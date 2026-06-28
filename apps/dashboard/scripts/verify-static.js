@@ -5,7 +5,7 @@ const indexPath = path.join(__dirname, "..", "public", "index.html");
 const html = fs.readFileSync(indexPath, "utf8");
 
 for (const token of [
-  "Attention queue",
+  "Competitive Brief",
   "Actual archive: 2026-06-17 to 2026-06-27",
   "The strongest actual finding is AWS OpenSearch pressure",
   "AWS OpenSearch Serverless is the strongest strategic threat found so far.",
