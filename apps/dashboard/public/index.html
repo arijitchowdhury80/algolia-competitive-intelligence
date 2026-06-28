@@ -52,6 +52,10 @@
     .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 18px; align-items: start; }
     .answer { margin-bottom: 14px; color: var(--ink); font-size: clamp(25px, 3.2vw, 42px); line-height: 1.06; font-weight: 900; letter-spacing: 0; }
     .summary { max-width: 820px; font-size: 17px; }
+    .finding-blocks { display: grid; gap: 14px; margin-top: 18px; }
+    .finding-block { border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 14px; }
+    .finding-block h3 { margin-bottom: 6px; font-size: 15px; }
+    .finding-block p { margin-bottom: 0; }
     .scorebox { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 14px; }
     .scorebox strong { display: block; color: var(--ink); font-size: 28px; line-height: 1; }
     .scorebox span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.35; }
@@ -137,17 +141,42 @@
         <section class="hero" aria-labelledby="answer">
           <div class="hero-grid">
             <div>
-              <div class="eyebrow">Top finding from the archive</div>
-              <h2 class="answer" id="answer">The strongest actual finding is AWS OpenSearch pressure on Algolia's agentic search story.</h2>
-              <p class="summary">
-                Across the archived reports, the clearest strategic item is the 2026-06-20 AWS OpenSearch Serverless finding:
-                AWS is pushing serverless search and agent-tool integrations into developer workflows. The 2026-06-27 Constructor/Bloomreach customer-proof signals are worth review, but less strategic until validated.
-              </p>
+              <div class="eyebrow">Primary finding</div>
+              <h2 class="answer" id="answer">AWS is pushing OpenSearch Serverless into agentic developer workflows.</h2>
+              <div class="finding-blocks">
+                <section class="finding-block" aria-labelledby="what-happened-title">
+                  <h3 id="what-happened-title">What happened</h3>
+                  <p>
+                    The 2026-06-20 CI brief found that AWS GA'd a next-generation OpenSearch Serverless release for agentic AI, with claims around faster provisioning, scale-to-zero, lower cost, and integrations into Claude Code, Cursor, Codex, Vercel, and Kiro through OpenSearch Agent Skills.
+                  </p>
+                </section>
+                <section class="finding-block" aria-labelledby="why-matters-title">
+                  <h3 id="why-matters-title">Why it matters</h3>
+                  <p>
+                    This can create a direct "why not OpenSearch?" pressure point against Algolia in agentic search and serverless search evaluations, especially with developers who already live inside those tools.
+                  </p>
+                </section>
+                <section class="finding-block" aria-labelledby="response-title">
+                  <h3 id="response-title">Recommended response</h3>
+                  <p>
+                    Product Marketing should review whether Algolia needs public proof content for MCP, agent-tooling, and serverless economics: working examples, an agent-workload guide, and a clear comparison story.
+                  </p>
+                </section>
+                <section class="finding-block" aria-labelledby="evidence-title">
+                  <h3 id="evidence-title">Evidence</h3>
+                  <p>
+                    <a href="/archive/2026-06-20.md">Open June 20 brief</a> ·
+                    <a href="https://aws.amazon.com/about-aws/whats-new/2026/05/amazon-opensearch-serverless-next-generation-generally-available/">AWS source</a> ·
+                    <a href="https://www.infoq.com/news/2026/06/aws-opensearch-serverless/">InfoQ source</a> ·
+                    <a href="https://github.com/opensearch-project/opensearch-agent-skills">OpenSearch Agent Skills repo</a>
+                  </p>
+                </section>
+              </div>
             </div>
             <aside class="scorebox" aria-label="Archive coverage">
               <div><strong>6</strong><span>Archived CI briefs used</span></div>
-              <div><strong>3</strong><span>Items worth attention</span></div>
-              <div><strong>0</strong><span>Mock findings on this page</span></div>
+              <div><strong>3</strong><span>Findings surfaced</span></div>
+              <div><strong>0</strong><span>Battlecard updates recommended</span></div>
             </aside>
           </div>
         </section>
@@ -155,8 +184,8 @@
         <section class="panel" aria-labelledby="findings-title">
           <div class="section-head">
             <div>
-              <div class="eyebrow">Start here</div>
-              <h2 id="findings-title">Findings to review</h2>
+              <div class="eyebrow">Intel queue</div>
+              <h2 id="findings-title">Other findings</h2>
             </div>
             <span class="pill blue">Actual archive</span>
           </div>
@@ -164,17 +193,16 @@
           <div class="finding-list">
             <article class="finding">
               <div class="rank">
-                <strong>1. Highest priority</strong>
+                <strong>Primary</strong>
                 <span>Found: 2026-06-20 daily</span>
                 <span>Owner: Product Marketing</span>
               </div>
               <div>
-                <h3>AWS OpenSearch Serverless is the strongest strategic threat found so far.</h3>
-                <p>
-                  The June 20 pulse says AWS GA'd next-generation OpenSearch Serverless for agentic AI, with faster provisioning, scale-to-zero, lower cost claims, and integrations into Claude Code, Cursor, Codex, Vercel, and Kiro through OpenSearch Agent Skills.
-                </p>
+                <h3>AWS OpenSearch Serverless remains the primary finding from the archive.</h3>
+                <p><strong>What happened:</strong> AWS positioned OpenSearch Serverless for agentic AI and developer-tool integrations.</p>
+                <p><strong>Why it matters:</strong> It can create substitution pressure against Algolia for agentic and serverless search.</p>
                 <div class="recommendation">
-                  Recommended next step: run a PMM content sprint for Algolia MCP and agentic workload proof, with reproducible examples and a serverless economics comparison.
+                  Recommended response: PMM should evaluate whether Algolia needs stronger public proof for MCP, agentic workloads, and serverless economics.
                 </div>
                 <div class="tags">
                   <span class="pill red">Strategic threat</span>
@@ -195,17 +223,16 @@
 
             <article class="finding">
               <div class="rank">
-                <strong>2. Review</strong>
+                <strong>Needs review</strong>
                 <span>Found: 2026-06-27 daily/weekly</span>
                 <span>Owner: Sales Enablement</span>
               </div>
               <div>
                 <h3>Constructor and Bloomreach customer proof needs sales validation.</h3>
-                <p>
-                  The June 27 reports identify Constructor customer proof as the top daily signal and include Bloomreach customer proof in battlecard update candidates. This matters only if the examples expose a proof-point gap for Algolia commerce deals.
-                </p>
+                <p><strong>What happened:</strong> The June 27 reports identify Constructor customer proof as the top daily signal and include Bloomreach customer proof in battlecard update candidates.</p>
+                <p><strong>Why it matters:</strong> These examples matter only if they expose a proof-point gap for Algolia commerce deals or objection handling.</p>
                 <div class="recommendation">
-                  Recommended next step: compare competitor customer proof against Algolia commerce proof and decide whether sales enablement language needs an update.
+                  Recommended response: Sales Enablement should compare competitor customer proof against Algolia commerce proof and decide whether sales language needs an update.
                 </div>
                 <div class="tags">
                   <span class="pill green">Customer proof</span>
@@ -226,17 +253,16 @@
 
             <article class="finding">
               <div class="rank">
-                <strong>3. Watch pattern</strong>
+                <strong>Watch</strong>
                 <span>Seen: 2026-06-17, 2026-06-20, 2026-06-27</span>
                 <span>Owner: PMM / Product</span>
               </div>
               <div>
                 <h3>AI search packaging is the repeated market pattern.</h3>
-                <p>
-                  The weekly reports repeatedly name AI search packaging: competitors are wrapping search and retrieval in MCP, agents, commerce reasoning, personalization, and product-discovery narratives.
-                </p>
+                <p><strong>What happened:</strong> The weekly reports repeatedly name AI search packaging across MCP, agents, commerce reasoning, personalization, and product-discovery narratives.</p>
+                <p><strong>Why it matters:</strong> This may affect Algolia positioning, but it is not by itself a battlecard change until a specific competitor delta is confirmed.</p>
                 <div class="recommendation">
-                  Recommended next step: keep this as a PMM watch area. Do not update battlecards from generic AI movement unless a specific competitor delta is confirmed.
+                  Recommended response: Keep this as a PMM watch area. Do not update battlecards from generic AI movement alone.
                 </div>
                 <div class="tags">
                   <span class="pill violet">Repeated pattern</span>
