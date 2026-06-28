@@ -1,20 +1,25 @@
 {
   "archive_range": "2026-06-17 to 2026-06-28",
-  "generated_at": "2026-06-28T09:00:28",
+  "generated_at": "2026-06-28T09:00:45",
   "latest_daily": {
-    "date": "2026-06-27",
+    "date": "2026-06-28",
     "path": "latest-daily.md"
   },
   "latest_weekly": {
     "date": "2026-06-28",
     "path": "latest-weekly.md"
   },
-  "report_count": 8,
+  "report_count": 9,
   "reports": [
     {
       "cadence": "weekly",
       "date": "2026-06-28",
       "path": "archive/2026-06-28-weekly.md"
+    },
+    {
+      "cadence": "daily",
+      "date": "2026-06-28",
+      "path": "archive/2026-06-28.md"
     },
     {
       "cadence": "weekly",
