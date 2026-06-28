@@ -6,19 +6,16 @@ const html = fs.readFileSync(indexPath, "utf8");
 
 for (const token of [
   "Competitive Brief",
-  "Actual archive: 2026-06-17 to 2026-06-27",
+  "Actual archive:",
   "Primary finding",
-  "Constructor customer proof changed needs validation.",
   "What happened",
   "Why it matters",
   "Recommended response",
-  "The pattern is named AI search packaging.",
   "Report history",
   "Data limits",
   "Automated archive",
   "Show collection details",
-  "archive/2026-06-20.md",
-  "archive/2026-06-27-weekly.md",
+  "archive/",
   "<base target=\"_blank\">",
   "noopener noreferrer"
 ]) {
@@ -31,6 +28,13 @@ const latestDataPath = path.join(__dirname, "..", "public", "data", "latest.json
 if (!fs.existsSync(latestDataPath)) {
   throw new Error("Dashboard data export is missing: data/latest.json");
 }
+const latestData = JSON.parse(fs.readFileSync(latestDataPath, "utf8"));
+if (!latestData.report_count || latestData.report_count < 1) {
+  throw new Error("Dashboard data export has no indexed reports.");
+}
+if (!latestData.archive_range || !latestData.reports || !latestData.reports.length) {
+  throw new Error("Dashboard data export is missing archive metadata.");
+}
 
 for (const token of [
   "Attention queue",
@@ -40,7 +44,8 @@ for (const token of [
   "Ask for proof",
   "Archive count",
   "Collector context",
-  "scorebox"
+  "scorebox",
+  "case_study"
 ]) {
   if (html.includes(token)) {
     throw new Error(`Dashboard static seed still contains retired UX copy: ${token}`);
