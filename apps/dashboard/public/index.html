@@ -3,31 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Algolia CI Command Center</title>
+  <title>Algolia Competitive Brief</title>
   <style>
     :root {
       --blue: #003dff;
-      --blue-strong: #0027a8;
-      --cyan: #00b6ff;
+      --blue-dark: #06133f;
+      --blue-soft: #eef3ff;
       --ink: #06133f;
-      --body: #30364a;
-      --muted: #657086;
-      --line: #dbe2ef;
-      --line-strong: #b8c3d8;
+      --body: #2f374e;
+      --muted: #68748c;
+      --line: #d9e1ef;
       --canvas: #f6f8fc;
       --paper: #ffffff;
       --paper-soft: #fbfcff;
       --green: #087f5b;
       --green-soft: #e9fbf3;
-      --amber: #a16207;
-      --amber-soft: #fff7df;
+      --amber: #9a6700;
+      --amber-soft: #fff5d6;
       --red: #b42318;
       --red-soft: #fff1f0;
       --violet: #5b35d5;
       --violet-soft: #f0edff;
-      --teal: #0f766e;
-      --teal-soft: #e8fbf8;
-      --shadow: 0 14px 34px rgba(6, 19, 63, .08);
+      --shadow: 0 12px 30px rgba(6, 19, 63, .08);
       --radius: 8px;
       color-scheme: light;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -39,22 +36,25 @@
 
     body {
       margin: 0;
+      background: var(--canvas);
       color: var(--body);
-      background:
-        linear-gradient(180deg, rgba(0, 61, 255, .05), rgba(0, 61, 255, 0) 260px),
-        var(--canvas);
       overflow-x: hidden;
     }
 
-    a { color: var(--blue); text-decoration: none; font-weight: 700; }
+    a {
+      color: var(--blue);
+      font-weight: 760;
+      text-decoration: none;
+    }
+
     a:hover { text-decoration: underline; }
 
-    button, a.button {
+    button, .button {
       min-height: 44px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid var(--line-strong);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
       background: var(--paper);
       color: var(--ink);
@@ -64,124 +64,94 @@
       cursor: pointer;
     }
 
-    button.primary {
+    button.primary, .button.primary {
       background: var(--blue);
       border-color: var(--blue);
       color: #fff;
     }
 
-    button.secondary { color: var(--blue); }
-
     button:focus-visible, a:focus-visible, summary:focus-visible {
-      outline: 3px solid rgba(0, 182, 255, .42);
+      outline: 3px solid rgba(0, 61, 255, .24);
       outline-offset: 3px;
     }
 
-    .shell {
-      width: min(1480px, 100%);
-      margin: 0 auto;
-      padding: 24px;
-    }
-
-    .topbar {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: end;
-      gap: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .eyebrow {
-      color: var(--blue);
-      font-size: 12px;
-      line-height: 1;
-      font-weight: 900;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-
-    h1, h2, h3, p {
-      margin-top: 0;
-      overflow-wrap: break-word;
-    }
+    h1, h2, h3, p { margin-top: 0; }
 
     h1 {
-      margin-bottom: 0;
+      margin-bottom: 8px;
       color: var(--ink);
-      font-size: clamp(30px, 4vw, 54px);
-      line-height: .98;
+      font-size: clamp(36px, 5vw, 70px);
+      line-height: .96;
       letter-spacing: 0;
     }
 
     h2 {
       margin-bottom: 14px;
       color: var(--ink);
-      font-size: 20px;
-      line-height: 1.2;
+      font-size: 22px;
+      line-height: 1.18;
       letter-spacing: 0;
     }
 
     h3 {
       margin-bottom: 8px;
       color: var(--ink);
-      font-size: 16px;
+      font-size: 17px;
       line-height: 1.25;
       letter-spacing: 0;
     }
 
+    p {
+      margin-bottom: 12px;
+      line-height: 1.48;
+    }
+
+    .shell {
+      width: min(1240px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
     .meta {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 8px;
       color: var(--muted);
       font-size: 13px;
+      line-height: 1.5;
+      text-align: right;
     }
 
-    .nav {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      margin: 0 -24px 18px;
-      padding: 12px 24px;
-      background: rgba(246, 248, 252, .92);
-      border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(12px);
-    }
-
-    .nav a {
-      min-height: 40px;
-      display: inline-flex;
-      align-items: center;
-      flex: 0 0 auto;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--paper);
-      color: var(--body);
-      padding: 0 12px;
-      font-size: 13px;
-      font-weight: 800;
-      text-decoration: none;
-    }
-
-    .nav a:first-child {
-      background: var(--ink);
-      border-color: var(--ink);
-      color: #fff;
-    }
-
-    .grid {
+    .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(340px, .72fr);
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 18px;
       align-items: start;
+      min-width: 0;
     }
 
-    .panel, .card, .metric, .decision-brief {
+    .main-flow {
+      display: grid;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .panel, .hero, .side-panel, .action {
       min-width: 0;
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -189,123 +159,141 @@
       box-shadow: var(--shadow);
     }
 
-    .panel, .decision-brief { padding: 18px; }
-
-    .decision-brief {
-      width: 100%;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, .38fr);
-      gap: 18px;
-      margin-bottom: 16px;
+    .hero {
+      padding: 24px;
       border-top: 5px solid var(--blue);
     }
 
-    .decision-brief p {
-      max-width: 760px;
-      margin-bottom: 16px;
-      color: var(--body);
-      font-size: 17px;
-      line-height: 1.48;
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 230px;
+      gap: 18px;
+      align-items: start;
     }
 
-    .decision-title {
-      margin-bottom: 10px;
+    .answer {
+      margin-bottom: 14px;
       color: var(--ink);
-      font-size: clamp(24px, 3vw, 36px);
-      line-height: 1.08;
+      font-size: clamp(24px, 3vw, 38px);
+      line-height: 1.06;
+      font-weight: 900;
       letter-spacing: 0;
     }
 
-    .brief-status {
+    .summary {
+      max-width: 780px;
+      font-size: 17px;
+    }
+
+    .recommendation-box {
       display: grid;
       gap: 10px;
-      align-content: start;
-    }
-
-    .status-block {
-      min-width: 0;
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 12px;
       background: var(--paper-soft);
+      padding: 14px;
     }
 
-    .status-block strong {
+    .recommendation-box strong {
       display: block;
       color: var(--ink);
-      font-size: 24px;
+      font-size: 26px;
       line-height: 1;
     }
 
-    .status-block span {
-      display: block;
-      margin-top: 7px;
+    .recommendation-box span {
       color: var(--muted);
       font-size: 12px;
       line-height: 1.35;
     }
 
-    .toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .metrics {
+    .read-order {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 16px;
+      gap: 10px;
+      margin-top: 18px;
     }
 
-    .metric {
-      min-height: 92px;
-      padding: 14px;
+    .step {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper-soft);
+      padding: 12px;
     }
 
-    .metric b {
+    .step b {
       display: block;
+      margin-bottom: 4px;
       color: var(--ink);
-      font-size: 30px;
-      line-height: 1;
+      font-size: 13px;
     }
 
-    .metric span {
+    .step span {
       display: block;
-      margin-top: 8px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12px;
       line-height: 1.35;
     }
 
-    .stack { display: grid; gap: 12px; }
+    .panel { padding: 20px; }
 
-    .card {
-      padding: 16px;
-    }
-
-    .card-header {
-      min-width: 0;
+    .section-head {
       display: flex;
-      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 10px;
+      align-items: flex-start;
+      margin-bottom: 14px;
     }
 
-    .card p {
-      margin-bottom: 12px;
-      line-height: 1.45;
+    .actions-list {
+      display: grid;
+      gap: 12px;
     }
 
-    .action-row {
-      display: flex;
-      flex-wrap: wrap;
+    .action {
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 16px;
+      padding: 16px;
+      box-shadow: none;
+    }
+
+    .action-label {
+      display: grid;
+      align-content: start;
       gap: 8px;
-      margin-top: 12px;
     }
 
-    .tagrow {
+    .action-label strong {
+      width: fit-content;
+      border-radius: var(--radius);
+      background: var(--ink);
+      color: #fff;
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .action-label span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .action h3 { margin-bottom: 6px; }
+
+    .action p { margin-bottom: 10px; }
+
+    .what-to-do {
+      border-left: 4px solid var(--blue);
+      background: var(--blue-soft);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 10px 12px;
+      color: var(--ink);
+      font-weight: 760;
+    }
+
+    .tag-row {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
@@ -313,10 +301,9 @@
     }
 
     .pill {
-      display: inline-flex;
       min-height: 26px;
+      display: inline-flex;
       align-items: center;
-      border: 1px solid transparent;
       border-radius: 999px;
       padding: 0 9px;
       font-size: 12px;
@@ -324,26 +311,12 @@
       white-space: nowrap;
     }
 
-    .pill.blue { background: rgba(0, 61, 255, .09); color: var(--blue-strong); }
     .pill.green { background: var(--green-soft); color: var(--green); }
     .pill.amber { background: var(--amber-soft); color: var(--amber); }
     .pill.red { background: var(--red-soft); color: var(--red); }
+    .pill.blue { background: var(--blue-soft); color: var(--blue); }
     .pill.violet { background: var(--violet-soft); color: var(--violet); }
-    .pill.teal { background: var(--teal-soft); color: var(--teal); }
     .pill.neutral { background: #eef2f8; color: #475467; }
-
-    .owner {
-      display: inline-flex;
-      min-height: 28px;
-      align-items: center;
-      border-radius: var(--radius);
-      padding: 0 9px;
-      background: var(--ink);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
 
     details {
       margin-top: 12px;
@@ -358,23 +331,23 @@
       font-weight: 850;
     }
 
-    .evidence {
+    .proof-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin-top: 10px;
     }
 
-    .evidence-item {
+    .proof-item {
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 10px;
       background: var(--paper-soft);
+      padding: 10px;
       font-size: 13px;
       line-height: 1.4;
     }
 
-    .evidence-item span {
+    .proof-item span {
       display: block;
       margin-bottom: 4px;
       color: var(--muted);
@@ -384,54 +357,32 @@
       text-transform: uppercase;
     }
 
-    .change-grid, .implication-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .change-card {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 14px;
-      background: var(--paper-soft);
-    }
-
-    .change-card b {
-      display: block;
-      margin-bottom: 7px;
-      color: var(--ink);
-    }
-
-    .change-card p {
-      margin-bottom: 10px;
-      font-size: 14px;
-    }
-
-    .rail {
+    .side {
       position: sticky;
-      top: 72px;
+      top: 18px;
       display: grid;
-      gap: 12px;
+      gap: 14px;
+      min-width: 0;
     }
 
-    .gate {
+    .side-panel { padding: 16px; }
+
+    .quality-list {
       display: grid;
-      gap: 10px;
+      gap: 9px;
     }
 
-    .gate-row {
+    .quality-row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: 28px minmax(0, 1fr);
       gap: 10px;
-      align-items: start;
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 10px;
       background: var(--paper-soft);
+      padding: 10px;
     }
 
-    .gate-mark {
+    .mark {
       width: 28px;
       height: 28px;
       display: grid;
@@ -442,18 +393,18 @@
       font-weight: 900;
     }
 
-    .gate-mark.warn {
+    .mark.warn {
       background: var(--amber-soft);
       color: var(--amber);
     }
 
-    .gate-row strong {
+    .quality-row strong {
       display: block;
       color: var(--ink);
       font-size: 14px;
     }
 
-    .gate-row span {
+    .quality-row span {
       display: block;
       margin-top: 3px;
       color: var(--muted);
@@ -461,21 +412,47 @@
       line-height: 1.35;
     }
 
-    .source-bars {
+    .metrics {
       display: grid;
-      gap: 8px;
+      gap: 9px;
     }
 
-    .source-bar {
+    .metric {
       display: grid;
-      grid-template-columns: 96px minmax(0, 1fr) 40px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 9px;
+      font-size: 13px;
+    }
+
+    .metric:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .metric strong {
+      color: var(--ink);
+      font-size: 22px;
+    }
+
+    .source-mix {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .source-row {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr) 28px;
       gap: 8px;
       align-items: center;
       font-size: 13px;
     }
 
     .bar {
-      height: 9px;
+      height: 8px;
       overflow: hidden;
       border-radius: 999px;
       background: #e8edf7;
@@ -487,24 +464,21 @@
       background: var(--blue);
     }
 
-    .reports {
+    .report-links {
       display: grid;
       gap: 8px;
     }
 
-    .report-line {
+    .report-link {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      gap: 10px;
-      align-items: center;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 10px;
       background: var(--paper-soft);
+      padding: 10px;
       font-size: 13px;
     }
-
-    .report-line strong { color: var(--ink); }
 
     table {
       width: 100%;
@@ -513,7 +487,7 @@
     }
 
     th, td {
-      padding: 11px 8px;
+      padding: 10px 8px;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
@@ -529,51 +503,59 @@
 
     .table-wrap { overflow-x: auto; }
 
-    .footer-note {
-      margin: 18px 0 0;
+    .note {
+      margin: 12px 0 0;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.45;
     }
 
-    @media (max-width: 1100px) {
-      .grid, .decision-brief {
+    @media (max-width: 980px) {
+      .layout, .hero-grid {
         grid-template-columns: 1fr;
       }
 
-      .rail { position: static; }
-      .change-grid, .implication-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .side { position: static; }
+      .read-order { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero-grid > *,
+      .action > *,
+      .section-head > *,
+      .summary,
+      .answer {
+        width: 100%;
+        max-width: calc(100vw - 66px);
+      }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 680px) {
+      body { width: 100%; }
       .shell {
-        width: 100vw;
-        max-width: 100vw;
-        overflow-x: hidden;
-        padding: 14px;
-      }
-      .nav {
         width: 100%;
         max-width: 100%;
-        margin-inline: 0;
-        padding-inline: 14px;
+        padding: 16px;
+        overflow-x: hidden;
       }
       .topbar { grid-template-columns: 1fr; }
-      .meta { justify-content: flex-start; }
-      .meta span { flex: 1 0 100%; }
-      h1 { font-size: 30px; }
-      .decision-title { font-size: 25px; }
-      .decision-brief p { font-size: 16px; }
-      .decision-brief, .panel, .metric {
-        width: calc(100vw - 28px);
-        max-width: calc(100vw - 28px);
+      .meta { text-align: left; }
+      .layout, .main-flow, .side {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
       }
-      .metrics { grid-template-columns: 1fr; }
-      .card-header { display: grid; }
-      .evidence, .change-grid, .implication-grid { grid-template-columns: 1fr; }
-      .report-line { grid-template-columns: 1fr; }
-      .source-bar { grid-template-columns: 80px minmax(0, 1fr) 34px; }
-      button, a.button { width: 100%; }
+      .hero, .panel, .side-panel, .action {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+      .read-order, .proof-grid { grid-template-columns: 1fr; }
+      .action { grid-template-columns: 1fr; }
+      h1 { font-size: 34px; }
+      .answer {
+        font-size: 25px;
+        overflow-wrap: break-word;
+      }
+      .summary { font-size: 16px; }
+      button, .button { width: 100%; }
     }
   </style>
 </head>
@@ -582,312 +564,231 @@
     <header class="topbar">
       <div>
         <div class="eyebrow">Algolia competitive intelligence</div>
-        <h1>CI Command Center</h1>
+        <h1>Weekly brief</h1>
       </div>
-      <div class="meta" aria-label="Report metadata">
-        <span>Window: 2026-06-21 to 2026-06-27</span>
-        <span>Last generated: 2026-06-27</span>
-        <span>Audience: Arijit operator view</span>
+      <div class="meta">
+        <div>Window: 2026-06-21 to 2026-06-27</div>
+        <div>Audience: Arijit operator view</div>
+        <div>Generated: 2026-06-27</div>
       </div>
     </header>
 
-    <nav class="nav" aria-label="Dashboard views">
-      <a href="#decision-brief">Decision brief</a>
-      <a href="#actions">Actions</a>
-      <a href="#changes">Changes</a>
-      <a href="#implications">Implications</a>
-      <a href="#trust">Trust</a>
-      <a href="#signals">Signals</a>
-      <a href="#archive">Archive</a>
-    </nav>
-
-    <section class="decision-brief" id="decision-brief" aria-labelledby="decision-title">
-      <div>
-        <div class="eyebrow">This week</div>
-        <h2 class="decision-title" id="decision-title">Use the intelligence, but wait for confirmed deltas.</h2>
-        <p>
-          The current run produced healthy source coverage and useful customer proof, AI visibility, and positioning signals.
-          Because this is still a baseline-heavy run, the right executive posture is selective review: route actions that strengthen evidence and source quality, but do not treat every detected change as a new market move.
-        </p>
-        <div class="toolbar" aria-label="Primary decision actions">
-          <button class="primary" type="button">Accept posture</button>
-          <button class="secondary" type="button">Assign review</button>
-          <button type="button">Ask for proof</button>
-        </div>
-      </div>
-      <aside class="brief-status" aria-label="Decision state">
-        <div class="status-block">
-          <strong>Review</strong>
-          <span>Recommended executive posture</span>
-        </div>
-        <div class="status-block">
-          <strong>30</strong>
-          <span>Material signals in latest indexed run</span>
-        </div>
-        <div class="status-block">
-          <strong>39 / 39</strong>
-          <span>Sources healthy after Scout-first collection</span>
-        </div>
-      </aside>
-    </section>
-
-    <div class="metrics" aria-label="Key metrics">
-      <div class="metric"><b>3</b><span>Decision-grade recommendations</span></div>
-      <div class="metric"><b>5</b><span>Stakeholder routes represented</span></div>
-      <div class="metric"><b>0</b><span>Sources needing attention</span></div>
-      <div class="metric"><b>10</b><span>Indexed daily and weekly reports</span></div>
-    </div>
-
-    <div class="grid">
-      <div class="stack">
-        <section class="panel" id="actions" aria-labelledby="actions-title">
-          <div class="card-header">
+    <div class="layout">
+      <div class="main-flow">
+        <section class="hero" aria-labelledby="start-here">
+          <div class="hero-grid">
             <div>
-              <div class="eyebrow">Decision queue</div>
-              <h2 id="actions-title">Actions</h2>
+              <div class="eyebrow">Start here</div>
+              <h2 class="answer" id="start-here">Review two areas. Do not update battlecards yet.</h2>
+              <p class="summary">
+                The run is healthy enough to use, but most findings are still baseline-heavy. Treat this week as a review cycle:
+                inspect customer proof, watch AI search messaging, and wait for confirmed deltas before changing field-facing material.
+              </p>
+              <a class="button primary" href="#next-actions">Review actions</a>
             </div>
-            <span class="pill amber">1 blocked by baseline guard</span>
+            <aside class="recommendation-box" aria-label="Current posture">
+              <div>
+                <strong>Review</strong>
+                <span>Recommended posture</span>
+              </div>
+              <div>
+                <strong>2</strong>
+                <span>Items worth attention now</span>
+              </div>
+              <div>
+                <strong>0</strong>
+                <span>Battlecard changes cleared</span>
+              </div>
+            </aside>
           </div>
 
-          <div class="stack">
-            <article class="card">
-              <div class="card-header">
-                <div>
-                  <span class="owner">Sales Enablement</span>
-                  <h3>Review commerce customer proof against Constructor and Bloomreach.</h3>
+          <div class="read-order" aria-label="How to read this brief">
+            <div class="step">
+              <b>1. Read the recommendation</b>
+              <span>Use the top card as the weekly posture.</span>
+            </div>
+            <div class="step">
+              <b>2. Pick an action</b>
+              <span>Only three actions are shown.</span>
+            </div>
+            <div class="step">
+              <b>3. Check proof</b>
+              <span>Open evidence only when needed.</span>
+            </div>
+            <div class="step">
+              <b>4. Ignore system details</b>
+              <span>Read data quality only if trust is broken.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="next-actions" aria-labelledby="actions-title">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">What needs attention</div>
+              <h2 id="actions-title">Next actions</h2>
+            </div>
+            <span class="pill amber">Static prototype</span>
+          </div>
+
+          <div class="actions-list">
+            <article class="action">
+              <div class="action-label">
+                <strong>Review now</strong>
+                <span>Owner: Sales Enablement</span>
+              </div>
+              <div>
+                <h3>Check whether Constructor or Bloomreach now has stronger commerce proof than our current sales material reflects.</h3>
+                <p>
+                  Both competitors surfaced customer-proof signals. The useful question is not "did the page change?" It is whether this creates an objection-handling or proof-point gap for Algolia.
+                </p>
+                <div class="what-to-do">What to do: compare these examples against Algolia commerce proof and decide whether a sales enablement note is needed.</div>
+                <div class="tag-row">
+                  <span class="pill green">Evidence ready</span>
+                  <span class="pill blue">Customer proof</span>
+                  <span class="pill neutral">High usefulness</span>
                 </div>
-                <span class="pill green">High value</span>
+                <details>
+                  <summary>Show proof</summary>
+                  <div class="proof-grid">
+                    <div class="proof-item">
+                      <span>Constructor source</span>
+                      <a href="https://constructor.com/customers">constructor.com/customers</a>
+                    </div>
+                    <div class="proof-item">
+                      <span>Bloomreach source</span>
+                      <a href="https://www.bloomreach.com/en/customers">bloomreach.com/en/customers</a>
+                    </div>
+                    <div class="proof-item">
+                      <span>Why this matters</span>
+                      Customer proof affects objection handling and confidence in commerce deals.
+                    </div>
+                    <div class="proof-item">
+                      <span>Risk</span>
+                      Do not quote competitor claims until the exact proof is manually reviewed.
+                    </div>
+                  </div>
+                </details>
               </div>
-              <p>
-                Constructor and Bloomreach both surfaced customer-proof movement. This matters only if the examples weaken Algolia's commerce proof points or expose a missing counter-proof.
-              </p>
-              <div class="tagrow">
-                <span class="pill blue">Customer proof</span>
-                <span class="pill neutral">Evidence ready</span>
-                <span class="pill teal">Owner specific</span>
-              </div>
-              <div class="action-row">
-                <button class="primary" type="button">Assign</button>
-                <button type="button">Defer</button>
-                <button type="button">Reject</button>
-              </div>
-              <details>
-                <summary>Evidence and rationale</summary>
-                <div class="evidence">
-                  <div class="evidence-item">
-                    <span>Source</span>
-                    <a href="https://constructor.com/customers">constructor.com/customers</a>
-                  </div>
-                  <div class="evidence-item">
-                    <span>Source</span>
-                    <a href="https://www.bloomreach.com/en/customers">bloomreach.com/en/customers</a>
-                  </div>
-                  <div class="evidence-item">
-                    <span>Quality state</span>
-                    Healthy source coverage. Requires human review before sales-language update.
-                  </div>
-                  <div class="evidence-item">
-                    <span>Algolia implication</span>
-                    PMM and Sales Enablement should verify whether counter-proof or objection language needs a refresh.
-                  </div>
-                </div>
-              </details>
             </article>
 
-            <article class="card">
-              <div class="card-header">
-                <div>
-                  <span class="owner">Product Marketing</span>
-                  <h3>Track AI search and agentic discovery positioning, but hold battlecard copy.</h3>
+            <article class="action">
+              <div class="action-label">
+                <strong>Watch</strong>
+                <span>Owner: PMM</span>
+              </div>
+              <div>
+                <h3>Watch AI search and agentic discovery language for one more run before changing messaging.</h3>
+                <p>
+                  Google, OpenAI, AWS, and agent ecosystem sources produced AI visibility signals. This is a real watch area, but the current evidence does not yet prove a fresh positioning shift.
+                </p>
+                <div class="what-to-do">What to do: keep this on the PMM watchlist and require a confirmed delta before battlecard or positioning edits.</div>
+                <div class="tag-row">
+                  <span class="pill amber">Needs delta proof</span>
+                  <span class="pill violet">AI visibility</span>
+                  <span class="pill neutral">Battlecard blocked</span>
                 </div>
-                <span class="pill amber">Guarded</span>
+                <details>
+                  <summary>Show proof</summary>
+                  <div class="proof-grid">
+                    <div class="proof-item">
+                      <span>Google source</span>
+                      <a href="https://cloud.google.com/blog/products/ai-machine-learning">Google Cloud AI blog</a>
+                    </div>
+                    <div class="proof-item">
+                      <span>OpenAI source</span>
+                      <a href="https://openai.com/news/rss.xml">OpenAI news RSS</a>
+                    </div>
+                    <div class="proof-item">
+                      <span>Quality gate</span>
+                      Baseline-only findings cannot trigger battlecard updates.
+                    </div>
+                    <div class="proof-item">
+                      <span>Next proof needed</span>
+                      A repeated or changed claim across future snapshots.
+                    </div>
+                  </div>
+                </details>
               </div>
-              <p>
-                Google Vertex AI Search, OpenAI, AWS, and agent ecosystem sources produced AI visibility signals. The pattern is worth PMM attention, but first-run detection does not prove a new positioning delta yet.
-              </p>
-              <div class="tagrow">
-                <span class="pill violet">AI visibility</span>
-                <span class="pill amber">Baseline risk</span>
-                <span class="pill neutral">Needs next run</span>
-              </div>
-              <div class="action-row">
-                <button class="primary" type="button">Watch</button>
-                <button type="button">Request delta proof</button>
-                <button type="button">Dismiss</button>
-              </div>
-              <details>
-                <summary>Evidence and rationale</summary>
-                <div class="evidence">
-                  <div class="evidence-item">
-                    <span>Source</span>
-                    <a href="https://cloud.google.com/blog/products/ai-machine-learning">Google Cloud AI blog</a>
-                  </div>
-                  <div class="evidence-item">
-                    <span>Source</span>
-                    <a href="https://openai.com/news/rss.xml">OpenAI news RSS</a>
-                  </div>
-                  <div class="evidence-item">
-                    <span>Quality gate</span>
-                    No battlecard update from baseline-only signals.
-                  </div>
-                  <div class="evidence-item">
-                    <span>Next proof needed</span>
-                    Confirm repeated movement or wording change across future snapshots.
-                  </div>
-                </div>
-              </details>
             </article>
 
-            <article class="card">
-              <div class="card-header">
-                <div>
-                  <span class="owner">CI Ops</span>
-                  <h3>Promote Scout-first source acquisition, then measure change quality.</h3>
+            <article class="action">
+              <div class="action-label">
+                <strong>Accept</strong>
+                <span>Owner: CI Ops</span>
+              </div>
+              <div>
+                <h3>Use Scout-first acquisition as the default source collection path for this pack.</h3>
+                <p>
+                  The source run is healthy. That means future quiet days can become more credible, because collection failure is less likely to masquerade as "nothing happened."
+                </p>
+                <div class="what-to-do">What to do: keep Scout as the primary collector and measure whether future runs produce cleaner true deltas.</div>
+                <div class="tag-row">
+                  <span class="pill green">39 / 39 healthy</span>
+                  <span class="pill blue">23 Scout</span>
+                  <span class="pill neutral">14 HTTP</span>
+                  <span class="pill neutral">2 RSS</span>
                 </div>
-                <span class="pill green">Ready</span>
-              </div>
-              <p>
-                The Scout-first router restored source health to 39 healthy sources and gives the dashboard enough evidence metadata to separate source failure from quiet market days.
-              </p>
-              <div class="tagrow">
-                <span class="pill green">39 ok</span>
-                <span class="pill blue">23 Scout</span>
-                <span class="pill neutral">14 direct HTTP</span>
-                <span class="pill neutral">2 RSS</span>
-              </div>
-              <div class="action-row">
-                <button class="primary" type="button">Accept</button>
-                <button type="button">Assign QA</button>
-              </div>
-              <details>
-                <summary>Evidence and rationale</summary>
-                <div class="evidence">
-                  <div class="evidence-item">
-                    <span>Collector mix</span>
-                    23 Scout scrape, 14 direct HTTP, 2 RSS feed sources.
+                <details>
+                  <summary>Show proof</summary>
+                  <div class="proof-grid">
+                    <div class="proof-item">
+                      <span>Source health</span>
+                      39 healthy sources and 0 sources needing attention in the latest generated dashboard state.
+                    </div>
+                    <div class="proof-item">
+                      <span>Collector mix</span>
+                      23 Scout scrape, 14 direct HTTP, 2 RSS feed.
+                    </div>
                   </div>
-                  <div class="evidence-item">
-                    <span>Dashboard implication</span>
-                    Source health can now become a trust indicator instead of the main product story.
-                  </div>
-                </div>
-              </details>
+                </details>
+              </div>
             </article>
           </div>
         </section>
 
-        <section class="panel" id="changes" aria-labelledby="changes-title">
-          <div class="card-header">
+        <section class="panel" aria-labelledby="proof-title">
+          <div class="section-head">
             <div>
-              <div class="eyebrow">Material movement</div>
-              <h2 id="changes-title">What changed this week</h2>
+              <div class="eyebrow">Proof behind the brief</div>
+              <h2 id="proof-title">Signal sample</h2>
             </div>
-            <span class="pill amber">Baseline-aware</span>
-          </div>
-          <div class="change-grid">
-            <article class="change-card">
-              <b>Customer proof pressure</b>
-              <p>Constructor and Bloomreach customer pages deserve Sales Enablement review for proof-point gaps.</p>
-              <span class="pill blue">Sales Enablement</span>
-            </article>
-            <article class="change-card">
-              <b>AI search narrative density</b>
-              <p>Google, OpenAI, AWS, and agent ecosystem sources keep AI discovery language in the watch zone.</p>
-              <span class="pill violet">PMM</span>
-            </article>
-            <article class="change-card">
-              <b>Source reliability improved</b>
-              <p>Scout-first collection returned a healthy source set, making future quiet-day confidence more credible.</p>
-              <span class="pill green">CI Ops</span>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel" id="implications" aria-labelledby="implications-title">
-          <div class="eyebrow">Role routing</div>
-          <h2 id="implications-title">Implications for Algolia</h2>
-          <div class="implication-grid">
-            <article class="change-card">
-              <b>PMM</b>
-              <p>Watch AI discovery and category language. Do not update battlecards until a real delta is confirmed.</p>
-            </article>
-            <article class="change-card">
-              <b>Sales Enablement</b>
-              <p>Check competitor customer proof against Algolia commerce proof and objection handling.</p>
-            </article>
-            <article class="change-card">
-              <b>Product</b>
-              <p>Review docs and product-release signals only when they show feature-level movement.</p>
-            </article>
-            <article class="change-card">
-              <b>Partnerships</b>
-              <p>Track agent protocol and ecosystem distribution signals for search and discovery surfaces.</p>
-            </article>
-            <article class="change-card">
-              <b>Exec</b>
-              <p>Escalate only multi-source patterns that affect category position, momentum, or strategic allocation.</p>
-            </article>
-            <article class="change-card">
-              <b>Arijit</b>
-              <p>Use the dashboard to accept, reject, or challenge recommendations and train usefulness over time.</p>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel" id="signals" aria-labelledby="signals-title">
-          <div class="card-header">
-            <div>
-              <div class="eyebrow">Audit trail</div>
-              <h2 id="signals-title">Signal ledger sample</h2>
-            </div>
-            <span class="pill neutral">Supporting evidence</span>
+            <span class="pill neutral">Audit trail</span>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Competitor</th>
-                  <th>Category</th>
-                  <th>Owner</th>
-                  <th>Score</th>
+                  <th>Signal</th>
+                  <th>Why it matters</th>
+                  <th>Action</th>
                   <th>Evidence</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Constructor</td>
-                  <td>Customer proof</td>
-                  <td>Sales Enablement</td>
-                  <td>0.79</td>
-                  <td><a href="https://constructor.com/customers">Customer page</a></td>
+                  <td>Constructor customer proof</td>
+                  <td>May affect commerce objection handling.</td>
+                  <td>Review now</td>
+                  <td><a href="https://constructor.com/customers">Open source</a></td>
                 </tr>
                 <tr>
-                  <td>Bloomreach</td>
-                  <td>Customer proof</td>
-                  <td>Sales Enablement</td>
-                  <td>0.79</td>
-                  <td><a href="https://www.bloomreach.com/en/customers">Customer page</a></td>
+                  <td>Bloomreach customer proof</td>
+                  <td>May expose a proof-point gap.</td>
+                  <td>Review now</td>
+                  <td><a href="https://www.bloomreach.com/en/customers">Open source</a></td>
                 </tr>
                 <tr>
-                  <td>Google Vertex AI Search</td>
-                  <td>AI visibility</td>
-                  <td>Product Marketing</td>
-                  <td>0.79</td>
-                  <td><a href="https://cloud.google.com/blog/products/ai-machine-learning">AI blog</a></td>
+                  <td>Google / OpenAI AI visibility</td>
+                  <td>Relevant to PMM, not yet a confirmed delta.</td>
+                  <td>Watch</td>
+                  <td><a href="https://cloud.google.com/blog/products/ai-machine-learning">Open source</a></td>
                 </tr>
                 <tr>
-                  <td>Coveo</td>
-                  <td>Product release</td>
-                  <td>Product</td>
-                  <td>0.75</td>
-                  <td><a href="https://ir.coveo.com/en/news-events/press-releases">Press releases</a></td>
-                </tr>
-                <tr>
-                  <td>AI Agent Ecosystem</td>
-                  <td>Protocol movement</td>
-                  <td>Partnerships</td>
-                  <td>0.75</td>
-                  <td><a href="https://blog.modelcontextprotocol.io">MCP blog</a></td>
+                  <td>Scout-first acquisition health</td>
+                  <td>Supports confidence in future quiet-day reporting.</td>
+                  <td>Accept</td>
+                  <td>Collector output in CI ledger</td>
                 </tr>
               </tbody>
             </table>
@@ -895,98 +796,100 @@
         </section>
       </div>
 
-      <aside class="rail">
-        <section class="panel" id="trust" aria-labelledby="trust-title">
-          <div class="eyebrow">Trust state</div>
-          <h2 id="trust-title">Quality gates</h2>
-          <div class="gate">
-            <div class="gate-row">
-              <div class="gate-mark">✓</div>
+      <aside class="side" aria-label="Brief context">
+        <section class="side-panel" aria-labelledby="quality-title">
+          <div class="eyebrow">Can I trust this?</div>
+          <h2 id="quality-title">Data quality</h2>
+          <div class="quality-list">
+            <div class="quality-row">
+              <div class="mark">✓</div>
               <div>
-                <strong>Evidence links present</strong>
-                <span>Material recommendations include public source URLs.</span>
+                <strong>Sources loaded</strong>
+                <span>39 of 39 enabled sources are healthy.</span>
               </div>
             </div>
-            <div class="gate-row">
-              <div class="gate-mark">✓</div>
+            <div class="quality-row">
+              <div class="mark">✓</div>
               <div>
-                <strong>Source health clear</strong>
-                <span>Latest dashboard state shows 0 sources needing attention.</span>
+                <strong>Evidence links exist</strong>
+                <span>The recommendations point to public sources.</span>
               </div>
             </div>
-            <div class="gate-row">
-              <div class="gate-mark warn">!</div>
+            <div class="quality-row">
+              <div class="mark warn">!</div>
               <div>
-                <strong>Baseline guard active</strong>
-                <span>Battlecard actions require confirmed deltas beyond first-run baseline.</span>
+                <strong>Delta proof is weak</strong>
+                <span>Baseline-heavy findings cannot update battlecards yet.</span>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="collector-title">
-          <div class="eyebrow">Operations</div>
-          <h2 id="collector-title">Source health and collector strategy</h2>
-          <div class="source-bars" aria-label="Collector mix">
-            <div class="source-bar">
+        <section class="side-panel" aria-labelledby="numbers-title">
+          <div class="eyebrow">Run numbers</div>
+          <h2 id="numbers-title">What the system saw</h2>
+          <div class="metrics">
+            <div class="metric"><span>Signals in latest run</span><strong>30</strong></div>
+            <div class="metric"><span>Items worth attention</span><strong>2</strong></div>
+            <div class="metric"><span>Battlecard changes cleared</span><strong>0</strong></div>
+            <div class="metric"><span>Indexed reports</span><strong>10</strong></div>
+          </div>
+        </section>
+
+        <section class="side-panel" aria-labelledby="collection-title">
+          <div class="eyebrow">Collection</div>
+          <h2 id="collection-title">How data arrived</h2>
+          <div class="source-mix">
+            <div class="source-row">
               <span>Scout</span>
               <div class="bar"><span style="width: 59%"></span></div>
               <strong>23</strong>
             </div>
-            <div class="source-bar">
+            <div class="source-row">
               <span>HTTP</span>
               <div class="bar"><span style="width: 36%"></span></div>
               <strong>14</strong>
             </div>
-            <div class="source-bar">
+            <div class="source-row">
               <span>RSS</span>
               <div class="bar"><span style="width: 5%"></span></div>
               <strong>2</strong>
             </div>
           </div>
-          <p class="footer-note">Healthy acquisition is necessary, but it is not the product. The product is the decision layer built on top of reliable acquisition.</p>
+          <p class="note">Collection health is a trust signal. It is not the main thing to act on unless sources fail.</p>
         </section>
 
-        <section class="panel" id="archive" aria-labelledby="archive-title">
+        <section class="side-panel" aria-labelledby="reports-title">
           <div class="eyebrow">Reports</div>
-          <h2 id="archive-title">Archive</h2>
-          <div class="reports">
-            <div class="report-line">
+          <h2 id="reports-title">Open source reports</h2>
+          <div class="report-links">
+            <div class="report-link">
               <strong>Latest daily</strong>
               <a href="/latest-daily.md">Markdown</a>
-              <a href="#decision-brief">View</a>
             </div>
-            <div class="report-line">
+            <div class="report-link">
               <strong>Latest weekly</strong>
               <a href="/latest-weekly.md">Markdown</a>
-              <a href="#changes">View</a>
             </div>
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="next-title">
-          <div class="eyebrow">Next build slice</div>
-          <h2 id="next-title">What must become real</h2>
-          <div class="gate">
-            <div class="gate-row">
-              <div class="gate-mark warn">!</div>
+        <section class="side-panel" aria-labelledby="not-live-title">
+          <div class="eyebrow">Not live yet</div>
+          <h2 id="not-live-title">What still needs building</h2>
+          <div class="quality-list">
+            <div class="quality-row">
+              <div class="mark warn">!</div>
               <div>
-                <strong>Persist action decisions</strong>
-                <span>Accept, assign, defer, and reject need an action-items store.</span>
+                <strong>Saved decisions</strong>
+                <span>Review, watch, and accept outcomes need persistence.</span>
               </div>
             </div>
-            <div class="gate-row">
-              <div class="gate-mark warn">!</div>
+            <div class="quality-row">
+              <div class="mark warn">!</div>
               <div>
-                <strong>Compute true deltas</strong>
-                <span>Baseline versus material change must be explicit in the ledger.</span>
-              </div>
-            </div>
-            <div class="gate-row">
-              <div class="gate-mark warn">!</div>
-              <div>
-                <strong>Evidence drawer from data</strong>
-                <span>Collector metadata and source snapshots should drive every evidence panel.</span>
+                <strong>True delta engine</strong>
+                <span>The ledger must separate baseline from confirmed change.</span>
               </div>
             </div>
           </div>
