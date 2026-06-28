@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base target="_blank">
   <title>Algolia Competitive Intelligence</title>
   <style>
     :root {
@@ -347,5 +348,11 @@
       </aside>
     </div>
   </main>
+  <script>
+    document.querySelectorAll("a[href]").forEach((link) => {
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    });
+  </script>
 </body>
 </html>

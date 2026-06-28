@@ -14,7 +14,9 @@ for (const token of [
   "Report history",
   "Archive is sparse",
   "/archive/2026-06-20.md",
-  "/archive/2026-06-27-weekly.md"
+  "/archive/2026-06-27-weekly.md",
+  "<base target=\"_blank\">",
+  "noopener noreferrer"
 ]) {
   if (!html.includes(token)) {
     throw new Error(`Dashboard static seed is missing: ${token}`);
