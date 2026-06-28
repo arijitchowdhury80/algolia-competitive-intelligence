@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.local/
+.env
+.env.*
+!.env.example
+node_modules/
+.vercel/
+dist/
+build/
+coverage/
+

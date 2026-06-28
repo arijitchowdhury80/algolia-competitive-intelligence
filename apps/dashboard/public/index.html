@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CI Command Center</title>
+  <style>
+    :root {
+      --blue: #003DFF;
+      --cyan: #00B6FF;
+      --ink: #021046;
+      --body: #30364a;
+      --muted: #667085;
+      --line: #dfe4ee;
+      --paper: #ffffff;
+      --canvas: #f6f8fc;
+      --ok: #087f5b;
+      --warn: #b45309;
+      --bad: #c2410c;
+      --shadow: 0 10px 26px rgba(2, 16, 70, .08);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--body); }
+    a { color: var(--blue); text-decoration: none; font-weight: 650; }
+    .shell { max-width: 1440px; margin: 0 auto; padding: 24px; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    h1 { margin: 0; color: var(--ink); font-size: 34px; line-height: 1.1; letter-spacing: 0; }
+    h2 { margin: 0 0 12px; color: var(--ink); font-size: 18px; letter-spacing: 0; }
+    .eyebrow { color: var(--blue); font-weight: 800; font-size: 12px; text-transform: uppercase; }
+    .updated { color: var(--muted); font-size: 13px; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 22px; }
+    nav a { min-height: 40px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .metric, section { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+    .metric { padding: 16px; min-height: 92px; }
+    .metric b { display: block; color: var(--ink); font-size: 28px; line-height: 1; }
+    .metric span { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .45fr); gap: 14px; }
+    section { padding: 18px; margin-bottom: 14px; overflow: hidden; }
+    .report-line { display: grid; grid-template-columns: 1fr 1.3fr .7fr auto auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+    .callout { border-left: 4px solid var(--blue); padding-left: 12px; color: var(--ink); font-weight: 650; }
+    .collector-line { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    .pill { display: inline-flex; min-height: 24px; align-items: center; border-radius: 999px; padding: 0 8px; font-size: 12px; font-weight: 750; }
+    .pill.ok { color: var(--ok); background: #ecfdf5; }
+    .pill.warn { color: var(--warn); background: #fff7ed; }
+    .pill.bad { color: var(--bad); background: #fff1f2; }
+    .empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 14px; }
+    @media (max-width: 900px) {
+      .shell { padding: 14px; }
+      header, .grid { display: block; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .report-line { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">Algolia competitive intelligence</div>
+        <h1>CI Command Center</h1>
+      </div>
+      <div class="updated">Window: 2026-06-21 to 2026-06-27</div>
+    </header>
+    <nav aria-label="Dashboard views">
+      <a href="#today">Today</a>
+      <a href="#weekly">Weekly</a>
+      <a href="#sources">Sources</a>
+      <a href="#signals">Signals</a>
+      <a href="#actions">Actions</a>
+      <a href="#archive">Archive</a>
+    </nav>
+    <div class="metrics">
+      <div class="metric"><b>30</b><span>Material signals</span></div>
+      <div class="metric"><b>0</b><span>Sources needing attention</span></div>
+      <div class="metric"><b>1</b><span>Open action items</span></div>
+      <div class="metric"><b>10</b><span>Indexed reports</span></div>
+    </div>
+    <div class="grid">
+      <div>
+        <section id="today">
+          <h2>Today</h2>
+          
+        <div class="report-line">
+          <strong>Latest daily</strong>
+          <span>2026-06-27 to 2026-06-27</span>
+          <span>Quality 1.00</span>
+          <a href="/index.html#today">HTML</a>
+          <a href="/latest-daily.md">Markdown</a>
+        </div>
+        
+          <p class="callout">Replace or reclassify 403/404 sources before raising quiet-day confidence.</p>
+        </section>
+        <section id="weekly">
+          <h2>Weekly</h2>
+          
+        <div class="report-line">
+          <strong>Latest weekly</strong>
+          <span>2026-06-21 to 2026-06-27</span>
+          <span>Quality 1.00</span>
+          <a href="/index.html#weekly">HTML</a>
+          <a href="/latest-weekly.md">Markdown</a>
+        </div>
+        
+        </section>
+        <section id="signals">
+          <h2>Signals</h2>
+          <table><thead><tr><th>Competitor</th><th>Category</th><th>Owner</th><th>Score</th><th>Evidence</th></tr></thead><tbody>
+        <tr>
+          <td>Constructor</td>
+          <td>customer_proof</td>
+          <td>Sales Enablement</td>
+          <td>0.79</td>
+          <td><a href="https://constructor.com/customers">Constructor changed case_study</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>customer_proof</td>
+          <td>Sales Enablement</td>
+          <td>0.79</td>
+          <td><a href="https://www.bloomreach.com/en/customers">Bloomreach changed case_study</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Google Vertex AI Search</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.79</td>
+          <td><a href="https://cloud.google.com/blog/products/ai-machine-learning">Google Vertex AI Search changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>product_release</td>
+          <td>Product</td>
+          <td>0.75</td>
+          <td><a href="https://ir.coveo.com/en/news-events/press-releases">Coveo changed press</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>OpenAI / ChatGPT</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.75</td>
+          <td><a href="https://openai.com/news/rss.xml">OpenAI / ChatGPT changed rss</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>AI Agent Ecosystem</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.75</td>
+          <td><a href="https://blog.modelcontextprotocol.io">AI Agent Ecosystem changed protocol</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>OpenAI / ChatGPT</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.75</td>
+          <td><a href="https://openai.com/news/rss.xml">OpenAI / ChatGPT changed rss</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Google Vertex AI Search</td>
+          <td>positioning_messaging</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://cloud.google.com/vertex-ai">Google Vertex AI Search changed product</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Yext</td>
+          <td>positioning_messaging</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://www.yext.com/platform/search">Yext changed product</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Google Vertex AI Search</td>
+          <td>positioning_messaging</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://cloud.google.com/vertex-ai">Google Vertex AI Search changed product</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Constructor</td>
+          <td>positioning_messaging</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://constructor.com/product">Constructor changed product</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Constructor</td>
+          <td>seo_content_movement</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://constructor.com/blog">Constructor changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>seo_content_movement</td>
+          <td>Product Marketing</td>
+          <td>0.72</td>
+          <td><a href="https://www.bloomreach.com/en/blog">Bloomreach changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>AWS OpenSearch / CloudSearch</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.70</td>
+          <td><a href="https://aws.amazon.com/blogs/big-data">AWS OpenSearch / CloudSearch changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>AWS OpenSearch / CloudSearch</td>
+          <td>ai_visibility</td>
+          <td>Product Marketing</td>
+          <td>0.70</td>
+          <td><a href="https://aws.amazon.com/blogs/big-data">AWS OpenSearch / CloudSearch changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Contra Collective (ecommerce search infrastructure)</td>
+          <td>seo_content_movement</td>
+          <td>Product Marketing</td>
+          <td>0.68</td>
+          <td><a href="https://contracollective.com/blog">Contra Collective (ecommerce search infrastructure) changed blog</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>CMSWire Digital Experience</td>
+          <td>seo_content_movement</td>
+          <td>Product Marketing</td>
+          <td>0.68</td>
+          <td><a href="https://www.cmswire.com/digital-experience">CMSWire Digital Experience changed news</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>Meilisearch</td>
+          <td>seo_content_movement</td>
+          <td>Product Marketing</td>
+          <td>0.68</td>
+          <td><a href="https://www.meilisearch.com/blog">Meilisearch changed blog</a></td>
+        </tr>
+        </tbody></table>
+        </section>
+        <section id="archive">
+          <h2>Archive</h2>
+          <table><thead><tr><th>Cadence</th><th>Period</th><th>Quality</th><th>HTML</th><th>Markdown</th></tr></thead><tbody>
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-21 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/index.html#weekly">HTML</a></td>
+          <td><a href="/latest-weekly.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>daily</td>
+          <td>2026-06-27 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/index.html#today">HTML</a></td>
+          <td><a href="/latest-daily.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-21 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/index.html#weekly">HTML</a></td>
+          <td><a href="/latest-weekly.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>daily</td>
+          <td>2026-06-27 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/index.html#today">HTML</a></td>
+          <td><a href="/latest-daily.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>daily</td>
+          <td>2026-06-27 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-27.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-27.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>daily</td>
+          <td>2026-06-27 to 2026-06-27</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-27.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-27.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-20 to 2026-06-26</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-26-weekly.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-26-weekly.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-20 to 2026-06-26</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-26-weekly.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-26-weekly.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-20 to 2026-06-26</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-26-weekly.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-26-weekly.md">Markdown</a></td>
+        </tr>
+        
+
+        <tr>
+          <td>weekly</td>
+          <td>2026-06-20 to 2026-06-26</td>
+          <td>1.00</td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/2026-06-26-weekly.html">HTML</a></td>
+          <td><a href="/opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/2026-06-26-weekly.md">Markdown</a></td>
+        </tr>
+        </tbody></table>
+        </section>
+      </div>
+      <aside>
+        <section id="sources">
+          <h2>Source health and collector strategy</h2>
+          <p class="collector-line">Collectors: direct_http: 10, rss_feed: 2, scout_scrape: 27</p>
+          <table><thead><tr><th>Source</th><th>Type</th><th>Collector</th><th>Quality</th><th>Priority</th><th>Status</th><th>Reason</th></tr></thead><tbody>
+        <tr>
+          <td>Algolia</td>
+          <td>docs</td>
+          <td>direct_http</td>
+          <td></td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.algolia.com/doc/guides/model-context-protocol</td>
+        </tr>
+        
+
+        <tr>
+          <td>Algolia</td>
+          <td>docs</td>
+          <td>direct_http</td>
+          <td></td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.algolia.com/doc/guides/model-context-protocol/public-mcp</td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>blog</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.bloomreach.com/en/blog</td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>changelog</td>
+          <td>direct_http</td>
+          <td></td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.bloomreach.com/en/products/updates</td>
+        </tr>
+        
+
+        <tr>
+          <td>Constructor</td>
+          <td>blog</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://constructor.com/blog</td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>press</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://ir.coveo.com/en/news-events/press-releases</td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>blog</td>
+          <td>scout_scrape</td>
+          <td></td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.coveo.com/en/blog</td>
+        </tr>
+        
+
+        <tr>
+          <td>Google Vertex AI Search</td>
+          <td>blog</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>1</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://cloud.google.com/blog/products/ai-machine-learning</td>
+        </tr>
+        
+
+        <tr>
+          <td>AI Agent Ecosystem</td>
+          <td>protocol</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://blog.modelcontextprotocol.io</td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>case_study</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.bloomreach.com/en/customers</td>
+        </tr>
+        
+
+        <tr>
+          <td>Bloomreach</td>
+          <td>roadmap</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.bloomreach.com/en/products/engagement/roadmap</td>
+        </tr>
+        
+
+        <tr>
+          <td>CMSWire Digital Experience</td>
+          <td>news</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.cmswire.com/digital-experience</td>
+        </tr>
+        
+
+        <tr>
+          <td>Constructor</td>
+          <td>case_study</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://constructor.com/customers</td>
+        </tr>
+        
+
+        <tr>
+          <td>Constructor</td>
+          <td>product</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://constructor.com/product</td>
+        </tr>
+        
+
+        <tr>
+          <td>Contra Collective (ecommerce search infrastructure)</td>
+          <td>blog</td>
+          <td>scout_scrape</td>
+          <td>1.00</td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://contracollective.com/blog</td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>product</td>
+          <td>scout_scrape</td>
+          <td></td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.coveo.com/en/platform</td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>case_study</td>
+          <td>scout_scrape</td>
+          <td></td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.coveo.com/en/resources/case-studies</td>
+        </tr>
+        
+
+        <tr>
+          <td>Coveo</td>
+          <td>product</td>
+          <td>scout_scrape</td>
+          <td></td>
+          <td>2</td>
+          <td><span class="pill ok">ok</span></td>
+          <td>https://www.coveo.com/en/solutions/commerce</td>
+        </tr>
+        </tbody></table>
+        </section>
+        <section id="actions">
+          <h2>Actions</h2>
+          <table><thead><tr><th>Title</th><th>Owner</th><th>Status</th><th>Priority</th><th>Recommendation</th></tr></thead><tbody>
+        <tr>
+          <td>Repair blocked CI sources</td>
+          <td>Competitive Intelligence</td>
+          <td>proposed</td>
+          <td>2</td>
+          <td>Replace or reclassify 403/404 sources before raising quiet-day confidence.</td>
+        </tr>
+        </tbody></table>
+        </section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

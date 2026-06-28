@@ -1,0 +1,392 @@
+# Competitor Source Configuration
+# =====================================
+# Source registry for the competitive research pipeline v2.
+# Public-source v1 only: direct URL snapshots/diffs, Parallel monitors, and
+# targeted Parallel search. No Gong, Salesforce, Slack, G2 paid API, Semrush API,
+# or internal field intel ingestion in this version.
+# Each URL can specify:
+# - type: source surface such as blog, press, product, changelog, docs, pricing
+# - signal_type: normalized signal taxonomy used by the SQLite ledger
+# - priority: 1-5, 1=highest
+# - cadence: daily, weekly, monthly, on-update, passive-monitor
+
+sources:
+  # ---- TIER 1: DIRECT COMPETITORS ----
+  coveo:
+    company: "Coveo"
+    tier: 1
+    urls:
+      - url: "https://www.coveo.com/en/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 1
+        cadence: daily
+      - url: "https://ir.coveo.com/en/news-events/press-releases"
+        type: press
+        signal_type: product_release
+        priority: 1
+        cadence: daily
+      - url: "https://www.coveo.com/en/platform"
+        type: product
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: weekly
+      - url: "https://www.coveo.com/en/solutions/commerce"
+        type: product
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: weekly
+      - url: "https://www.coveo.com/en/resources/case-studies"
+        type: case_study
+        signal_type: customer_proof
+        priority: 2
+        cadence: weekly
+    linkedin: "https://www.linkedin.com/company/coveo"
+    twitter: "@coveo"
+
+  bloomreach:
+    company: "Bloomreach"
+    tier: 1
+    urls:
+      - url: "https://www.bloomreach.com/en/products/updates"
+        type: changelog
+        signal_type: changelog_docs_change
+        priority: 1
+        cadence: daily
+      - url: "https://www.bloomreach.com/en/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 1
+        cadence: daily
+      - url: "https://www.bloomreach.com/en/products/engagement/roadmap"
+        type: roadmap
+        signal_type: product_release
+        priority: 2
+        cadence: weekly
+      - url: "https://www.bloomreach.com/en/customers"
+        type: case_study
+        signal_type: customer_proof
+        priority: 2
+        cadence: weekly
+    linkedin: "https://www.linkedin.com/company/bloomreach"
+    twitter: "@bloomreach"
+
+  constructor:
+    company: "Constructor"
+    tier: 1
+    urls:
+      - url: "https://constructor.com/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 1
+        cadence: daily
+      - url: "https://constructor.com/product"
+        type: product
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: weekly
+      - url: "https://constructor.com/customers"
+        type: case_study
+        signal_type: customer_proof
+        priority: 2
+        cadence: weekly
+    linkedin: "https://www.linkedin.com/company/constructor-io"
+    twitter: "@constructor_io"
+
+  google-vertex:
+    company: "Google Vertex AI Search"
+    tier: 1
+    urls:
+      - url: "https://cloud.google.com/blog/products/ai-machine-learning"
+        type: blog
+        signal_type: ai_visibility
+        priority: 1
+        cadence: daily
+      - url: "https://cloud.google.com/vertex-ai"
+        type: product
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: weekly
+      - url: "https://cloud.google.com/generative-ai-app-builder/docs"
+        type: docs
+        signal_type: changelog_docs_change
+        priority: 2
+        cadence: weekly
+    twitter: "@googlecloud"
+
+  # ---- TIER 2: TRADITIONAL COMPETITORS ----
+  elastic:
+    company: "Elastic"
+    tier: 2
+    urls:
+      - url: "https://www.elastic.co/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 2
+        cadence: daily
+      - url: "https://www.elastic.co/enterprise-search"
+        type: product
+        signal_type: positioning_messaging
+        priority: 3
+        cadence: weekly
+      - url: "https://www.elastic.co/docs/release-notes/elasticsearch"
+        type: changelog
+        signal_type: changelog_docs_change
+        priority: 3
+        cadence: weekly
+    twitter: "@elastic"
+
+  lucidworks:
+    company: "Lucidworks"
+    tier: 2
+    urls:
+      - url: "https://doc.lucidworks.com/docs/lw-platform/latest-changes"
+        type: changelog
+        signal_type: changelog_docs_change
+        priority: 2
+        cadence: daily
+        notes: "Replaces blocked lucidworks.com/blog direct fetch."
+      - url: "https://doc.lucidworks.com/docs/lw-platform"
+        type: docs
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: daily
+        notes: "Replaces blocked lucidworks.com/products direct fetch."
+    twitter: "@lucidworks"
+
+  yext:
+    company: "Yext"
+    tier: 2
+    urls:
+      - url: "https://www.yext.com/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 2
+        cadence: daily
+      - url: "https://www.yext.com/platform/search"
+        type: product
+        signal_type: positioning_messaging
+        priority: 2
+        cadence: daily
+    twitter: "@yext"
+
+  algonomy:
+    company: "Algonomy"
+    tier: 2
+    urls:
+      - url: "https://algonomy.com/blogs/"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 3
+        cadence: weekly
+    twitter: "@algonomy"
+
+  # ---- TIER 3: OSS THREATS ----
+  meilisearch:
+    company: "Meilisearch"
+    tier: 3
+    urls:
+      - url: "https://www.meilisearch.com/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 2
+        cadence: daily
+      - url: "https://github.com/meilisearch/meilisearch/releases"
+        type: changelog
+        signal_type: changelog_docs_change
+        priority: 2
+        cadence: daily
+    twitter: "@meilisearch"
+
+  typesense:
+    company: "Typesense"
+    tier: 3
+    urls:
+      - url: "https://typesense.org/blog/"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 3
+        cadence: weekly
+      - url: "https://github.com/typesense/typesense/releases"
+        type: changelog
+        signal_type: changelog_docs_change
+        priority: 3
+        cadence: weekly
+    twitter: "@typesense"
+
+  aws-search:
+    company: "AWS OpenSearch / CloudSearch"
+    tier: 3
+    urls:
+      - url: "https://aws.amazon.com/blogs/big-data/"
+        type: blog
+        signal_type: ai_visibility
+        priority: 3
+        cadence: weekly
+    twitter: "@awscloud"
+
+  # ---- TIER 4: AI-NATIVE THREATS ----
+  perplexity:
+    company: "Perplexity AI"
+    tier: 4
+    urls:
+      - url: "https://www.perplexity.ai/hub/blog"
+        type: blog
+        signal_type: ai_visibility
+        priority: 2
+        cadence: daily
+        enabled: false
+        notes: "Direct fetch returns 403 from VPS; track through ai_threats search queries until a stable public feed exists."
+    twitter: "@perplexity_ai"
+
+  openai:
+    company: "OpenAI / ChatGPT"
+    tier: 4
+    urls:
+      - url: "https://openai.com/news/rss.xml"
+        type: rss
+        signal_type: ai_visibility
+        priority: 2
+        cadence: daily
+        notes: "Official RSS replaces blocked openai.com/blog direct fetch."
+    twitter: "@openai"
+
+  ai-agents:
+    company: "AI Agent Ecosystem"
+    tier: 4
+    urls:
+      - url: "https://blog.modelcontextprotocol.io/"
+        type: protocol
+        signal_type: ai_visibility
+        priority: 2
+        cadence: weekly
+      - url: "https://github.com/google/A2A/releases"
+        type: protocol
+        signal_type: changelog_docs_change
+        priority: 3
+        cadence: weekly
+
+  # ---- TIER 5: ADJACENT / WATCHLIST ----
+  glean:
+    company: "Glean"
+    tier: 5
+    urls:
+      - url: "https://www.glean.com/blog"
+        type: blog
+        signal_type: seo_content_movement
+        priority: 4
+        cadence: weekly
+
+  # ---- ALGOLIA PUBLIC BASELINE ----
+  # Used only to prevent false competitive-gap claims.
+  algolia-baseline:
+    company: "Algolia"
+    tier: 0
+    urls:
+      - url: "https://www.algolia.com/doc/guides/model-context-protocol"
+        type: docs
+        signal_type: algolia_baseline_comparison
+        priority: 1
+        cadence: weekly
+      - url: "https://www.algolia.com/doc/guides/model-context-protocol/public-mcp"
+        type: docs
+        signal_type: algolia_baseline_comparison
+        priority: 1
+        cadence: weekly
+
+  # ---- INDUSTRY & ANALYST SOURCES ----
+  industry:
+    - url: "https://www.gartner.com/en/documents/6633334"
+      type: analyst
+      name: "Gartner MQ Search & Product Discovery"
+      signal_type: analyst_review_signal
+      priority: 1
+      cadence: on-update
+      enabled: false
+      notes: "Gated analyst document returns 403 from VPS; treat as manual-only or replace with public summaries."
+    - url: "https://www.cmswire.com/digital-experience/"
+      type: news
+      name: "CMSWire Digital Experience"
+      signal_type: seo_content_movement
+      priority: 2
+      cadence: daily
+    - url: "https://martechedge.com/"
+      type: news
+      name: "Martech Edge"
+      signal_type: seo_content_movement
+      priority: 3
+      cadence: daily
+    - url: "https://contracollective.com/blog"
+      type: blog
+      name: "Contra Collective (ecommerce search infrastructure)"
+      signal_type: seo_content_movement
+      priority: 2
+      cadence: weekly
+
+  # ---- COMMUNITY SOURCES ----
+  community:
+    - url: "old.reddit.com/r/ecommerce/.rss"
+      type: forum
+      signal_type: customer_community_voice
+      priority: 4
+      cadence: daily-monitor
+      notes: "RSS endpoint replaces blocked new Reddit page."
+    - url: "old.reddit.com/r/SEO/.rss"
+      type: forum
+      signal_type: customer_community_voice
+      priority: 4
+      cadence: daily-monitor
+      enabled: false
+      notes: "RSS endpoint currently returns 429 from VPS; use search/manual monitor until stable."
+    - url: "old.reddit.com/r/MachineLearning/.rss"
+      type: forum
+      signal_type: customer_community_voice
+      priority: 4
+      cadence: daily-monitor
+      enabled: false
+      notes: "RSS endpoint currently returns 429 from VPS; use search/manual monitor until stable."
+    - url: "news.ycombinator.com"
+      type: forum
+      signal_type: customer_community_voice
+      priority: 5
+      cadence: daily-monitor
+
+# ---- SEARCH QUERIES FOR DAILY RESEARCH RUN ----
+daily_queries:
+  competitor_moves:
+    - "Coveo AI search announcement release 2026"
+    - "Bloomreach discovery commerce latest news"
+    - "Constructor ecommerce AI search product update"
+    - "Google Vertex AI Search retail ecommerce new feature"
+    - "Elasticsearch enterprise search announcement"
+    - "Meilisearch Typesense open source search release"
+  industry_signals:
+    - "search and product discovery trends ecommerce 2026"
+    - "conversational commerce AI shopping agent"
+    - "retail ecommerce site search best practices"
+    - "Gartner Forrester IDC search discovery analyst"
+    - "MCP A2A UCP agent protocol commerce search"
+  ai_threats:
+    - "Perplexity shopping commerce search"
+    - "ChatGPT search browse ecommerce product discovery"
+    - "Google Universal Cart agentic commerce"
+    - "AI agents replacing site search ecommerce 2026"
+
+# ---- KEY EXECUTIVES TO TRACK (LinkedIn/X) ----
+executives:
+  coveo:
+    - name: "Louis Tetu"
+      role: "CEO"
+    - name: "Sheila Morin"
+      role: "CMO"
+  bloomreach:
+    - name: "Raj De Datta"
+      role: "CEO"
+    - name: "Anirban Bardalaye"
+      role: "CPO"
+  constructor:
+    - name: "Eli Finkelshteyn"
+      role: "CEO"
+  algolia:
+    - name: "Piyush Patel"
+      role: "Chief Ecosystem Officer"

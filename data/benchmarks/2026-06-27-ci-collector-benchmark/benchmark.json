@@ -1,0 +1,283 @@
+{
+  "date": "2026-06-27",
+  "created_at": "2026-06-27T15:56:26",
+  "targets": [
+    {
+      "id": "google-ai-blog",
+      "label": "Google AI blog",
+      "url": "https://cloud.google.com/blog/products/ai-machine-learning",
+      "expected_collector": "scout_scrape",
+      "selected_collector": "scout_scrape",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 266,
+          "text_chars": 3234,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 2377,
+          "text_chars": 3737,
+          "quality_score": 1.0,
+          "quality_reasons": [
+            "title_present",
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "links_extracted",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "scout_scrape",
+          "recommended_collector_reason": "browser_rendered_page",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "skipped",
+          "collector": "rss_feed",
+          "error": "not a feed target"
+        }
+      }
+    },
+    {
+      "id": "constructor-product",
+      "label": "Constructor product",
+      "url": "https://constructor.com/product",
+      "expected_collector": "scout_scrape",
+      "selected_collector": "scout_scrape",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 115,
+          "text_chars": 12035,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 2807,
+          "text_chars": 5418,
+          "quality_score": 1.0,
+          "quality_reasons": [
+            "title_present",
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "links_extracted",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "scout_scrape",
+          "recommended_collector_reason": "browser_rendered_page",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "skipped",
+          "collector": "rss_feed",
+          "error": "not a feed target"
+        }
+      }
+    },
+    {
+      "id": "coveo-press-blog",
+      "label": "Coveo press/blog",
+      "url": "https://ir.coveo.com/en/news-events/press-releases",
+      "expected_collector": "scout_scrape",
+      "selected_collector": "scout_scrape",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 151,
+          "text_chars": 1922,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 2518,
+          "text_chars": 5833,
+          "quality_score": 1.0,
+          "quality_reasons": [
+            "title_present",
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "links_extracted",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "scout_scrape",
+          "recommended_collector_reason": "browser_rendered_page",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "skipped",
+          "collector": "rss_feed",
+          "error": "not a feed target"
+        }
+      }
+    },
+    {
+      "id": "bloomreach-updates",
+      "label": "Bloomreach updates",
+      "url": "https://www.bloomreach.com/en/products/updates",
+      "expected_collector": "direct_http",
+      "selected_collector": "direct_http",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 112,
+          "text_chars": 13873,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 3123,
+          "text_chars": 17465,
+          "quality_score": 1.0,
+          "quality_reasons": [
+            "title_present",
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "links_extracted",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "scout_scrape",
+          "recommended_collector_reason": "browser_rendered_page",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "skipped",
+          "collector": "rss_feed",
+          "error": "not a feed target"
+        }
+      }
+    },
+    {
+      "id": "openai-rss",
+      "label": "OpenAI RSS",
+      "url": "https://openai.com/news/rss.xml",
+      "expected_collector": "rss_feed",
+      "selected_collector": "rss_feed",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 497,
+          "text_chars": 120000,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 15351,
+          "text_chars": 120000,
+          "quality_score": 0.75,
+          "quality_reasons": [
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "rss_feed",
+          "recommended_collector_reason": "feed_like_url",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "rss_feed",
+          "duration_ms": 453,
+          "text_chars": 12719,
+          "quality_score": 0.9,
+          "quality_reasons": [
+            "feed_items:1022"
+          ],
+          "recommended_collector": "rss_feed",
+          "recommended_collector_reason": null,
+          "error": null
+        }
+      }
+    },
+    {
+      "id": "static-example",
+      "label": "Simple static source",
+      "url": "https://example.com",
+      "expected_collector": "direct_http",
+      "selected_collector": "direct_http",
+      "results": {
+        "direct_http": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "direct_http",
+          "duration_ms": 16,
+          "text_chars": 142,
+          "quality_score": null,
+          "quality_reasons": [],
+          "recommended_collector": null,
+          "recommended_collector_reason": null,
+          "error": null
+        },
+        "scout_scrape": {
+          "status": "ok",
+          "http_status": 200,
+          "collector": "scout_scrape",
+          "duration_ms": 1291,
+          "text_chars": 165,
+          "quality_score": 1.0,
+          "quality_reasons": [
+            "title_present",
+            "enough_text_extracted",
+            "expected_markers_found",
+            "not_blocked",
+            "links_extracted",
+            "low_boilerplate_ratio"
+          ],
+          "recommended_collector": "scout_scrape",
+          "recommended_collector_reason": "browser_rendered_page",
+          "error": null
+        },
+        "rss_feed": {
+          "status": "skipped",
+          "collector": "rss_feed",
+          "error": "not a feed target"
+        }
+      }
+    }
+  ]
+}

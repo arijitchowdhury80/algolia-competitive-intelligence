@@ -1,0 +1,14 @@
+{
+  "name": "algolia-competitive-intelligence",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "python3 -m pytest packages/ci-core/tests -q",
+    "dashboard:dev": "cd apps/dashboard && npm run dev",
+    "dashboard:build": "cd apps/dashboard && npm run build"
+  }
+}
+

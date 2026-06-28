@@ -1,0 +1,18 @@
+[project]
+name = "algolia-competitive-intelligence"
+version = "0.1.0"
+description = "Algolia-specific competitive intelligence engine and dashboard."
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/ci-core/tests"]
+pythonpath = ["packages/ci-core/scripts"]
+
