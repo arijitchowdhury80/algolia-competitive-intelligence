@@ -2394,21 +2394,60 @@ def signal_is_daily_material(signal: Dict[str, Any]) -> bool:
         return False
     if signal_is_baseline(signal):
         return False
+    if signal_is_legacy_raw_change(signal):
+        return False
     try:
         return float(signal.get("score", 0)) >= 0.3
     except (TypeError, ValueError):
         return False
 
 
-def signal_is_baseline(signal: Dict[str, Any]) -> bool:
+def signal_raw_json(signal: Dict[str, Any]) -> Dict[str, Any]:
     raw = signal.get("raw_json")
-    if raw:
-        try:
-            raw_data = json.loads(raw) if isinstance(raw, str) else raw
-            if isinstance(raw_data, dict) and raw_data.get("baseline") is True:
-                return True
-        except (TypeError, ValueError):
-            pass
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw) if isinstance(raw, str) else raw
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def signal_has_semantic_delta(signal: Dict[str, Any]) -> bool:
+    raw_data = signal_raw_json(signal)
+    return isinstance(raw_data.get("semantic_delta"), dict)
+
+
+def signal_is_legacy_raw_change(signal: Dict[str, Any]) -> bool:
+    if signal_has_semantic_delta(signal):
+        return False
+    raw_data = signal_raw_json(signal)
+    collector = str(raw_data.get("collector", "")).lower()
+    text = " ".join([
+        str(signal.get("title", "")),
+        str(signal.get("summary", "")),
+        str(signal.get("evidence_snippet", "")),
+    ]).lower()
+    acquisition_collectors = {"direct_fetch", "direct_http", "scout_scrape", "rss_feed"}
+    raw_change_patterns = [
+        "changed since the previous snapshot",
+        "changed case_study",
+        "changed blog",
+        "changed press",
+        "public case_study source changed",
+        "public blog source changed",
+        "public press source changed",
+        "baseline captured",
+    ]
+    if collector in acquisition_collectors and any(pattern in text for pattern in raw_change_patterns):
+        return True
+    return bool(any(pattern in text for pattern in raw_change_patterns))
+
+
+def signal_is_baseline(signal: Dict[str, Any]) -> bool:
+    raw_data = signal_raw_json(signal)
+    if raw_data.get("baseline") is True:
+        return True
     return (
         signal.get("category") == "algolia_baseline_comparison"
         or signal.get("source_type") == "official_algolia_baseline"
@@ -2421,6 +2460,8 @@ def build_synthesis_packet(conn: sqlite3.Connection, cadence: str, date_start: s
     all_signals = get_signals(conn, date_start=date_start, date_end=date_end, limit=5000, min_score=0.0)
     semantic_deltas = get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="publish", limit=limit)
     suppressed_deltas = get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="suppressed", limit=50)
+    signals = [row for row in signals if not signal_is_legacy_raw_change(dict(row))]
+    all_signals_for_prompt = [row for row in all_signals if not signal_is_legacy_raw_change(dict(row))]
     if cadence == "daily":
         signals = [row for row in signals if signal_is_daily_material(dict(row))]
     counts = get_signal_counts(conn, date_start, date_end)
@@ -2435,7 +2476,7 @@ def build_synthesis_packet(conn: sqlite3.Connection, cadence: str, date_start: s
         "all_signals": [dict(row) for row in all_signals],
         "semantic_deltas": semantic_deltas,
         "suppressed_deltas": suppressed_deltas,
-        "source_ledger": source_ledger(all_signals),
+        "source_ledger": source_ledger(all_signals_for_prompt),
     }
 
 

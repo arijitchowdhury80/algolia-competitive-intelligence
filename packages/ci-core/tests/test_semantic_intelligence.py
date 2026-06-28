@@ -216,3 +216,34 @@ def test_synthesis_packet_prefers_semantic_deltas_over_raw_page_change(monkeypat
     assert "changed since the previous snapshot" not in markdown
     raw = json.loads(packet["signals"][0]["raw_json"])
     assert raw["semantic_delta"]["delta_type"] == "new_customer_proof"
+
+
+def test_synthesis_packet_filters_legacy_raw_change_signals(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+    conn = ci_core.connect_db()
+    ci_core.insert_signals(conn, [
+        ci_core.build_signal(
+            competitor="Constructor",
+            category="customer_proof",
+            source_url="https://constructor.com/customers",
+            source_type="case_study",
+            title="Constructor changed case_study",
+            evidence="Constructor public case_study source changed since the previous snapshot.",
+            summary="Constructor public case_study source changed since the previous snapshot.",
+            detected_date="2026-06-28",
+            event_date="2026-06-28",
+            novelty=0.85,
+            confidence=0.72,
+            impact=0.8,
+            raw={"collector": "direct_fetch", "baseline": False},
+        )
+    ])
+
+    packet = ci_core.build_synthesis_packet(conn, "weekly", "2026-06-28", "2026-06-28")
+    markdown = ci_core.synthesize_local(packet, cadence="weekly")
+
+    assert packet["signals"] == []
+    assert packet["source_ledger"] == []
+    assert "changed case_study" not in markdown
+    assert "changed since the previous snapshot" not in markdown
+    assert "No material public signals" in markdown
