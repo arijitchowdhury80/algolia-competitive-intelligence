@@ -29,18 +29,16 @@
       color-scheme: light;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-
     * { box-sizing: border-box; }
     html, body { max-width: 100%; overflow-x: hidden; }
     body { margin: 0; background: var(--canvas); color: var(--body); }
-    a { color: var(--blue); font-weight: 760; text-decoration: none; }
+    a { color: var(--blue); font-weight: 760; text-decoration: none; overflow-wrap: anywhere; }
     a:hover { text-decoration: underline; }
     h1, h2, h3, p { margin-top: 0; }
     h1 { margin-bottom: 8px; color: var(--ink); font-size: clamp(34px, 5vw, 66px); line-height: .98; letter-spacing: 0; }
     h2 { margin-bottom: 14px; color: var(--ink); font-size: 22px; line-height: 1.18; letter-spacing: 0; }
     h3 { margin-bottom: 8px; color: var(--ink); font-size: 18px; line-height: 1.25; letter-spacing: 0; }
     p { margin-bottom: 12px; line-height: 1.5; }
-
     .shell { width: min(1280px, 100%); margin: 0 auto; padding: 28px; }
     .topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
     .eyebrow { color: var(--blue); font-size: 12px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
@@ -51,8 +49,7 @@
     .hero, .panel, .side-panel, .finding, .report-row { border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }
     .hero { padding: 24px; border-top: 5px solid var(--blue); }
     .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; }
-    .answer { margin-bottom: 14px; color: var(--ink); font-size: clamp(25px, 3.2vw, 42px); line-height: 1.06; font-weight: 900; letter-spacing: 0; }
-    .summary { max-width: 820px; font-size: 17px; }
+    .answer { margin-bottom: 14px; color: var(--ink); font-size: clamp(25px, 3.2vw, 42px); line-height: 1.06; font-weight: 900; letter-spacing: 0; overflow-wrap: anywhere; }
     .finding-blocks { display: grid; gap: 14px; margin-top: 18px; }
     .finding-block { border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 14px; }
     .finding-block h3 { margin-bottom: 6px; font-size: 15px; }
@@ -79,7 +76,7 @@
     .proof-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
     .proof { border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 10px; font-size: 13px; line-height: 1.4; }
     .proof span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
-    .quality-list, .metric-list, .report-list { display: grid; gap: 9px; }
+    .quality-list, .report-list { display: grid; gap: 9px; }
     .limit-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
     .limit-stat { border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 10px; }
     .limit-stat strong { display: block; color: var(--ink); font-size: 22px; line-height: 1; }
@@ -89,19 +86,11 @@
     .mark.warn { background: var(--amber-soft); color: var(--amber); }
     .quality-row strong { display: block; color: var(--ink); font-size: 14px; }
     .quality-row span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }
-    .metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 9px; font-size: 13px; }
-    .metric:last-child { border-bottom: 0; padding-bottom: 0; }
-    .metric strong { color: var(--ink); font-size: 22px; }
     .report-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; box-shadow: none; }
     .report-row time { color: var(--muted); font-size: 12px; font-weight: 850; }
     .report-row b { display: block; color: var(--ink); margin-bottom: 3px; }
     .report-row span { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
     .note { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .source-mix { display: grid; gap: 8px; margin-top: 8px; }
-    .source-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) 28px; gap: 8px; align-items: center; font-size: 13px; }
-    .bar { height: 8px; overflow: hidden; border-radius: 999px; background: #e8edf7; }
-    .bar span { display: block; height: 100%; background: var(--blue); }
-
     @media (max-width: 980px) {
       .layout, .hero-grid { grid-template-columns: 1fr; }
       .side { position: static; }
@@ -111,18 +100,10 @@
       .topbar, .finding, .report-row { grid-template-columns: 1fr; }
       .meta { text-align: left; }
       .hero, .panel, .side-panel, .finding { width: 100%; max-width: 100%; overflow: hidden; }
-      .hero-grid > *, .finding > *, .answer, .summary, .recommendation {
-        width: 100%;
-        min-width: 0;
-        max-width: 100%;
-        overflow-wrap: break-word;
-      }
-      .answer, a { overflow-wrap: anywhere; }
       .proof-grid { grid-template-columns: 1fr; }
       h1 { font-size: 34px; }
       .answer { font-size: 23px; line-height: 1.12; }
       h3 { font-size: 16px; }
-      .summary { font-size: 16px; }
     }
   </style>
 </head>
@@ -139,192 +120,155 @@
         <div>Generated from archived CI briefs, not mock data</div>
       </div>
     </header>
-
     <div class="layout">
       <div class="main">
         <section class="hero" aria-labelledby="answer">
           <div class="hero-grid">
             <div>
               <div class="eyebrow">Primary finding</div>
-              <h2 class="answer" id="answer">AWS is pushing OpenSearch Serverless into agentic developer workflows.</h2>
+              <h2 class="answer" id="answer">Constructor customer proof changed needs validation.</h2>
               <div class="finding-blocks">
-                <section class="finding-block" aria-labelledby="what-happened-title">
-                  <h3 id="what-happened-title">What happened</h3>
-                  <p>
-                    The 2026-06-20 CI brief found that AWS GA'd a next-generation OpenSearch Serverless release for agentic AI, with claims around faster provisioning, scale-to-zero, lower cost, and integrations into Claude Code, Cursor, Codex, Vercel, and Kiro through OpenSearch Agent Skills.
-                  </p>
-                </section>
-                <section class="finding-block" aria-labelledby="why-matters-title">
-                  <h3 id="why-matters-title">Why it matters</h3>
-                  <p>
-                    This can create a direct "why not OpenSearch?" pressure point against Algolia in agentic search and serverless search evaluations, especially with developers who already live inside those tools.
-                  </p>
-                </section>
-                <section class="finding-block" aria-labelledby="response-title">
-                  <h3 id="response-title">Recommended response</h3>
-                  <p>
-                    Product Marketing should review whether Algolia needs public proof content for MCP, agent-tooling, and serverless economics: working examples, an agent-workload guide, and a clear comparison story.
-                  </p>
-                </section>
-                <section class="finding-block" aria-labelledby="evidence-title">
-                  <h3 id="evidence-title">Evidence</h3>
-                  <p>
-                    <a href="/archive/2026-06-20.md">Open June 20 brief</a> ·
-                    <a href="https://aws.amazon.com/about-aws/whats-new/2026/05/amazon-opensearch-serverless-next-generation-generally-available/">AWS source</a> ·
-                    <a href="https://www.infoq.com/news/2026/06/aws-opensearch-serverless/">InfoQ source</a> ·
-                    <a href="https://github.com/opensearch-project/opensearch-agent-skills">OpenSearch Agent Skills repo</a>
-                  </p>
-                </section>
+                <section class="finding-block"><h3>What happened</h3><p>Constructor produced the highest-scored public signal: <a href="https://constructor.com/customers">Constructor customer proof changed</a>. The signal category is Customer Proof, with medium confidence and a 78% impact score. Treat this as actionable only after checking whether the same theme appears in sales conversations or customer proof.</p></section>
+                <section class="finding-block"><h3>Why it matters</h3><p>The pattern is named AI search packaging. Competitors are not just describing features; they are giving AI search and retrieval a marketable wrapper across MCP, agent, commerce reasoning, personalization, and product-discovery narratives. Treat this as a Product Marketing-led positioning problem first, then escalate to Product only where internal validation shows a real capability delta.</p></section>
+                <section class="finding-block"><h3>Recommended response</h3><p>Sales Enablement owns the first move. Review the source evidence today, decide whether it changes positioning, battlecards, or product response, and log the validation result in the next weekly synthesis.</p></section>
+                <section class="finding-block"><h3>Evidence</h3><p><a href="archive/2026-06-27.md">Open latest daily brief</a> · <a href="https://constructor.com/customers">Constructor customer proof changed</a> · <a href="https://www.bloomreach.com/en/customers">Bloomreach customer proof changed</a> · <a href="https://cloud.google.com/blog/products/ai-machine-learning">Google Vertex AI Search blog changed</a> · <a href="https://ir.coveo.com/en/news-events/press-releases">Coveo press page changed</a></p></section>
               </div>
             </div>
           </div>
         </section>
-
         <section class="panel" aria-labelledby="findings-title">
           <div class="section-head">
-            <div>
-              <div class="eyebrow">Intel queue</div>
-              <h2 id="findings-title">Other findings</h2>
-            </div>
+            <div><div class="eyebrow">Intel queue</div><h2 id="findings-title">Other findings</h2></div>
             <span class="pill blue">Actual archive</span>
           </div>
-
           <div class="finding-list">
             <article class="finding">
               <div class="rank">
-                <strong>Primary</strong>
-                <span>Found: 2026-06-20 daily</span>
-                <span>Owner: Product Marketing</span>
+                <strong>Sales Enablement</strong>
+                <span>Found: 2026-06-27 weekly</span>
+                <span>Source: Weekly synthesis</span>
               </div>
               <div>
-                <h3>AWS OpenSearch Serverless remains the primary finding from the archive.</h3>
-                <p><strong>What happened:</strong> AWS positioned OpenSearch Serverless for agentic AI and developer-tool integrations.</p>
-                <p><strong>Why it matters:</strong> It can create substitution pressure against Algolia for agentic and serverless search.</p>
-                <div class="recommendation">
-                  Recommended response: PMM should evaluate whether Algolia needs stronger public proof for MCP, agentic workloads, and serverless economics.
-                </div>
+                <h3>Act on Customer Proof by validating whether Constructor customer proof changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Constructor public customer proof source changed since the previous snapshot..</h3>
+                <p><strong>What happened:</strong> The ledger captured 67 public signals. AI visibility is the dominant movement with 10 signals, followed by SEO/content movement (25) and pricing/packaging (0). The strongest source-backed signal is from Constructor: Constructor customer proof changed.</p>
+                <p><strong>Why it matters:</strong> The pattern is named AI search packaging. Competitors are not just describing features; they are giving AI search and retrieval a marketable wrapper across MCP, agent, commerce reasoning, personalization, and product-discovery narratives. Treat this as a Product Marketing-led positioning problem first, then escalate to Product only where internal validation shows a real capability delta.</p>
+                <div class="recommendation">Recommended response: Act on Customer Proof by validating whether Constructor customer proof changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Constructor public customer proof source changed since the previous snapshot..</div>
                 <div class="tags">
-                  <span class="pill red">Strategic threat</span>
-                  <span class="pill violet">Agentic search</span>
-                  <span class="pill blue">PMM action</span>
+                  <span class="pill blue">Owner specific</span>
+                  <span class="pill amber">Validate before action</span>
                 </div>
                 <details>
                   <summary>Show evidence</summary>
                   <div class="proof-grid">
-                    <div class="proof"><span>Archived report</span><a href="/archive/2026-06-20.md">Open 2026-06-20 daily brief</a></div>
-                    <div class="proof"><span>AWS source</span><a href="https://aws.amazon.com/about-aws/whats-new/2026/05/amazon-opensearch-serverless-next-generation-generally-available/">AWS OpenSearch Serverless NextGen GA</a></div>
-                    <div class="proof"><span>Technical analysis</span><a href="https://www.infoq.com/news/2026/06/aws-opensearch-serverless/">InfoQ technical breakdown</a></div>
-                    <div class="proof"><span>Protocol proof</span><a href="https://github.com/opensearch-project/opensearch-agent-skills">OpenSearch Agent Skills repo</a></div>
+                    <div class="proof"><span>Archived weekly</span><a href="archive/2026-06-27-weekly.md">Open weekly synthesis</a></div>
+                    <div class="proof"><span>Archived daily</span><a href="archive/2026-06-27.md">Open daily brief</a></div>
                   </div>
                 </details>
               </div>
             </article>
+                
 
             <article class="finding">
               <div class="rank">
-                <strong>Needs review</strong>
-                <span>Found: 2026-06-27 daily/weekly</span>
-                <span>Owner: Sales Enablement</span>
+                <strong>Product Marketing</strong>
+                <span>Found: 2026-06-27 weekly</span>
+                <span>Source: Weekly synthesis</span>
               </div>
               <div>
-                <h3>Constructor and Bloomreach customer proof needs sales validation.</h3>
-                <p><strong>What happened:</strong> The June 27 reports identify Constructor customer proof as the top daily signal and include Bloomreach customer proof in battlecard update candidates.</p>
-                <p><strong>Why it matters:</strong> These examples matter only if they expose a proof-point gap for Algolia commerce deals or objection handling.</p>
-                <div class="recommendation">
-                  Recommended response: Sales Enablement should compare competitor customer proof against Algolia commerce proof and decide whether sales language needs an update.
-                </div>
+                <h3>Act on AI Visibility by validating whether Google Vertex AI Search blog changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Google Vertex AI Search public blog source changed since the previous snapshot..</h3>
+                <p><strong>What happened:</strong> The ledger captured 67 public signals. AI visibility is the dominant movement with 10 signals, followed by SEO/content movement (25) and pricing/packaging (0). The strongest source-backed signal is from Constructor: Constructor customer proof changed.</p>
+                <p><strong>Why it matters:</strong> The pattern is named AI search packaging. Competitors are not just describing features; they are giving AI search and retrieval a marketable wrapper across MCP, agent, commerce reasoning, personalization, and product-discovery narratives. Treat this as a Product Marketing-led positioning problem first, then escalate to Product only where internal validation shows a real capability delta.</p>
+                <div class="recommendation">Recommended response: Act on AI Visibility by validating whether Google Vertex AI Search blog changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Google Vertex AI Search public blog source changed since the previous snapshot..</div>
                 <div class="tags">
-                  <span class="pill green">Customer proof</span>
-                  <span class="pill amber">Needs validation</span>
-                  <span class="pill blue">Sales enablement</span>
+                  <span class="pill blue">Owner specific</span>
+                  <span class="pill amber">Validate before action</span>
                 </div>
                 <details>
                   <summary>Show evidence</summary>
                   <div class="proof-grid">
-                    <div class="proof"><span>Archived daily</span><a href="/archive/2026-06-27.md">Open 2026-06-27 daily brief</a></div>
-                    <div class="proof"><span>Archived weekly</span><a href="/archive/2026-06-27-weekly.md">Open 2026-06-27 weekly synthesis</a></div>
-                    <div class="proof"><span>Constructor</span><a href="https://constructor.com/customers">Constructor customers</a></div>
-                    <div class="proof"><span>Bloomreach</span><a href="https://www.bloomreach.com/en/customers">Bloomreach customers</a></div>
+                    <div class="proof"><span>Archived weekly</span><a href="archive/2026-06-27-weekly.md">Open weekly synthesis</a></div>
+                    <div class="proof"><span>Archived daily</span><a href="archive/2026-06-27.md">Open daily brief</a></div>
                   </div>
                 </details>
               </div>
             </article>
+                
 
             <article class="finding">
               <div class="rank">
-                <strong>Watch</strong>
-                <span>Seen: 2026-06-17, 2026-06-20, 2026-06-27</span>
-                <span>Owner: PMM / Product</span>
+                <strong>Product</strong>
+                <span>Found: 2026-06-27 weekly</span>
+                <span>Source: Weekly synthesis</span>
               </div>
               <div>
-                <h3>AI search packaging is the repeated market pattern.</h3>
-                <p><strong>What happened:</strong> The weekly reports repeatedly name AI search packaging across MCP, agents, commerce reasoning, personalization, and product-discovery narratives.</p>
-                <p><strong>Why it matters:</strong> This may affect Algolia positioning, but it is not by itself a battlecard change until a specific competitor delta is confirmed.</p>
-                <div class="recommendation">
-                  Recommended response: Keep this as a PMM watch area. Do not update battlecards from generic AI movement alone.
-                </div>
+                <h3>Act on Product Release by validating whether Coveo press page changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Coveo public press source changed since the previous snapshot..</h3>
+                <p><strong>What happened:</strong> The ledger captured 67 public signals. AI visibility is the dominant movement with 10 signals, followed by SEO/content movement (25) and pricing/packaging (0). The strongest source-backed signal is from Constructor: Constructor customer proof changed.</p>
+                <p><strong>Why it matters:</strong> The pattern is named AI search packaging. Competitors are not just describing features; they are giving AI search and retrieval a marketable wrapper across MCP, agent, commerce reasoning, personalization, and product-discovery narratives. Treat this as a Product Marketing-led positioning problem first, then escalate to Product only where internal validation shows a real capability delta.</p>
+                <div class="recommendation">Recommended response: Act on Product Release by validating whether Coveo press page changed changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: Coveo public press source changed since the previous snapshot..</div>
                 <div class="tags">
-                  <span class="pill violet">Repeated pattern</span>
-                  <span class="pill amber">Battlecard gated</span>
-                  <span class="pill neutral">Watch</span>
+                  <span class="pill blue">Owner specific</span>
+                  <span class="pill amber">Validate before action</span>
                 </div>
                 <details>
                   <summary>Show evidence</summary>
                   <div class="proof-grid">
-                    <div class="proof"><span>June 17 weekly</span><a href="/archive/2026-06-17-weekly.md">Open weekly synthesis</a></div>
-                    <div class="proof"><span>June 27 weekly</span><a href="/archive/2026-06-27-weekly.md">Open weekly synthesis</a></div>
-                    <div class="proof"><span>Coveo source</span><a href="https://ir.coveo.com/en/news-events/press-releases/detail/474/coveo-announces-hosted-mcp-server-to-expand-enterprise-ai">Coveo hosted MCP server release</a></div>
-                    <div class="proof"><span>Google source</span><a href="https://cloud.google.com/blog/products/ai-machine-learning">Google AI blog</a></div>
+                    <div class="proof"><span>Archived weekly</span><a href="archive/2026-06-27-weekly.md">Open weekly synthesis</a></div>
+                    <div class="proof"><span>Archived daily</span><a href="archive/2026-06-27.md">Open daily brief</a></div>
                   </div>
                 </details>
               </div>
             </article>
-          </div>
+                </div>
         </section>
-
         <section class="panel" aria-labelledby="history-title">
           <div class="section-head">
-            <div>
-              <div class="eyebrow">Where this came from</div>
-              <h2 id="history-title">Report history</h2>
-            </div>
-            <span class="pill neutral">Sparse archive</span>
+            <div><div class="eyebrow">Where this came from</div><h2 id="history-title">Report history</h2></div>
+            <span class="pill neutral">Automated archive</span>
           </div>
           <div class="report-list">
             <div class="report-row">
-              <time>Jun 27 weekly</time>
-              <div><b>67 public signals. Constructor customer proof, Google AI blog, Coveo press.</b><span>Recommended owners: Sales Enablement, Product Marketing, Product.</span></div>
-              <a href="/archive/2026-06-27-weekly.md">Open</a>
+              <time>2026-06-27</time>
+              <div><b>2026-06-27 weekly</b><span>The ledger captured 67 public signals. AI visibility is the dominant movement with 10 signals, followed by SEO/content movement (25) and pricing/packaging (0). The strongest source</span></div>
+              <a href="archive/2026-06-27-weekly.md">Open</a>
             </div>
+            
+
             <div class="report-row">
-              <time>Jun 27 daily</time>
-              <div><b>Constructor customer proof was the top signal.</b><span>Sales Enablement owns first review.</span></div>
-              <a href="/archive/2026-06-27.md">Open</a>
+              <time>2026-06-27</time>
+              <div><b>2026-06-27 daily</b><span>Constructor produced the highest-scored public signal: Constructor customer proof changed. The signal category is Customer Proof, with medium confidence and a 78% impact score. Tre</span></div>
+              <a href="archive/2026-06-27.md">Open</a>
             </div>
+            
+
             <div class="report-row">
-              <time>Jun 20 daily</time>
-              <div><b>AWS OpenSearch Serverless plus agent skills was the strongest strategic threat.</b><span>PMM content sprint recommended.</span></div>
-              <a href="/archive/2026-06-20.md">Open</a>
+              <time>2026-06-20</time>
+              <div><b>2026-06-20 daily</b><span>Two signals this cycle carry real competitive weight. AWS has GA&#x27;d a next-generation OpenSearch Serverless rebuilt explicitly for agentic AI, with 20x faster provisioning, true sca</span></div>
+              <a href="archive/2026-06-20.md">Open</a>
             </div>
+            
+
             <div class="report-row">
-              <time>Jun 18 weekly</time>
-              <div><b>Setup report: 0 changed/material signals, 13 source failures.</b><span>Useful for reliability context, not competitive action.</span></div>
-              <a href="/archive/2026-06-18-weekly.md">Open</a>
+              <time>2026-06-18</time>
+              <div><b>2026-06-18 weekly</b><span>This is a setup report. All 26 signals collected across 43 configured sources are baseline captures with zero changed signals and zero material signals. No competitor made a detect</span></div>
+              <a href="archive/2026-06-18-weekly.md">Open</a>
             </div>
+            
+
             <div class="report-row">
-              <time>Jun 17 weekly</time>
-              <div><b>82 public signals. AI search packaging pattern identified.</b><span>Coveo MCP and Bloomreach examples drove early recommendations.</span></div>
-              <a href="/archive/2026-06-17-weekly.md">Open</a>
+              <time>2026-06-17</time>
+              <div><b>2026-06-17 weekly</b><span>The ledger captured 82 public signals. AI visibility is the dominant movement with 31 signals, followed by SEO/content movement (20) and pricing/packaging (12). The strongest sourc</span></div>
+              <a href="archive/2026-06-17-weekly.md">Open</a>
             </div>
+            
+
             <div class="report-row">
-              <time>Jun 17 daily</time>
-              <div><b>Coveo MCP / AI visibility was the highest-scored public signal.</b><span>PMM review recommended.</span></div>
-              <a href="/archive/2026-06-17.md">Open</a>
+              <time>2026-06-17</time>
+              <div><b>2026-06-17 daily</b><span>Coveo produced the highest-scored public signal: Coveo Announces Hosted MCP Server to Expand Enterprise AI and Agentic Partner Ecosystem :: Coveo Solutions Inc. (CVO). The signal c</span></div>
+              <a href="archive/2026-06-17.md">Open</a>
             </div>
-          </div>
+            </div>
         </section>
       </div>
-
       <aside class="side" aria-label="Data reliability">
         <section class="side-panel">
           <div class="eyebrow">Can I trust this?</div>
@@ -332,35 +276,17 @@
           <div class="limit-stats" aria-label="Archive coverage">
             <div class="limit-stat"><strong>6</strong><span>Archived CI briefs used</span></div>
             <div class="limit-stat"><strong>3</strong><span>Findings surfaced</span></div>
-            <div class="limit-stat"><strong>0</strong><span>Battlecard updates recommended</span></div>
+            <div class="limit-stat"><strong>4</strong><span>Battlecard updates listed</span></div>
             <div class="limit-stat"><strong>11d</strong><span>Covered date range</span></div>
           </div>
           <div class="quality-list">
-            <div class="quality-row">
-              <div class="mark">✓</div>
-              <div><strong>Uses real archived briefs</strong><span>No mock findings or fake action buttons are used on this page.</span></div>
-            </div>
-            <div class="quality-row">
-              <div class="mark warn">!</div>
-              <div><strong>Archive is sparse</strong><span>There are 3 daily and 3 weekly reports, not 14 daily reports.</span></div>
-            </div>
-            <div class="quality-row">
-              <div class="mark warn">!</div>
-              <div><strong>Public-source only</strong><span>No Gong, Salesforce, Slack, G2 paid exports, Semrush API, or internal win/loss data.</span></div>
-            </div>
-            <div class="quality-row">
-              <div class="mark warn">!</div>
-              <div><strong>Local ledger missing</strong><span>This view is generated from archived report files. The local `ci.sqlite` ledger was not present.</span></div>
-            </div>
+            <div class="quality-row"><div class="mark">✓</div><div><strong>Uses real archived briefs</strong><span>No mock findings or fake action buttons are used on this page.</span></div></div>
+            <div class="quality-row"><div class="mark warn">!</div><div><strong>Public-source only</strong><span>No Gong, Salesforce, Slack, G2 paid exports, Semrush API, or internal win/loss data.</span></div></div>
+            <div class="quality-row"><div class="mark warn">!</div><div><strong>Generated by Chowmes</strong><span>Last generated at 2026-06-28T02:00:30 after CI runtime artifacts were exported.</span></div></div>
           </div>
           <details>
             <summary>Show collection details</summary>
-            <div class="source-mix">
-              <div class="source-row"><span>Scout</span><div class="bar"><span style="width: 59%"></span></div><strong>23</strong></div>
-              <div class="source-row"><span>HTTP</span><div class="bar"><span style="width: 36%"></span></div><strong>14</strong></div>
-              <div class="source-row"><span>RSS</span><div class="bar"><span style="width: 5%"></span></div><strong>2</strong></div>
-            </div>
-            <p class="note">Collection context explains confidence. It is not part of the main workflow.</p>
+            <p class="note">Collection context is captured in the CI ledger and source health events. This public dashboard shows the executive brief first and keeps collection mechanics secondary.</p>
           </details>
         </section>
       </aside>

@@ -1,0 +1,45 @@
+{
+  "archive_range": "2026-06-17 to 2026-06-27",
+  "generated_at": "2026-06-28T02:00:30",
+  "latest_daily": {
+    "date": "2026-06-27",
+    "path": "latest-daily.md"
+  },
+  "latest_weekly": {
+    "date": "2026-06-27",
+    "path": "latest-weekly.md"
+  },
+  "report_count": 6,
+  "reports": [
+    {
+      "cadence": "weekly",
+      "date": "2026-06-27",
+      "path": "archive/2026-06-27-weekly.md"
+    },
+    {
+      "cadence": "daily",
+      "date": "2026-06-27",
+      "path": "archive/2026-06-27.md"
+    },
+    {
+      "cadence": "daily",
+      "date": "2026-06-20",
+      "path": "archive/2026-06-20.md"
+    },
+    {
+      "cadence": "weekly",
+      "date": "2026-06-18",
+      "path": "archive/2026-06-18-weekly.md"
+    },
+    {
+      "cadence": "weekly",
+      "date": "2026-06-17",
+      "path": "archive/2026-06-17-weekly.md"
+    },
+    {
+      "cadence": "daily",
+      "date": "2026-06-17",
+      "path": "archive/2026-06-17.md"
+    }
+  ]
+}

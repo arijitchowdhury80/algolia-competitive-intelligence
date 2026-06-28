@@ -29,12 +29,35 @@ fi
 cd "$SKILL_ROOT"
 export COMPETITIVE_RESEARCH_OUTPUT_ROOT="$WORKSPACE_ROOT/artifacts/competitive-research"
 
+publish_dashboard() {
+  repo_root="${ALGOLIA_CI_REPO_ROOT:-}"
+  if [ -z "$repo_root" ]; then
+    return 0
+  fi
+  publisher="$repo_root/packages/ci-core/scripts/publish-dashboard.py"
+  if [ ! -f "$publisher" ]; then
+    printf '[WARN] Dashboard publisher not found: %s\n' "$publisher"
+    return 0
+  fi
+  log_path="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log"
+  mkdir -p "$(dirname "$log_path")"
+  if ! python3 "$publisher" \
+    --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
+    --repo-root "$repo_root" \
+    --commit-message "Update weekly CI dashboard" >"$log_path" 2>&1
+  then
+    printf '[WARN] Dashboard publish failed. Log: %s\n' "$log_path"
+  fi
+}
+
 output="$(
   python3 "$SKILL_ROOT/scripts/weekly-review.py" 2>&1
 )" || {
   printf '%s\n' "$output"
   exit 1
 }
+
+publish_dashboard
 
 period="$(
   printf '%s\n' "$output" | sed -nE 's/^=== Weekly competitive synthesis v2: (.*) ===$/\1/p' | head -1
