@@ -1,16 +1,21 @@
 {
-  "archive_range": "2026-06-17 to 2026-06-27",
-  "generated_at": "2026-06-28T02:03:01",
+  "archive_range": "2026-06-17 to 2026-06-28",
+  "generated_at": "2026-06-28T02:04:53",
   "latest_daily": {
     "date": "2026-06-27",
     "path": "latest-daily.md"
   },
   "latest_weekly": {
-    "date": "2026-06-27",
+    "date": "2026-06-28",
     "path": "latest-weekly.md"
   },
-  "report_count": 7,
+  "report_count": 8,
   "reports": [
+    {
+      "cadence": "weekly",
+      "date": "2026-06-28",
+      "path": "archive/2026-06-28-weekly.md"
+    },
     {
       "cadence": "weekly",
       "date": "2026-06-27",
