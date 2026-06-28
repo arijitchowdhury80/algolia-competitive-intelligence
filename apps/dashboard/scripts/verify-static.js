@@ -16,7 +16,9 @@ for (const token of [
   "Constructor and Bloomreach customer proof needs sales validation.",
   "AI search packaging is the repeated market pattern.",
   "Report history",
+  "Data limits",
   "Archive is sparse",
+  "Show collection details",
   "/archive/2026-06-20.md",
   "/archive/2026-06-27-weekly.md",
   "<base target=\"_blank\">",
@@ -24,6 +26,21 @@ for (const token of [
 ]) {
   if (!html.includes(token)) {
     throw new Error(`Dashboard static seed is missing: ${token}`);
+  }
+}
+
+for (const token of [
+  "Attention queue",
+  "Mock findings",
+  "Accept posture",
+  "Assign review",
+  "Ask for proof",
+  "Archive count",
+  "Collector context",
+  "scorebox"
+]) {
+  if (html.includes(token)) {
+    throw new Error(`Dashboard static seed still contains retired UX copy: ${token}`);
   }
 }
 
