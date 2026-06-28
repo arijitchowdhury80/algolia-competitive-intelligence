@@ -30,7 +30,7 @@ cd "$SKILL_ROOT"
 export COMPETITIVE_RESEARCH_OUTPUT_ROOT="$WORKSPACE_ROOT/artifacts/competitive-research"
 
 publish_dashboard() {
-  repo_root="${ALGOLIA_CI_REPO_ROOT:-}"
+  repo_root="${ALGOLIA_CI_REPO_ROOT:-/opt/data/apps/algolia-competitive-intelligence}"
   if [ -z "$repo_root" ]; then
     return 0
   fi
