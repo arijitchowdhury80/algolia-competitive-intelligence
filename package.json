@@ -1,7 +1,7 @@
 {
   "name": "algolia-competitive-intelligence",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "workspaces": [
     "apps/*"
   ],
@@ -11,4 +11,3 @@
     "dashboard:build": "cd apps/dashboard && npm run build"
   }
 }
-
