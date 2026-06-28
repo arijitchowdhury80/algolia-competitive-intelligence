@@ -282,6 +282,40 @@ def init_db(conn: sqlite3.Connection) -> None:
           created_at text default current_timestamp
         );
 
+        create table if not exists semantic_facts (
+          id integer primary key autoincrement,
+          source_url text not null,
+          competitor text not null,
+          source_type text,
+          detected_date text not null,
+          fact_type text not null,
+          fact_json text not null,
+          evidence_text text,
+          evidence_url text,
+          confidence real default 0.6,
+          created_at text default current_timestamp
+        );
+
+        create table if not exists semantic_deltas (
+          id integer primary key autoincrement,
+          source_url text not null,
+          competitor text not null,
+          source_type text,
+          detected_date text not null,
+          delta_type text not null,
+          before_json text,
+          after_json text,
+          delta_summary text not null,
+          materiality_score real default 0,
+          materiality_reason text,
+          algolia_implication text,
+          action_owner text,
+          recommended_action text,
+          evidence_urls text,
+          quality_status text default 'suppressed',
+          created_at text default current_timestamp
+        );
+
         create table if not exists synthesis_runs (
           id integer primary key autoincrement,
           cadence text not null,
@@ -357,6 +391,9 @@ def init_db(conn: sqlite3.Connection) -> None:
         create index if not exists idx_signals_detected on signals(detected_date);
         create index if not exists idx_signals_competitor on signals(competitor);
         create index if not exists idx_signals_score on signals(score);
+        create index if not exists idx_semantic_facts_source_date on semantic_facts(source_url, detected_date);
+        create index if not exists idx_semantic_deltas_date_status on semantic_deltas(detected_date, quality_status);
+        create index if not exists idx_semantic_deltas_competitor on semantic_deltas(competitor, delta_type);
         create index if not exists idx_report_index_period on report_index(cadence, date_end);
         create index if not exists idx_action_items_status on action_items(status, owner);
         create index if not exists idx_source_health_url_time on source_health_events(source_url, created_at);
@@ -1138,6 +1175,507 @@ def split_signal_lines(text: str) -> List[str]:
     return [c.strip() for c in chunks if len(c.strip()) > 20][:800]
 
 
+def source_value(source: Any, key: str, default: Any = None) -> Any:
+    try:
+        value = source[key]
+    except (KeyError, IndexError, TypeError):
+        value = default
+    return default if value is None else value
+
+
+def semantic_lines(text: str) -> List[str]:
+    lines: List[str] = []
+    for raw in (text or "").splitlines():
+        line = normalize_text(raw).strip(" -*\t")
+        if not line or is_boilerplate_diff(line):
+            continue
+        lower = line.lower()
+        if any(marker in lower for marker in [
+            "cookie preferences",
+            "accept all",
+            "decline all",
+            "privacy policy",
+            "terms of use",
+            "navigation products",
+            "subscribe to newsletter",
+        ]):
+            continue
+        if len(line) >= 4:
+            lines.append(line)
+    return lines[:500]
+
+
+def normalize_identity(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def is_customer_source(source: Any) -> bool:
+    source_type = (source_value(source, "source_type", "") or "").lower()
+    url = (source_value(source, "url", "") or "").lower()
+    return any(marker in f"{source_type} {url}" for marker in ["case", "customer", "story"])
+
+
+def is_content_source(source: Any) -> bool:
+    source_type = (source_value(source, "source_type", "") or "").lower()
+    url = (source_value(source, "url", "") or "").lower()
+    return any(marker in f"{source_type} {url}" for marker in ["blog", "press", "news", "ai", "rss", "content"])
+
+
+def infer_product_area(text: str) -> str:
+    lower = text.lower()
+    if "ai search" in lower or ("ai" in lower and "search" in lower):
+        return "AI search"
+    if "product discovery" in lower:
+        return "product discovery"
+    if "personalization" in lower or "personalized" in lower:
+        return "personalization"
+    if "recommendation" in lower:
+        return "recommendations"
+    if "commerce search" in lower or "ecommerce search" in lower:
+        return "commerce search"
+    if "search" in lower:
+        return "search"
+    return "unknown"
+
+
+def infer_industry(text: str) -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["ecommerce", "commerce", "retail", "shopper", "product discovery"]):
+        return "retail/ecommerce"
+    if any(k in lower for k in ["health", "pharma", "clinic"]):
+        return "healthcare"
+    if any(k in lower for k in ["bank", "finance", "insurance"]):
+        return "financial services"
+    if any(k in lower for k in ["media", "publisher", "content"]):
+        return "media"
+    return "unknown"
+
+
+def extract_metric(text: str) -> str:
+    match = re.search(r"\b\d+(?:\.\d+)?\s?%|\b\d+(?:\.\d+)?x\b|\$\s?\d+(?:\.\d+)?[mMkK]?", text)
+    return normalize_text(match.group(0)).replace(" ", "") if match else ""
+
+
+def customer_candidate_name(line: str) -> str:
+    candidate = re.sub(r"^#+\s*", "", line).strip()
+    candidate = re.split(r"\s+(?:uses|selected|chooses|is using|announced|launches)\s+", candidate, maxsplit=1, flags=re.I)[0]
+    if " - " in candidate:
+        candidate = candidate.split(" - ", 1)[0]
+    elif ": " in candidate:
+        candidate = candidate.split(": ", 1)[0]
+    words = candidate.split()
+    if len(words) > 4:
+        candidate = " ".join(words[:3])
+    if not re.match(r"^[A-Z][A-Za-z0-9&.' -]{1,60}$", candidate):
+        return ""
+    if candidate.lower() in {"customers", "customer stories", "case studies", "constructor customers"}:
+        return ""
+    return candidate.strip()
+
+
+def surrounding_evidence(lines: Sequence[str], idx: int) -> str:
+    window = " ".join(lines[idx: idx + 5])
+    return normalize_text(window)[:900]
+
+
+def extract_customer_proof_facts(text: str, source: Any, detected_date: str) -> List[Dict[str, Any]]:
+    lines = semantic_lines(text)
+    facts: List[Dict[str, Any]] = []
+    competitor = source_value(source, "competitor", infer_competitor_from_url(source_value(source, "url", "")))
+    source_url = canonical_url(source_value(source, "url", ""))
+    seen = set()
+    for idx, line in enumerate(lines):
+        name = customer_candidate_name(line)
+        evidence = surrounding_evidence(lines, idx)
+        if not name and any(k in line.lower() for k in ["uses", "selected", "chooses", "customer", "case study"]):
+            name = customer_candidate_name(line)
+        if not name or normalize_identity(name) in seen:
+            continue
+        target = evidence or line
+        metric = extract_metric(target)
+        product_area = infer_product_area(target)
+        proof_strength = "high" if metric else ("medium" if any(k in target.lower() for k in ["uses", "selected", "case study", "customer"]) else "low")
+        fact_json = {
+            "customer_name": name,
+            "industry": infer_industry(target),
+            "use_case": product_area if product_area != "unknown" else "unknown",
+            "product_area": product_area,
+            "claimed_outcome": target if any(k in target.lower() for k in ["increase", "improve", "conversion", "revenue", "personalized", "uses"]) else "",
+            "metric": metric,
+            "quote": "",
+            "asset_title": line,
+            "asset_url": source_url,
+            "proof_strength": proof_strength,
+        }
+        facts.append({
+            "source_url": source_url,
+            "competitor": competitor,
+            "source_type": source_value(source, "source_type", "case_study"),
+            "detected_date": detected_date,
+            "fact_type": "customer_proof",
+            "fact_json": fact_json,
+            "evidence_text": target,
+            "evidence_url": source_url,
+            "confidence": 0.82 if proof_strength == "high" else 0.7,
+        })
+        seen.add(normalize_identity(name))
+    return facts
+
+
+def infer_content_topic(text: str) -> str:
+    lower = text.lower()
+    if ("agent" in lower or "agentic" in lower) and "search" in lower:
+        return "agentic_search"
+    if "ai search" in lower or ("ai" in lower and "retrieval" in lower):
+        return "ai_search"
+    if "product discovery" in lower:
+        return "product_discovery"
+    if "personalization" in lower:
+        return "personalization"
+    if "customer" in lower or "case study" in lower:
+        return "customer_proof"
+    return "market_narrative"
+
+
+def infer_narrative_angle(text: str) -> str:
+    topic = infer_content_topic(text)
+    if topic == "agentic_search":
+        return "Agentic search and retrieval are being packaged as enterprise workflow infrastructure."
+    if topic == "ai_search":
+        return "AI search is being positioned as a platform-level capability."
+    if topic == "product_discovery":
+        return "Product discovery is being framed around commerce outcomes and personalization."
+    if topic == "customer_proof":
+        return "Customer proof is being used to validate competitive claims."
+    return "Competitor narrative movement needs classification."
+
+
+def infer_target_audience(text: str) -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["developer", "api", "build", "workflow"]):
+        return "developers"
+    if any(k in lower for k in ["commerce", "merchandising", "shopper", "retail"]):
+        return "commerce teams"
+    if any(k in lower for k in ["enterprise", "leader", "cto", "cio"]):
+        return "enterprise AI leaders"
+    return "go-to-market teams"
+
+
+def infer_content_opportunity(topic: str, competitor: str) -> str:
+    if topic == "agentic_search":
+        return "Algolia should explain where its AI search and MCP story fits into agentic discovery workflows."
+    if topic == "ai_search":
+        return "Algolia should produce evidence-backed AI search comparison content for buyers evaluating retrieval quality."
+    if topic == "product_discovery":
+        return "Algolia should connect product discovery content to measurable ecommerce outcomes and proof."
+    if topic == "customer_proof":
+        return "Algolia should counter with comparable customer proof and vertical-specific stories."
+    return "Algolia should decide whether this narrative deserves a response or only monitoring."
+
+
+def content_candidate_title(line: str) -> str:
+    title = re.sub(r"^#+\s*", "", line).strip()
+    title = re.sub(r"\s+", " ", title)
+    lower = title.lower()
+    if not title or len(title) < 12:
+        return ""
+    if any(k in lower for k in ["cookie", "privacy", "navigation", "contact", "subscribe"]):
+        return ""
+    if len(title.split()) > 18:
+        title = " ".join(title.split()[:18])
+    return title
+
+
+def extract_content_narrative_facts(text: str, source: Any, detected_date: str) -> List[Dict[str, Any]]:
+    lines = semantic_lines(text)
+    facts: List[Dict[str, Any]] = []
+    competitor = source_value(source, "competitor", infer_competitor_from_url(source_value(source, "url", "")))
+    source_url = canonical_url(source_value(source, "url", ""))
+    source_type = source_value(source, "source_type", "blog")
+    for idx, line in enumerate(lines):
+        target = surrounding_evidence(lines, idx)
+        title = content_candidate_title(line)
+        lower_target = target.lower()
+        if not title or not any(k in lower_target for k in ["ai", "agent", "search", "retrieval", "product discovery", "launch", "announce", "introducing"]):
+            continue
+        topic = infer_content_topic(target)
+        publish_match = re.search(r"\b20\d{2}-\d{2}-\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+20\d{2}\b|\bJune\s+\d{1,2},\s+20\d{2}\b", target)
+        fact_json = {
+            "title": title,
+            "publish_date": publish_match.group(0) if publish_match else "",
+            "asset_type": "press" if source_type in {"press", "news"} else "blog",
+            "topic": topic,
+            "narrative_angle": infer_narrative_angle(target),
+            "target_audience": infer_target_audience(target),
+            "strategic_claim": target,
+            "product_claims": [claim for claim in ["AI search", "agentic discovery", "retrieval workflows", "product discovery"] if claim.lower() in lower_target],
+            "proof_points": [extract_metric(target)] if extract_metric(target) else [],
+            "cta": "Learn more" if "learn more" in lower_target else "",
+            "algolia_content_opportunity": infer_content_opportunity(topic, competitor),
+        }
+        facts.append({
+            "source_url": source_url,
+            "competitor": competitor,
+            "source_type": source_type,
+            "detected_date": detected_date,
+            "fact_type": "content_narrative",
+            "fact_json": fact_json,
+            "evidence_text": target,
+            "evidence_url": source_url,
+            "confidence": 0.78 if topic in {"agentic_search", "ai_search", "product_discovery"} else 0.62,
+        })
+        break
+    return facts
+
+
+def extract_semantic_facts(text: str, source: Any, detected_date: str) -> List[Dict[str, Any]]:
+    if is_customer_source(source):
+        return extract_customer_proof_facts(text, source, detected_date)
+    if is_content_source(source):
+        return extract_content_narrative_facts(text, source, detected_date)
+    return []
+
+
+def semantic_fact_identity(fact: Dict[str, Any]) -> str:
+    payload = fact.get("fact_json") or {}
+    if fact.get("fact_type") == "customer_proof":
+        return "customer:%s" % normalize_identity(payload.get("customer_name", ""))
+    if fact.get("fact_type") == "content_narrative":
+        return "content:%s" % normalize_identity(payload.get("title", ""))
+    return normalize_identity(json.dumps(payload, sort_keys=True, default=str))
+
+
+def mostly_boilerplate_delta(old_text: str, new_text: str) -> bool:
+    summary = diff_summary(old_text, new_text)
+    if not summary:
+        return True
+    useful_keywords = ["customer", "case study", "ai", "search", "agent", "launch", "announce", "product discovery", "conversion", "revenue"]
+    return not any(keyword in summary.lower() for keyword in useful_keywords)
+
+
+def materiality_for_delta(delta: Dict[str, Any], source: Any, collector_changed: bool = False) -> Dict[str, Any]:
+    after = delta.get("after_json") or {}
+    score = 0.0
+    reasons: List[str] = []
+    if delta["delta_type"] == "new_customer_proof":
+        score = 0.42
+        reasons.append("named customer proof")
+        if after.get("customer_name"):
+            score += 0.15
+        if after.get("metric") or after.get("claimed_outcome"):
+            score += 0.16
+            reasons.append("outcome evidence")
+        if after.get("product_area") in {"AI search", "product discovery", "commerce search", "search"}:
+            score += 0.12
+            reasons.append("Algolia-relevant product area")
+        if int(source_value(source, "priority", 3) or 3) <= 2:
+            score += 0.08
+            reasons.append("priority source")
+        if after.get("proof_strength") == "high":
+            score += 0.08
+        delta["algolia_implication"] = (
+            "%s is adding customer proof in %s. Algolia should check whether the proof weakens current sales claims or battlecards."
+            % (delta["competitor"], after.get("product_area") or "search/product discovery")
+        )
+        delta["action_owner"] = "Sales Enablement"
+        delta["recommended_action"] = "Validate the customer proof, compare it against Algolia proof points, and decide whether the competitive playbook needs an update."
+    elif delta["delta_type"] == "new_content_narrative":
+        score = 0.35
+        reasons.append("new content narrative")
+        if after.get("topic") in {"agentic_search", "ai_search", "product_discovery"}:
+            score += 0.2
+            reasons.append("Algolia-relevant topic")
+        if after.get("strategic_claim"):
+            score += 0.1
+        if after.get("product_claims"):
+            score += 0.1
+            reasons.append("product claim present")
+        if int(source_value(source, "priority", 3) or 3) <= 2:
+            score += 0.06
+        delta["algolia_implication"] = after.get("algolia_content_opportunity") or "Algolia should decide whether this narrative requires a response."
+        delta["action_owner"] = "Product Marketing"
+        delta["recommended_action"] = "Review the narrative, compare it with Algolia messaging, and decide whether to create or update content."
+    else:
+        reasons.append("no semantic delta")
+
+    if collector_changed:
+        score -= 0.25
+        reasons.append("collector method changed, so confidence is penalized")
+    if not delta.get("evidence_urls"):
+        score -= 0.2
+        reasons.append("missing evidence URL")
+
+    score = max(0.0, min(0.98, round(score, 3)))
+    delta["materiality_score"] = score
+    delta["materiality_reason"] = "; ".join(reasons)
+    delta["quality_status"] = "publish" if score >= 0.65 and delta["delta_type"] in {"new_customer_proof", "new_content_narrative"} else "suppressed"
+    return delta
+
+
+def make_suppressed_delta(source: Any, detected_date: str, reason: str, old_text: str, new_text: str) -> Dict[str, Any]:
+    source_url = canonical_url(source_value(source, "url", ""))
+    return {
+        "source_url": source_url,
+        "competitor": source_value(source, "competitor", infer_competitor_from_url(source_url)),
+        "source_type": source_value(source, "source_type", "source"),
+        "detected_date": detected_date,
+        "delta_type": "suppressed_non_semantic_change",
+        "before_json": {},
+        "after_json": {},
+        "delta_summary": "Suppressed source change: %s." % reason,
+        "materiality_score": 0.0,
+        "materiality_reason": reason,
+        "algolia_implication": "No Algolia action. The change did not produce a validated semantic delta.",
+        "action_owner": "Competitive Intelligence",
+        "recommended_action": "Keep for diagnostics only.",
+        "evidence_urls": [source_url] if source_url else [],
+        "quality_status": "suppressed",
+    }
+
+
+def semantic_diff(
+    source: Any,
+    old_text: str,
+    new_text: str,
+    detected_date: str,
+    collector_changed: bool = False,
+) -> Dict[str, Any]:
+    old_facts = extract_semantic_facts(old_text, source, detected_date) if old_text else []
+    new_facts = extract_semantic_facts(new_text, source, detected_date)
+    old_by_identity = {semantic_fact_identity(fact): fact for fact in old_facts}
+    deltas: List[Dict[str, Any]] = []
+    for fact in new_facts:
+        identity = semantic_fact_identity(fact)
+        if not identity or identity in old_by_identity:
+            continue
+        after = fact["fact_json"]
+        if fact["fact_type"] == "customer_proof":
+            delta_type = "new_customer_proof"
+            summary = "%s added customer proof for %s." % (fact["competitor"], after.get("customer_name", "a named customer"))
+        elif fact["fact_type"] == "content_narrative":
+            delta_type = "new_content_narrative"
+            summary = "%s published or surfaced a narrative asset: %s." % (fact["competitor"], after.get("title", "Untitled asset"))
+        else:
+            continue
+        delta = {
+            "source_url": fact["source_url"],
+            "competitor": fact["competitor"],
+            "source_type": fact["source_type"],
+            "detected_date": detected_date,
+            "delta_type": delta_type,
+            "before_json": {},
+            "after_json": after,
+            "delta_summary": summary,
+            "materiality_score": 0.0,
+            "materiality_reason": "",
+            "algolia_implication": "",
+            "action_owner": "Competitive Intelligence",
+            "recommended_action": "",
+            "evidence_urls": [fact["evidence_url"]],
+            "quality_status": "suppressed",
+        }
+        deltas.append(materiality_for_delta(delta, source, collector_changed=collector_changed))
+    if not deltas and (old_text or new_text):
+        reason = "only boilerplate, collector, or hash-level movement detected"
+        if not mostly_boilerplate_delta(old_text, new_text):
+            reason = "changed text did not map to a supported semantic schema"
+        deltas.append(make_suppressed_delta(source, detected_date, reason, old_text, new_text))
+    return {"facts": new_facts, "deltas": deltas}
+
+
+def json_dumps_record(value: Any) -> str:
+    return json.dumps(value if value is not None else {}, ensure_ascii=True, sort_keys=True, default=str)
+
+
+def insert_semantic_facts(conn: sqlite3.Connection, facts: Sequence[Dict[str, Any]]) -> List[int]:
+    ids: List[int] = []
+    for fact in facts:
+        cur = conn.execute(
+            """
+            insert into semantic_facts (
+              source_url, competitor, source_type, detected_date, fact_type,
+              fact_json, evidence_text, evidence_url, confidence
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fact["source_url"],
+                fact["competitor"],
+                fact.get("source_type"),
+                fact["detected_date"],
+                fact["fact_type"],
+                json_dumps_record(fact.get("fact_json")),
+                fact.get("evidence_text"),
+                fact.get("evidence_url"),
+                fact.get("confidence", 0.6),
+            ),
+        )
+        ids.append(int(cur.lastrowid))
+    conn.commit()
+    return ids
+
+
+def insert_semantic_deltas(conn: sqlite3.Connection, deltas: Sequence[Dict[str, Any]]) -> List[int]:
+    ids: List[int] = []
+    for delta in deltas:
+        cur = conn.execute(
+            """
+            insert into semantic_deltas (
+              source_url, competitor, source_type, detected_date, delta_type,
+              before_json, after_json, delta_summary, materiality_score,
+              materiality_reason, algolia_implication, action_owner,
+              recommended_action, evidence_urls, quality_status
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                delta["source_url"],
+                delta["competitor"],
+                delta.get("source_type"),
+                delta["detected_date"],
+                delta["delta_type"],
+                json_dumps_record(delta.get("before_json")),
+                json_dumps_record(delta.get("after_json")),
+                delta["delta_summary"],
+                delta.get("materiality_score", 0.0),
+                delta.get("materiality_reason"),
+                delta.get("algolia_implication"),
+                delta.get("action_owner"),
+                delta.get("recommended_action"),
+                json_dumps_record(delta.get("evidence_urls") or []),
+                delta.get("quality_status", "suppressed"),
+            ),
+        )
+        ids.append(int(cur.lastrowid))
+    conn.commit()
+    return ids
+
+
+def semantic_delta_to_signal(delta: Dict[str, Any]) -> Dict[str, Any]:
+    after = delta.get("after_json") or {}
+    category = "customer_proof" if delta["delta_type"] == "new_customer_proof" else source_type_to_signal(delta.get("source_type", ""), delta["source_url"])
+    if delta["delta_type"] == "new_content_narrative":
+        category = "ai_visibility" if after.get("topic") in {"agentic_search", "ai_search"} else "seo_content_movement"
+    confidence = 0.84 if delta.get("materiality_score", 0) >= 0.75 else 0.72
+    return build_signal(
+        competitor=delta["competitor"],
+        category=category,
+        source_url=delta["source_url"],
+        source_type=delta.get("source_type", ""),
+        title=delta["delta_summary"],
+        evidence=delta["delta_summary"],
+        summary="%s Why it matters to Algolia: %s Recommended action: %s" % (
+            delta["delta_summary"],
+            delta.get("algolia_implication") or "",
+            delta.get("recommended_action") or "",
+        ),
+        detected_date=delta["detected_date"],
+        event_date=delta["detected_date"],
+        novelty=0.82,
+        confidence=confidence,
+        impact=max(0.55, float(delta.get("materiality_score", 0.0))),
+        raw={"semantic_delta": delta},
+    )
+
+
 def build_signal(
     competitor: str,
     category: str,
@@ -1333,6 +1871,8 @@ def collect_direct_sources(conn: sqlite3.Connection, limit: Optional[int] = None
     created_signals = []
     errors = []
     snapshots = 0
+    semantic_fact_count = 0
+    semantic_delta_count = 0
     for row in rows:
         url = row["url"]
         previous = latest_snapshot(conn, url)
@@ -1349,41 +1889,37 @@ def collect_direct_sources(conn: sqlite3.Connection, limit: Optional[int] = None
         old_hash = previous["content_hash"] if previous else None
         if previous and old_hash == new_hash:
             continue
-        evidence = diff_summary(old_text, new_text) if old_text else first_evidence(new_text)
-        if not evidence:
+        if not old_text:
+            baseline_facts = extract_semantic_facts(new_text, row, date_today())
+            if baseline_facts:
+                semantic_fact_count += len(insert_semantic_facts(conn, baseline_facts))
             continue
-        if old_text and row["source_type"] == "forum" and not is_relevant_community_signal(evidence):
-            continue
-        category = row["signal_type"] or source_type_to_signal(row["source_type"], url)
-        novelty = 0.85 if old_text else 0.35
-        title = "%s %s %s" % (
-            row["competitor"],
-            "changed" if old_text else "baseline captured",
-            row["source_type"] or "source",
-        )
-        summary = "%s public %s source %s." % (
-            row["competitor"],
-            row["source_type"] or "owned",
-            "changed since the previous snapshot" if old_text else "was captured as a baseline for future diffs",
-        )
-        signal = build_signal(
-            competitor=row["competitor"],
-            category=category,
-            source_url=url,
-            source_type=row["source_type"],
-            title=title,
-            evidence=evidence,
-            summary=summary,
+
+        collector_changed = bool(previous and (previous["collector"] or "") != (fetch.get("collector") or ""))
+        semantic = semantic_diff(
+            row,
+            old_text=old_text,
+            new_text=new_text,
             detected_date=date_today(),
-            event_date=date_today(),
-            novelty=novelty,
-            confidence=0.72,
-            impact=score_impact(category, row["source_type"], row["priority"], title),
-            raw={"collector": "direct_fetch", "source": dict(row), "baseline": not bool(old_text)},
+            collector_changed=collector_changed,
         )
-        created_signals.append(signal)
+        if semantic.get("facts"):
+            semantic_fact_count += len(insert_semantic_facts(conn, semantic["facts"]))
+        if semantic.get("deltas"):
+            semantic_delta_count += len(insert_semantic_deltas(conn, semantic["deltas"]))
+
+        for delta in semantic.get("deltas", []):
+            if delta.get("quality_status") == "publish":
+                created_signals.append(semantic_delta_to_signal(delta))
     ids = insert_signals(conn, created_signals)
-    return {"snapshots": snapshots, "signals": len(ids), "errors": errors, "signal_ids": ids}
+    return {
+        "snapshots": snapshots,
+        "signals": len(ids),
+        "errors": errors,
+        "signal_ids": ids,
+        "semantic_facts": semantic_fact_count,
+        "semantic_deltas": semantic_delta_count,
+    }
 
 
 def first_evidence(text: str) -> str:
@@ -1624,6 +2160,47 @@ def get_signal_counts(conn: sqlite3.Connection, date_start: Optional[str], date_
     }
 
 
+def get_semantic_deltas(
+    conn: sqlite3.Connection,
+    date_start: Optional[str] = None,
+    date_end: Optional[str] = None,
+    quality_status: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    clauses: List[str] = []
+    params: List[Any] = []
+    if date_start:
+        clauses.append("detected_date >= ?")
+        params.append(date_start)
+    if date_end:
+        clauses.append("detected_date <= ?")
+        params.append(date_end)
+    if quality_status:
+        clauses.append("quality_status = ?")
+        params.append(quality_status)
+    suffix = "where " + " and ".join(clauses) if clauses else ""
+    rows = conn.execute(
+        """
+        select * from semantic_deltas
+        %s
+        order by materiality_score desc, id desc
+        limit ?
+        """ % suffix,
+        params + [limit],
+    ).fetchall()
+    parsed: List[Dict[str, Any]] = []
+    for row in rows:
+        record = dict(row)
+        for key in ["before_json", "after_json", "evidence_urls"]:
+            value = record.get(key)
+            try:
+                record[key] = json.loads(value) if value else ([] if key == "evidence_urls" else {})
+            except json.JSONDecodeError:
+                record[key] = [] if key == "evidence_urls" else {}
+        parsed.append(record)
+    return parsed
+
+
 def get_source_inventory(conn: sqlite3.Connection) -> Dict[str, Any]:
     rows = conn.execute(
         """
@@ -1842,6 +2419,8 @@ def signal_is_baseline(signal: Dict[str, Any]) -> bool:
 def build_synthesis_packet(conn: sqlite3.Connection, cadence: str, date_start: str, date_end: str, limit: int = 18) -> Dict[str, Any]:
     signals = get_signals(conn, date_start=date_start, date_end=date_end, limit=limit, min_score=0.3)
     all_signals = get_signals(conn, date_start=date_start, date_end=date_end, limit=5000, min_score=0.0)
+    semantic_deltas = get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="publish", limit=limit)
+    suppressed_deltas = get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="suppressed", limit=50)
     if cadence == "daily":
         signals = [row for row in signals if signal_is_daily_material(dict(row))]
     counts = get_signal_counts(conn, date_start, date_end)
@@ -1854,6 +2433,8 @@ def build_synthesis_packet(conn: sqlite3.Connection, cadence: str, date_start: s
         "source_coverage": get_source_coverage(conn, date_start, date_end),
         "signals": [dict(row) for row in signals],
         "all_signals": [dict(row) for row in all_signals],
+        "semantic_deltas": semantic_deltas,
+        "suppressed_deltas": suppressed_deltas,
         "source_ledger": source_ledger(all_signals),
     }
 
@@ -1874,6 +2455,8 @@ Use exactly these Markdown sections:
 
 Rules:
 - 450 words maximum.
+- Use semantic_deltas as the primary intelligence input. Do not infer strategic meaning from raw hash changes or generic page changes.
+- Never write "changed case_study", "page changed", or "changed since the previous snapshot" as the finding. Publish only the semantic change and evidence.
 - Every material claim must link to a source URL from the signal ledger.
 - Pick one action owner from Product, Product Marketing, Sales Enablement, Partner Enablement, Competitive Intelligence, or Executive Review.
 - Be explicit about confidence.
@@ -1902,6 +2485,8 @@ Use exactly these Markdown sections:
 
 Rules:
 - 900 words maximum.
+- Use semantic_deltas as the primary intelligence input. Suppressed deltas are diagnostics only.
+- Never recommend battlecard updates from baseline captures, collector changes, hash-only movement, or generic page-change signals.
 - Return only the final Markdown report. Do not include reasoning notes, preambles, or statements about what you are about to do.
 - Every material claim must link to a source URL from the signal ledger.
 - Group recommendations by owner.
@@ -1963,6 +2548,130 @@ def quiet_day_evidence(packet: Dict[str, Any]) -> str:
 
 def synthesize_local(packet: Dict[str, Any], cadence: str = "daily") -> str:
     signals = packet.get("signals", [])
+    semantic_deltas = packet.get("semantic_deltas", [])
+    suppressed_deltas = packet.get("suppressed_deltas", [])
+    if semantic_deltas:
+        top_delta = semantic_deltas[0]
+        evidence_url = (top_delta.get("evidence_urls") or [top_delta.get("source_url", "")])[0]
+        if cadence == "weekly":
+            customer = [d for d in semantic_deltas if d.get("delta_type") == "new_customer_proof"]
+            narrative = [d for d in semantic_deltas if d.get("delta_type") == "new_content_narrative"]
+            customer_lines = "\n".join(
+                "- **{competitor}:** [{summary}]({url}) - {implication}".format(
+                    competitor=d.get("competitor", "Unknown"),
+                    summary=d.get("delta_summary", "Customer proof movement"),
+                    url=(d.get("evidence_urls") or [d.get("source_url", "")])[0],
+                    implication=d.get("algolia_implication", "Review for sales impact."),
+                )
+                for d in customer[:5]
+            ) or "- No material customer proof movement passed the semantic gate."
+            narrative_lines = "\n".join(
+                "- **{competitor}:** [{summary}]({url}) - {implication}".format(
+                    competitor=d.get("competitor", "Unknown"),
+                    summary=d.get("delta_summary", "Narrative movement"),
+                    url=(d.get("evidence_urls") or [d.get("source_url", "")])[0],
+                    implication=d.get("algolia_implication", "Review for messaging impact."),
+                )
+                for d in narrative[:5]
+            ) or "- No material content or narrative movement passed the semantic gate."
+            action_lines = "\n".join(
+                "- **{owner}:** {action} Evidence: [{summary}]({url}).".format(
+                    owner=d.get("action_owner", "Competitive Intelligence"),
+                    action=d.get("recommended_action", "Review and validate."),
+                    summary=d.get("delta_summary", "semantic delta"),
+                    url=(d.get("evidence_urls") or [d.get("source_url", "")])[0],
+                )
+                for d in semantic_deltas[:6]
+            )
+            battlecard_lines = "\n".join(
+                "- Candidate: {summary} Only update the playbook after validation confirms this changes the objection, proof gap, or talk track.".format(
+                    summary=d.get("delta_summary", "customer proof movement")
+                )
+                for d in customer[:4]
+            ) or "- No battlecard update recommended from this week of semantic deltas."
+            suppressed_count = len(suppressed_deltas)
+            return """**Weekly competitive synthesis - {date_start} to {date_end}**
+
+**What changed**
+
+{top_summary}
+
+**Customer proof movement**
+
+{customer_lines}
+
+**Content/narrative movement**
+
+{narrative_lines}
+
+**Campaign opportunities**
+
+- Product Marketing should turn the strongest narrative deltas into content hypotheses only where the evidence shows a clear AI/search/product-discovery claim.
+
+**Recommended actions by owner**
+
+{action_lines}
+
+**Battlecard updates**
+
+{battlecard_lines}
+
+**Suppressed weak signals**
+
+{suppressed_count} weak or ambiguous source changes were kept out of the executive brief because they did not pass semantic materiality gates.
+
+**Coverage gaps**
+
+This run remains public-source only. Internal win/loss, CRM, Gong, Slack, paid review exports, and paid traffic data are not included.
+""".format(
+                date_start=packet["date_start"],
+                date_end=packet["date_end"],
+                top_summary=top_delta.get("delta_summary", "Semantic movement detected."),
+                customer_lines=customer_lines,
+                narrative_lines=narrative_lines,
+                action_lines=action_lines,
+                battlecard_lines=battlecard_lines,
+                suppressed_count=suppressed_count,
+            )
+
+        return """**Competitive pulse - {date_end}**
+
+**What changed**
+
+{summary} Evidence: [{source}]({url}).
+
+**Why it matters to Algolia**
+
+{implication}
+
+**Recommended action**
+
+{owner} should {action}
+
+**Evidence**
+
+- [{source}]({url}) - {reason}. Confidence is {confidence}; materiality score is {score:.0%}.
+
+**Validation needed**
+
+- Confirm whether this semantic delta changes an Algolia sales claim, content angle, or product narrative before changing public messaging.
+
+**Research coverage**
+
+The report uses semantic deltas from public-source snapshots. Hash-only page changes, collector changes, and boilerplate movement are suppressed.
+""".format(
+            date_end=packet["date_end"],
+            summary=top_delta.get("delta_summary", "Semantic movement detected."),
+            source=top_delta.get("competitor", "source"),
+            url=evidence_url,
+            implication=top_delta.get("algolia_implication", "Review for Algolia impact."),
+            owner=top_delta.get("action_owner", "Competitive Intelligence"),
+            action=(top_delta.get("recommended_action") or "review and validate this delta.").rstrip(".") + ".",
+            reason=top_delta.get("materiality_reason", "semantic gate passed"),
+            confidence=confidence_label(0.8 if top_delta.get("materiality_score", 0) >= 0.75 else 0.65),
+            score=float(top_delta.get("materiality_score", 0.0)),
+        )
+
     if not signals:
         if cadence == "weekly":
             return """**Weekly competitive synthesis - {date_start} to {date_end}**

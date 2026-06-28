@@ -1,0 +1,11 @@
+{
+  "source_url": "https://constructor.com/customers",
+  "source_type": "case_study",
+  "competitor": "Constructor",
+  "delta_type": "new_customer_proof",
+  "semantic_delta": "Constructor added customer proof for Petco.",
+  "materiality_min": 0.65,
+  "algolia_implication_contains": "customer proof",
+  "recommended_owner": "Sales Enablement",
+  "publish": true
+}

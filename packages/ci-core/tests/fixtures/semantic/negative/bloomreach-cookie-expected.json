@@ -1,0 +1,9 @@
+{
+  "source_url": "https://www.bloomreach.com/en/customers",
+  "source_type": "case_study",
+  "competitor": "Bloomreach",
+  "delta_type": "suppressed_non_semantic_change",
+  "materiality_max": 0.0,
+  "publish": false,
+  "reason": "cookie and navigation movement only"
+}

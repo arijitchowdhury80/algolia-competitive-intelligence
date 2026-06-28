@@ -11,6 +11,10 @@ for (const token of [
   "What happened",
   "Why it matters",
   "Recommended response",
+  "Customer Proof Radar",
+  "Narrative And Content Radar",
+  "Decision Queue",
+  "Suppressed Signals",
   "Report history",
   "Data limits",
   "Automated archive",
@@ -44,6 +48,7 @@ for (const token of [
   "Ask for proof",
   "Archive count",
   "Collector context",
+  "Other findings",
   "scorebox",
   "case_study"
 ]) {

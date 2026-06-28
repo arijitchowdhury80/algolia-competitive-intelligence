@@ -10,9 +10,13 @@ REPO_ROOT = SKILL_ROOT.parents[1]
 
 DAILY = """**Competitive pulse - 2026-06-28**
 
-**Bottom line**
+**What changed**
 
-Constructor produced the highest-scored public signal: [Constructor changed case_study](https://constructor.com/customers). Treat this as actionable only after validation.
+Constructor added customer proof for [Petco](https://constructor.com/customers).
+
+**Why it matters to Algolia**
+
+Constructor is adding customer proof in AI search. Algolia should check whether the proof weakens current sales claims or battlecards.
 
 **Recommended action**
 
@@ -20,7 +24,7 @@ Sales Enablement owns the first move. Review the source evidence today and log t
 
 **Evidence**
 
-- **Constructor, 2026-06-28:** [Constructor changed case_study](https://constructor.com/customers) - Constructor public case_study source changed.
+- [Constructor](https://constructor.com/customers) - named customer proof with outcome evidence.
 """
 
 
@@ -28,15 +32,32 @@ WEEKLY = """**Weekly competitive synthesis - 2026-06-22 to 2026-06-28**
 
 **What changed**
 
-The ledger captured 12 public signals. The strongest source-backed signal is from Constructor.
+Constructor added customer proof for Petco.
 
-**Strategic pattern**
+**Customer proof movement**
 
-AI search packaging remains the repeated market pattern.
+- **Constructor:** [Constructor added customer proof for Petco.](https://constructor.com/customers) - review for playbook impact.
+
+**Content/narrative movement**
+
+- **Google Vertex AI Search:** [Google Cloud published an agentic search narrative.](https://cloud.google.com/blog/products/ai-machine-learning) - review for content response.
+
+**Campaign opportunities**
+
+- Product Marketing should create an Algolia POV on agentic search and commerce discovery.
 
 **Recommended actions by owner**
 
 - **Sales Enablement:** Validate whether Constructor customer proof changes objection handling.
+- **Product Marketing:** Compare Google agentic search language against Algolia AI search messaging.
+
+**Battlecard updates**
+
+- Candidate: Constructor customer proof for Petco.
+
+**Suppressed weak signals**
+
+3 weak or ambiguous source changes were kept out of the executive brief.
 
 **Coverage gaps**
 
@@ -81,14 +102,19 @@ def test_export_dashboard_assets_uses_latest_real_reports(tmp_path):
     assert (public / "data" / "latest.json").exists()
     assert "Competitive Brief" in html
     assert "Generated from archived CI briefs, not mock data" in html
-    assert "Constructor customer proof changed needs validation." in html
+    assert "Constructor added customer proof for Petco." in html
     assert "What happened" in html
     assert "Why it matters" in html
     assert "Recommended response" in html
+    assert "Customer Proof Radar" in html
+    assert "Narrative And Content Radar" in html
+    assert "Decision Queue" in html
+    assert "Suppressed Signals" in html
     assert "Data limits" in html
     assert "Show collection details" in html
     assert "Attention queue" not in html
     assert "Mock findings" not in html
+    assert "case_study" not in html
 
 
 def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():

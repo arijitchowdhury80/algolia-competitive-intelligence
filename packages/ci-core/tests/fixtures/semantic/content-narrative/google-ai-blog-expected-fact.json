@@ -1,0 +1,9 @@
+{
+  "source_url": "https://cloud.google.com/blog/products/ai-machine-learning",
+  "source_type": "blog",
+  "competitor": "Google Vertex AI Search",
+  "fact_type": "content_narrative",
+  "topic": "agentic_search",
+  "target_audience": "developers",
+  "publish": true
+}

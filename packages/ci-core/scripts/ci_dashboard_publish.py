@@ -51,6 +51,39 @@ def humanize_copy(text: str) -> str:
     return text
 
 
+def is_legacy_raw_change(text: str) -> bool:
+    lower = strip_markdown_without_humanize(text).lower()
+    patterns = [
+        "changed since the previous snapshot",
+        "changed case_study",
+        "changed blog",
+        "changed press",
+        "baseline captured",
+        "public case_study source changed",
+        "public customer proof source changed",
+        "public blog source changed",
+        "public press source changed",
+        "changed changes positioning",
+        "changed changes battlecards",
+        "changed changes roadmap",
+    ]
+    if any(pattern in lower for pattern in patterns):
+        return True
+    return bool(re.search(r"\b(customer proof|blog|press page|source)\s+changed\b", lower))
+
+
+def strip_markdown_without_humanize(text: str) -> str:
+    text = LINK_RE.sub(r"\1", text or "")
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"^\s*[-*]\s+", "", text, flags=re.MULTILINE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def decision_safe_text(text: str, fallback: str) -> str:
+    cleaned = strip_markdown(text)
+    return fallback if is_legacy_raw_change(cleaned) else cleaned
+
+
 def markdown_inline_to_html(text: str) -> str:
     text = humanize_copy(text)
     safe = escape(text or "")
@@ -70,7 +103,8 @@ def primary_title(daily: Optional[ReportFile], fallback_text: str) -> str:
         links = evidence_links(daily.text, limit=1)
         if links:
             label = strip_markdown(links[0][0])
-            return "%s needs validation." % label
+            if not is_legacy_raw_change(label):
+                return "%s needs validation." % label
     title = strip_markdown(fallback_text).rstrip(".") + "."
     if len(title) > 110:
         title = title[:107].rstrip() + "..."
@@ -184,6 +218,8 @@ def evidence_links(markdown: str, limit: int = 4) -> List[Tuple[str, str]]:
 def render_evidence(links: Sequence[Tuple[str, str]], fallback_href: str) -> str:
     items = ['<a href="{href}">Open latest daily brief</a>'.format(href=escape(fallback_href, quote=True))]
     for label, url in links:
+        if is_legacy_raw_change(label):
+            continue
         items.append(
             '<a href="{url}">{label}</a>'.format(
                 url=escape(url, quote=True),
@@ -263,11 +299,88 @@ def render_finding_cards(weekly: Optional[ReportFile], daily: Optional[ReportFil
     return "\n".join(cards)
 
 
+def render_bullet_cards(section: str, empty: str, badge: str = "Review") -> str:
+    bullets = bullet_lines(section, limit=6)
+    if not bullets:
+        return '<div class="empty">{empty}</div>'.format(empty=escape(empty))
+    cards = []
+    for item in bullets:
+        if is_legacy_raw_change(item):
+            continue
+        title = strip_markdown(item)
+        owner = badge
+        if ":" in title:
+            possible_owner, rest = title.split(":", 1)
+            if len(possible_owner.split()) <= 4:
+                owner = possible_owner.strip("* ")
+                title = rest.strip()
+        cards.append(
+            """
+            <article class="mini-card">
+              <strong>{owner}</strong>
+              <p>{title}</p>
+            </article>
+            """.format(owner=escape(owner), title=markdown_inline_to_html(title))
+        )
+    return "\n".join(cards) or '<div class="empty">{empty}</div>'.format(empty=escape(empty))
+
+
+def render_intelligence_lanes(weekly: Optional[ReportFile]) -> str:
+    customer = parse_section(weekly.text, "Customer proof movement") if weekly else ""
+    narrative = parse_section(weekly.text, "Content/narrative movement") if weekly else ""
+    opportunities = parse_section(weekly.text, "Campaign opportunities") if weekly else ""
+    decisions = parse_section(weekly.text, "Recommended actions by owner") if weekly else ""
+    suppressed = parse_section(weekly.text, "Suppressed weak signals") if weekly else ""
+    return """
+        <section class="panel lane" aria-labelledby="customer-proof-title">
+          <div class="section-head">
+            <div><div class="eyebrow">Customer proof intelligence</div><h2 id="customer-proof-title">Customer Proof Radar</h2></div>
+            <span class="pill green">Sales impact</span>
+          </div>
+          <div class="mini-grid">{customer}</div>
+        </section>
+        <section class="panel lane" aria-labelledby="narrative-title">
+          <div class="section-head">
+            <div><div class="eyebrow">Content and narrative intelligence</div><h2 id="narrative-title">Narrative And Content Radar</h2></div>
+            <span class="pill violet">PMM impact</span>
+          </div>
+          <div class="mini-grid">{narrative}</div>
+          <div class="subsection">
+            <h3>Campaign opportunities</h3>
+            <div class="mini-grid">{opportunities}</div>
+          </div>
+        </section>
+        <section class="panel lane" aria-labelledby="decision-title">
+          <div class="section-head">
+            <div><div class="eyebrow">What should happen next</div><h2 id="decision-title">Decision Queue</h2></div>
+            <span class="pill blue">Owner routed</span>
+          </div>
+          <div class="mini-grid">{decisions}</div>
+        </section>
+        <section class="panel lane" aria-labelledby="suppressed-title">
+          <div class="section-head">
+            <div><div class="eyebrow">Trust diagnostics</div><h2 id="suppressed-title">Suppressed Signals</h2></div>
+            <span class="pill amber">Not published</span>
+          </div>
+          <p>{suppressed}</p>
+        </section>
+    """.format(
+        customer=render_bullet_cards(customer, "No material customer proof movement passed the semantic gate.", "Customer proof"),
+        narrative=render_bullet_cards(narrative, "No material content or narrative movement passed the semantic gate.", "Narrative"),
+        opportunities=render_bullet_cards(opportunities, "No campaign opportunity was strong enough to recommend.", "Campaign"),
+        decisions=render_bullet_cards(decisions, "No owner-routed decision is available yet.", "Decision"),
+        suppressed=markdown_inline_to_html(first_paragraph(suppressed) or "No suppressed-source diagnostics were available in this archive."),
+    )
+
+
 def render_report_history(reports: Sequence[ReportFile]) -> str:
     rows = []
     for report in sorted(reports, key=lambda item: (item.date, item.cadence), reverse=True)[:10]:
         section_name = "What changed" if report.cadence == "weekly" else "Bottom line"
-        summary = strip_markdown(first_paragraph(parse_section(report.text, section_name))) or "Archived CI report."
+        summary = decision_safe_text(
+            first_paragraph(parse_section(report.text, section_name)),
+            "Legacy raw-change summary hidden from decision view. Open the archive for the original report.",
+        ) or "Archived CI report."
         label = "%s %s" % (report.date, report.cadence)
         rows.append(
             """
@@ -292,12 +405,31 @@ def render_dashboard_html(
     weekly: Optional[ReportFile],
     generated_at: str,
 ) -> str:
-    what = first_paragraph(parse_section(daily.text, "Bottom line")) if daily else "No daily competitive pulse has been archived yet."
-    response = first_paragraph(parse_section(daily.text, "Recommended action")) if daily else "Wait for the next daily CI run before taking action."
-    why = (
+    what_raw = (
+        first_paragraph(parse_section(daily.text, "What changed"))
+        or first_paragraph(parse_section(daily.text, "Bottom line"))
+        if daily
+        else "No daily competitive pulse has been archived yet."
+    )
+    what = decision_safe_text(
+        what_raw,
+        "No semantic daily finding is available yet.",
+    )
+    response_raw = first_paragraph(parse_section(daily.text, "Recommended action")) if daily else "Wait for the next daily CI run before taking action."
+    response = decision_safe_text(
+        response_raw,
+        "Wait for the next semantic CI run before changing messaging, battlecards, or campaign plans.",
+    )
+    why_raw = (
+        first_paragraph(parse_section(daily.text, "Why it matters to Algolia")) if daily else ""
+    ) or (
         first_paragraph(parse_section(weekly.text, "Strategic pattern"))
         if weekly
         else "There is not enough weekly context yet to separate a real pattern from a single-day signal."
+    )
+    why = decision_safe_text(
+        why_raw,
+        "Legacy archive language did not explain an Algolia-specific implication. The semantic layer must produce this before the dashboard treats it as actionable.",
     )
     evidence = evidence_links(daily.text if daily else "", limit=4)
     daily_href = "archive/%s" % daily.path.name if daily else "latest-daily.md"
@@ -365,6 +497,7 @@ def render_dashboard_html(
     .finding-block h3 {{ margin-bottom: 6px; font-size: 15px; }}
     .finding-block p {{ margin-bottom: 0; }}
     .panel, .side-panel {{ padding: 20px; }}
+    .lane {{ box-shadow: none; }}
     .section-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }}
     .finding-list {{ display: grid; gap: 12px; }}
     .finding {{ display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; padding: 16px; box-shadow: none; }}
@@ -386,6 +519,13 @@ def render_dashboard_html(
     .proof-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }}
     .proof {{ border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 10px; font-size: 13px; line-height: 1.4; }}
     .proof span {{ display: block; margin-bottom: 4px; color: var(--muted); font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }}
+    .mini-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
+    .mini-card {{ border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 12px; }}
+    .mini-card strong {{ display: inline-flex; width: fit-content; margin-bottom: 8px; border-radius: var(--radius); background: var(--blue-soft); color: var(--blue); padding: 5px 8px; font-size: 11px; line-height: 1; }}
+    .mini-card p {{ margin: 0; color: var(--ink); font-size: 14px; line-height: 1.45; font-weight: 680; }}
+    .subsection {{ margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }}
+    .subsection h3 {{ font-size: 15px; }}
+    .empty {{ border: 1px dashed var(--line); border-radius: var(--radius); background: var(--soft); padding: 12px; color: var(--muted); font-size: 13px; }}
     .quality-list, .report-list {{ display: grid; gap: 9px; }}
     .limit-stats {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }}
     .limit-stat {{ border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 10px; }}
@@ -411,6 +551,7 @@ def render_dashboard_html(
       .meta {{ text-align: left; }}
       .hero, .panel, .side-panel, .finding {{ width: 100%; max-width: 100%; overflow: hidden; }}
       .proof-grid {{ grid-template-columns: 1fr; }}
+      .mini-grid {{ grid-template-columns: 1fr; }}
       h1 {{ font-size: 34px; }}
       .answer {{ font-size: 23px; line-height: 1.12; }}
       h3 {{ font-size: 16px; }}
@@ -446,13 +587,7 @@ def render_dashboard_html(
             </div>
           </div>
         </section>
-        <section class="panel" aria-labelledby="findings-title">
-          <div class="section-head">
-            <div><div class="eyebrow">Intel queue</div><h2 id="findings-title">Other findings</h2></div>
-            <span class="pill blue">Actual archive</span>
-          </div>
-          <div class="finding-list">{finding_cards}</div>
-        </section>
+        {intelligence_lanes}
         <section class="panel" aria-labelledby="history-title">
           <div class="section-head">
             <div><div class="eyebrow">Where this came from</div><h2 id="history-title">Report history</h2></div>
@@ -501,7 +636,7 @@ def render_dashboard_html(
         why=markdown_inline_to_html(why),
         response=markdown_inline_to_html(response),
         evidence=render_evidence(evidence, daily_href),
-        finding_cards=render_finding_cards(weekly, daily),
+        intelligence_lanes=render_intelligence_lanes(weekly),
         report_history=render_report_history(reports),
         report_count=len(reports),
         finding_count=finding_count,
