@@ -115,7 +115,7 @@ print_delivery_status() {
   cat <<'EOF'
 Delivery status
 Operator: Argus generated and reviewed this CI run.
-Current delivery path: temporary default Chowmes Telegram gateway until the dedicated Argus bot token/channel is configured.
+Current delivery path: dedicated Argus Telegram gateway.
 Athena role: supervisor only, not weekly CI operator.
 
 EOF
