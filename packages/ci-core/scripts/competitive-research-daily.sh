@@ -18,6 +18,10 @@ if [ -z "$WORKSPACE_ROOT" ]; then
   exit 2
 fi
 SKILL_ROOT="$WORKSPACE_ROOT/skills/competitive-research"
+PYTHON_BIN="${PYTHON_BIN:-/opt/hermes/.venv/bin/python}"
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="python3"
+fi
 
 for env_file in /opt/data/.env /root/.hermes/.env; do
   if [ -f "$env_file" ]; then
@@ -30,7 +34,10 @@ done
 
 cd "$SKILL_ROOT"
 export COMPETITIVE_RESEARCH_OUTPUT_ROOT="$WORKSPACE_ROOT/artifacts/competitive-research"
-python3 "$SKILL_ROOT/scripts/ci-provider-preflight.py"
+export CI_MODEL_PROVIDER="${CI_MODEL_PROVIDER:-gemini}"
+export COMPETITIVE_RESEARCH_PROVIDER="${COMPETITIVE_RESEARCH_PROVIDER:-gemini}"
+export COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"
+"$PYTHON_BIN" "$SKILL_ROOT/scripts/ci-provider-preflight.py"
 
 publish_dashboard() {
   repo_root="${ALGOLIA_CI_REPO_ROOT:-/opt/data/apps/algolia-competitive-intelligence}"
@@ -44,7 +51,7 @@ publish_dashboard() {
   fi
   log_path="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log"
   mkdir -p "$(dirname "$log_path")"
-  if ! python3 "$publisher" \
+  if ! "$PYTHON_BIN" "$publisher" \
     --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
     --repo-root "$repo_root" \
     --commit-message "Update daily CI dashboard" >"$log_path" 2>&1
@@ -54,7 +61,7 @@ publish_dashboard() {
 }
 
 output="$(
-  python3 "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors --fail-on-synthesis-error 2>&1
+  "$PYTHON_BIN" "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors --fail-on-synthesis-error 2>&1
 )" || {
   printf '%s\n' "$output"
   exit 1

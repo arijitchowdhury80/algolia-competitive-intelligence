@@ -1,7 +1,7 @@
 {
   "name": "@algolia-ci/dashboard",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "scripts": {
     "build": "node scripts/verify-static.js",
     "dev": "python3 -m http.server 4173 --directory public"

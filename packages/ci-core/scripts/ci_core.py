@@ -52,7 +52,8 @@ ALGOLIA_DESIGN_SYSTEM_FALLBACKS = [
     Path("/Users/arijitchowdhury/Library/CloudStorage/GoogleDrive-arijit.chowdhury@gmail.com/My Drive/AI-Projects/Algolia-Design-System"),
 ]
 HERMES_BIN = os.environ.get("HERMES_BIN", "/opt/hermes/.venv/bin/hermes")
-SYNTHESIS_MODEL = os.environ.get("COMPETITIVE_RESEARCH_MODEL", "anthropic/claude-sonnet-4.6")
+SYNTHESIS_MODEL = os.environ.get("COMPETITIVE_RESEARCH_MODEL", "gemini-2.5-flash")
+SYNTHESIS_PROVIDER = os.environ.get("COMPETITIVE_RESEARCH_PROVIDER", "").strip()
 
 ACTION_OWNERS = [
     "Product",
@@ -2547,8 +2548,11 @@ Signal ledger:
 
 
 def synthesize_with_hermes(prompt: str, timeout: int = 600) -> str:
+    command = [HERMES_BIN, "chat", "-q", prompt, "-m", SYNTHESIS_MODEL, "--quiet"]
+    if SYNTHESIS_PROVIDER:
+        command.extend(["--provider", SYNTHESIS_PROVIDER])
     result = subprocess.run(
-        [HERMES_BIN, "chat", "-q", prompt, "-m", SYNTHESIS_MODEL, "--quiet"],
+        command,
         capture_output=True, text=True, timeout=timeout,
     )
     if result.returncode != 0:

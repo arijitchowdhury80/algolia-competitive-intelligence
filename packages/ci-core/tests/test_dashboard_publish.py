@@ -133,7 +133,15 @@ def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
 
     assert "ci-provider-preflight.py" in daily
     assert "ci-provider-preflight.py" in weekly
+    assert 'PYTHON_BIN="${PYTHON_BIN:-/opt/hermes/.venv/bin/python}"' in daily
+    assert 'PYTHON_BIN="${PYTHON_BIN:-/opt/hermes/.venv/bin/python}"' in weekly
     assert "/opt/data/.env" in daily
     assert "/opt/data/.env" in weekly
+    assert 'CI_MODEL_PROVIDER="${CI_MODEL_PROVIDER:-gemini}"' in daily
+    assert 'CI_MODEL_PROVIDER="${CI_MODEL_PROVIDER:-gemini}"' in weekly
+    assert 'COMPETITIVE_RESEARCH_PROVIDER="${COMPETITIVE_RESEARCH_PROVIDER:-gemini}"' in daily
+    assert 'COMPETITIVE_RESEARCH_PROVIDER="${COMPETITIVE_RESEARCH_PROVIDER:-gemini}"' in weekly
+    assert 'COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"' in daily
+    assert 'COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"' in weekly
     assert "--fail-on-synthesis-error" in daily
     assert "--fail-on-synthesis-error" in weekly
