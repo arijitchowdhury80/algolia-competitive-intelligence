@@ -145,3 +145,27 @@ def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
     assert 'COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"' in weekly
     assert "--fail-on-synthesis-error" in daily
     assert "--fail-on-synthesis-error" in weekly
+
+
+def test_dashboard_publish_rebases_before_push(monkeypatch, tmp_path):
+    publish = load_publish_module()
+    repo_root = tmp_path / "repo"
+    (repo_root / "apps" / "dashboard" / "public").mkdir(parents=True)
+    calls = []
+
+    def fake_run_git(root, args, check=True):
+        calls.append(tuple(args))
+        if args[:3] == ["status", "--porcelain", "--"]:
+            return publish.subprocess.CompletedProcess(["git", *args], 0, stdout=" M apps/dashboard/public/index.html\n")
+        return publish.subprocess.CompletedProcess(["git", *args], 0, stdout="")
+
+    def fake_subprocess_run(args, **kwargs):
+        calls.append(tuple(args[1:]))
+        return publish.subprocess.CompletedProcess(args, 0, stdout="[main abc123] Update\n")
+
+    monkeypatch.setattr(publish, "run_git", fake_run_git)
+    monkeypatch.setattr(publish.subprocess, "run", fake_subprocess_run)
+
+    assert publish.publish_git(repo_root, "Update dashboard") is True
+    assert ("pull", "--rebase", "origin", "main") in calls
+    assert calls.index(("pull", "--rebase", "origin", "main")) < calls.index(("push", "origin", "main"))

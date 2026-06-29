@@ -2558,7 +2558,15 @@ def synthesize_with_hermes(prompt: str, timeout: int = 600) -> str:
     if result.returncode != 0:
         raise RuntimeError(result.stderr[:800])
     lines = [line for line in result.stdout.splitlines() if not line.startswith("session_id:")]
-    return clean_synthesis_markdown("\n".join(lines).strip())
+    markdown = clean_synthesis_markdown("\n".join(lines).strip())
+    provider_failure_markers = [
+        "No reply: the model returned empty content",
+        "model returned empty content",
+        "after retries and any fallback providers",
+    ]
+    if not markdown.strip() or any(marker in markdown for marker in provider_failure_markers):
+        raise RuntimeError("Hermes synthesis returned empty/provider-failure content")
+    return markdown
 
 
 def quiet_day_evidence(packet: Dict[str, Any]) -> str:

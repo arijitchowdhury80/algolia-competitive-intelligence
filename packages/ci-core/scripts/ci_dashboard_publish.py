@@ -715,6 +715,7 @@ def publish_git(repo_root: Path, message: str) -> bool:
         stderr=subprocess.STDOUT,
         check=True,
     )
+    run_git(repo_root, ["pull", "--rebase", "origin", "main"], check=True)
     run_git(repo_root, ["push", "origin", "main"], check=True)
     print("Dashboard publish: committed and pushed.")
     return True

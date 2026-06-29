@@ -1,8 +1,8 @@
 ---
 name: competitive-research
 description: Daily competitive intelligence brief for Algolia's search/discovery landscape. Use when Arijit asks for the morning competitive update, or when building/editing the competitive research cron job. Covers Coveo, Bloomreach, Constructor, Google Vertex AI, Elastic, Meilisearch, Typesense, Perplexity, ChatGPT, and AI agent threats. Sources are MANDATORY for every claim.
-version: 1.0.0
-author: Athena (Chowmes)
+version: 1.3.3
+author: Argus (Competitive Intelligence), supervised by Athena (Chowmes)
 license: MIT
 metadata:
   hermes:
@@ -14,6 +14,8 @@ metadata:
 
 Daily competitive intelligence engine for Arijit at Algolia. Covers competitor moves, industry signals, AI-native threats, and content angles for LinkedIn thought leadership. The v2 pipeline stores public-source evidence in a SQLite signal ledger before synthesis.
 
+Operational owner: Argus, the dedicated Competitive Intelligence agent. Athena supervises quality and escalation; Athena should not be the routine daily CI delivery voice once the dedicated Argus Telegram bot is active.
+
 Important: Arijit cares about OEM/resale partnerships, but the skill must not force every recommendation into a partner-only strategy. Choose the action owner from the evidence: Product, Product Marketing, Sales Enablement, Partner Enablement, Competitive Intelligence, or a cross-functional group.
 
 Canonical runtime contract:
@@ -23,6 +25,10 @@ Canonical runtime contract:
 - Hermes compatibility link: `/opt/data/skills/competitive-research` points to the workspace skill root.
 - Cron wrappers live in `/opt/data/scripts/` and call the workspace skill root directly.
 - Do not keep a second executable copy under Chowmes; update the workspace skill and redeploy wrappers.
+- Current live delivery mode is Argus-owned Telegram delivery through the `argus` Hermes profile. The old default daily/weekly CI cron jobs have been removed from Athena/default cron state.
+- Daily and weekly wrappers run `ci_run_self_check.py` after successful report generation and dashboard publish. The audit is written to `artifacts/competitive-research/run-audits/`.
+- Daily and weekly wrappers then run `ci_run_review.py` to create Argus post-run review and learning artifacts in `artifacts/competitive-research/run-reviews/`.
+- Argus's knowledge base starts with `agents/argus-ci-field-manual.md`; use it to interpret CI platform patterns, Algolia's wedge, and stakeholder action routing.
 
 ## Algolia Brand System Mandate
 
@@ -43,6 +49,39 @@ Brand rules:
 - For visual artifacts, use Algolia Blue `#003DFF`, Sora, JetBrains Mono for code, mostly white surfaces, dark navy CTA/report bands where useful, 12-16px cards, 8px buttons, 999px badges only.
 - Use official Algolia logos/assets when available. Never redraw the Algolia mark.
 - Full HTML reports must use the Algolia report styling in `daily-research-run.py`; do not revert to placeholder Inter styling or fake logo marks.
+
+## Argus CI Agent Mandate
+
+Argus is the analyst/operator for this skill.
+
+Argus must be:
+
+- Evidence-backed.
+- Skeptical.
+- Concise.
+- Commercially aware.
+- Willing to challenge weak action requests.
+- Clear about confidence, source health, and what is unknown.
+
+Argus may be dry or lightly sarcastic in conversation, but reports for Algolia stakeholders must stay professional, evidence-backed, and brand-safe. The daily/weekly report is not a comedy club with URLs.
+
+Argus should not publish:
+
+- Raw page-change findings.
+- Baseline captures as if they are market movement.
+- Battlecard recommendations without material competitor deltas.
+- Unsupported momentum claims.
+- Quiet-day confidence when source coverage is unhealthy.
+
+Every useful CI output must answer:
+
+1. What happened?
+2. What changed versus the prior known baseline?
+3. Why does it matter to Algolia?
+4. Who should act?
+5. What should they do next?
+6. What evidence supports it?
+7. What would change the recommendation?
 
 ## Workflow
 
@@ -84,6 +123,39 @@ python3 scripts/weekly-review.py
 python3 scripts/weekly-review.py --date 2026-06-22
 ```
 
+### Post-Run Self-Check
+
+```bash
+python3 scripts/ci_run_self_check.py \
+  --cadence daily \
+  --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
+  --markdown-path "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/briefs/YYYY-MM-DD.md" \
+  --html-path "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/reports/YYYY-MM-DD.html" \
+  --dashboard-log "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/raw/dashboard-publish-latest.log"
+```
+
+The self-check validates planned vs actual cadence, Markdown/HTML artifact existence, ledger presence, dashboard publish log health, semantic delta counts, and weak raw-change language. It fails on missing required artifacts and warns on suspicious report language.
+
+### Argus Post-Run Review
+
+```bash
+python3 scripts/ci_run_review.py \
+  --cadence daily \
+  --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
+  --audit-json "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/run-audits/YYYY-MM-DD-daily.json" \
+  --run-output-file "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/raw/daily-run-latest-output.log"
+```
+
+The review writes:
+
+```text
+artifacts/competitive-research/run-reviews/YYYY-MM-DD-daily.json
+artifacts/competitive-research/run-reviews/YYYY-MM-DD-daily.md
+artifacts/competitive-research/run-reviews/argus-learning-log.md
+```
+
+This is Argus's deterministic learning loop foundation. It turns failed or warning self-checks and output quality warnings into owner-specific improvement actions, then appends a durable learning-log entry. Argus must not silently deliver weak output and forget the discrepancy.
+
 ## Architecture
 
 ```
@@ -96,9 +168,11 @@ cron (9 AM ET daily)
         ├─→ parallel-cli search            (if authenticated)
         ├─→ normalize scored signals → ci.sqlite
         ├─→ build synthesis packet from signal ledger
-        ├─→ /opt/hermes/.venv/bin/hermes chat -q (Claude Sonnet) (synthesis)
+        ├─→ Gemini synthesis through Hermes/provider env (default: gemini-2.5-flash)
         ├─→ save markdown brief → /opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/briefs/
         ├─→ save Algolia-branded HTML report → /opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/reports/
+        ├─→ run post-run self-check → /opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/run-audits/
+        ├─→ run Argus post-run review → /opt/data/knowledge/obsidian/MyOS/Projects/Competitive Intelligence/artifacts/competitive-research/run-reviews/
         └─→ stdout → Telegram pulse only, not full report
 ```
 
@@ -109,13 +183,15 @@ cron (9 AM ET daily)
 - `curl`: for source health checks
 - Python 3.10+: pyyaml
 - SQLite (Python stdlib)
-- OpenRouter API key (for Claude Sonnet synthesis)
+- Gemini API key for synthesis (`GEMINI_API_KEY` in `/opt/data/.env`)
+- Algolia inference config for low-end/fast housekeeping routes when explicitly selected
 
 ## Prerequisites
 
 1. `parallel-cli login` (device auth or API key)
 2. `python3 scripts/setup-monitors.py` (one-time, creates 12+ monitors)
 3. Hermes CLI available for synthesis step
+4. Provider preflight passes before synthesis
 
 ## Cron Setup
 
@@ -129,7 +205,7 @@ Hermes cron resolves `--script competitive-research-daily.sh` from `/opt/data/sc
 
 Do not install this cron wrapper under `/opt/data/.hermes/scripts/`; that path is not the Hermes cron lookup path for this job.
 
-The full daily run can exceed Hermes' default 120-second no-agent script timeout because it performs source collection and Claude synthesis before stdout is delivered. Keep `/opt/data/config.yaml` aligned with:
+The full daily run can exceed Hermes' default 120-second no-agent script timeout because it performs source collection and Gemini synthesis before stdout is delivered. Keep `/opt/data/config.yaml` aligned with:
 
 ```yaml
 cron:
@@ -299,7 +375,7 @@ Failure modes to detect and patch:
 8. **Python dependency drift.** If `import yaml` fails, reinstall `python3-yaml` or run the script with `/opt/hermes/.venv/bin/python`.
 9. **Hermes CLI running as wrong user.** Daily script calls `hermes chat -q`. The script already hardcodes `/opt/hermes/.venv/bin/hermes`. Ensure it runs as `hermes` user, not root, to avoid permission issues on `/opt/data`.
 10. **Monitors not created.** Run `scripts/setup-monitors.py` once before expecting real-time alerts.
-11. **Synthesis timeout.** Claude Sonnet may take more than 2 minutes for full briefs. Hermes cron must allow the wrapper enough time to finish; set `/opt/data/config.yaml` `cron.script_timeout_seconds` to `900`.
+11. **Synthesis timeout.** Gemini synthesis may take more than 2 minutes for full briefs. Hermes cron must allow the wrapper enough time to finish; set `/opt/data/config.yaml` `cron.script_timeout_seconds` to `900`.
 12. **Quiet day spam.** If 5+ quiet days in a week, weekly review will flag for query expansion.
 13. **Telegram tool-repair spiral.** If the skill fails from Telegram because a dependency, auth, path, or permission is wrong, do not keep probing from the DM. Stop, report the first failing prerequisite, and let Codex patch the skill or runtime from the ChowMes workspace.
 14. **Wrong cron script directory.** Hermes cron `--script` resolves relative script names under `/opt/data/scripts/`. Do not place the executable only under `/opt/data/.hermes/scripts/` or inside the skill directory.

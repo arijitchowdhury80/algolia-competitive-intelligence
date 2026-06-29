@@ -1,5 +1,6 @@
 import importlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -219,6 +220,27 @@ Sales Enablement should review the playbook.
 
     assert "missing_links" in ci_core.validate_output(markdown)
     assert ci_core.quality_score(markdown) < 0.9
+
+
+def test_hermes_empty_reply_is_treated_as_synthesis_failure(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout="⚠️ No reply: the model returned empty content after retries and any fallback providers.\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(ci_core.subprocess, "run", fake_run)
+
+    try:
+        ci_core.synthesize_with_hermes("weekly prompt")
+    except RuntimeError as exc:
+        assert "empty/provider-failure" in str(exc)
+    else:
+        raise AssertionError("provider failure marker should raise RuntimeError")
 
 
 def test_daily_quiet_day_with_failed_sources_routes_ci_ops_repair(monkeypatch, tmp_path):
