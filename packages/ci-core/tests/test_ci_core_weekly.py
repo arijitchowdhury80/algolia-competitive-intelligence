@@ -155,6 +155,71 @@ def test_daily_material_filter_accepts_changed_direct_signal(monkeypatch, tmp_pa
     assert ci_core.signal_is_daily_material(signal) is True
 
 
+def test_daily_quiet_day_with_full_coverage_does_not_invent_repair_action(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+
+    packet = {
+        "cadence": "daily",
+        "date_start": "2026-06-29",
+        "date_end": "2026-06-29",
+        "signals": [],
+        "source_ledger": [],
+        "source_coverage": {
+            "totals": {
+                "enabled_sources": 39,
+                "checked_sources": 39,
+                "successful_sources": 39,
+                "failed_sources": 0,
+                "missing_sources": 0,
+            },
+            "sources": [],
+        },
+    }
+
+    markdown = ci_core.synthesize_local(packet, cadence="daily")
+
+    assert "39 succeeded, 0 failed, and 0 were missing" in markdown
+    assert "No immediate competitive action is recommended today" in markdown
+    assert "repair or replace" not in markdown
+    assert "because some source coverage needs repair" not in markdown
+
+
+def test_daily_quiet_day_with_failed_sources_routes_ci_ops_repair(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+
+    packet = {
+        "cadence": "daily",
+        "date_start": "2026-06-29",
+        "date_end": "2026-06-29",
+        "signals": [],
+        "source_ledger": [],
+        "source_coverage": {
+            "totals": {
+                "enabled_sources": 39,
+                "checked_sources": 39,
+                "successful_sources": 38,
+                "failed_sources": 1,
+                "missing_sources": 0,
+            },
+            "sources": [
+                {
+                    "competitor": "Constructor",
+                    "source_type": "customer proof",
+                    "url": "https://constructor.com/customers",
+                    "status": "error",
+                    "error": "HTTP 403 Forbidden",
+                }
+            ],
+        },
+    }
+
+    markdown = ci_core.synthesize_local(packet, cadence="daily")
+
+    assert "38 succeeded, 1 failed, and 0 were missing" in markdown
+    assert "repair or replace failed and missing sources" in markdown
+    assert "low-medium confidence" in markdown
+
+
 def test_v1_dashboard_tables_exist(monkeypatch, tmp_path):
     ci_core = load_ci_core(monkeypatch, tmp_path)
     conn = ci_core.connect_db()

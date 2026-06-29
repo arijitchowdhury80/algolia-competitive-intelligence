@@ -2742,15 +2742,28 @@ No battlecard update recommended.
 No source-backed signals available for this period.
 """.format(**packet)
         coverage_totals = (packet.get("source_coverage") or {}).get("totals", {})
+        failed_sources = int(coverage_totals.get("failed_sources", 0) or 0)
+        missing_sources = int(coverage_totals.get("missing_sources", 0) or 0)
+        has_coverage_gap = failed_sources > 0 or missing_sources > 0
+        if has_coverage_gap:
+            confidence = "low-medium"
+            confidence_clause = "Treat this as a quiet day with low-medium confidence because some source coverage needs repair."
+            action = "Competitive Intelligence should repair or replace failed and missing sources before treating quiet days as confirmed market quiet."
+            trigger = "- If a failed or missing tier 1 or AI-native source returns on the next run and produces a changed signal, treat it as time-delayed and review the source same day."
+        else:
+            confidence = "medium"
+            confidence_clause = "Treat this as a quiet day with medium confidence: collection completed, but public-source CI can still miss gated or delayed market movement."
+            action = "No immediate competitive action is recommended today. Maintain the watchlist and wait for a material semantic delta before changing sales, PMM, or product guidance."
+            trigger = "- If tomorrow's run produces a material semantic delta from a tier 1, customer-proof, AI/search, or pricing source, review it same day and route it to the relevant owner."
         return """**Competitive pulse - {date_end}**
 
 **Bottom line**
 
-No material public competitive signal was stored in the ledger today. Direct source collection checked {checked} of {enabled} enabled sources; {ok} succeeded, {failed} failed, and {missing} were missing from the collection window. Treat this as a quiet day with {confidence} confidence until failed sources are repaired.
+No material public competitive signal was stored in the ledger today. Direct source collection checked {checked} of {enabled} enabled sources; {ok} succeeded, {failed} failed, and {missing} were missing from the collection window. {confidence_clause}
 
 **Recommended action**
 
-Competitive Intelligence should repair or replace the failed sources before treating quiet days as confirmed market quiet.
+{action}
 
 **Evidence**
 
@@ -2758,7 +2771,7 @@ Competitive Intelligence should repair or replace the failed sources before trea
 
 **Watch trigger**
 
-- If any failed tier 1 or AI-native source returns on the next run and produces a changed signal, treat it as time-delayed and review the source same day.
+{trigger}
 
 **Research coverage**
 
@@ -2768,10 +2781,13 @@ Daily synthesis uses direct public-source diffs only. Broad search discovery and
             enabled=coverage_totals.get("enabled_sources", 0),
             checked=coverage_totals.get("checked_sources", 0),
             ok=coverage_totals.get("successful_sources", 0),
-            failed=coverage_totals.get("failed_sources", 0),
-            missing=coverage_totals.get("missing_sources", 0),
-            confidence="medium" if coverage_totals.get("failed_sources", 0) == 0 else "low-medium",
+            failed=failed_sources,
+            missing=missing_sources,
+            confidence=confidence,
+            confidence_clause=confidence_clause,
+            action=action,
             evidence=quiet_day_evidence(packet),
+            trigger=trigger,
         )
 
     top = signals[0]
