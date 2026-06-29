@@ -2907,11 +2907,19 @@ def display_label(value: str) -> str:
     return label.replace("Ai ", "AI ")
 
 
+def is_link_exempt_quiet_day(markdown: str) -> bool:
+    return (
+        "No material public competitive signal was stored in the ledger today" in markdown
+        and "Direct source collection checked" in markdown
+        and "No immediate competitive action is recommended today" in markdown
+    )
+
+
 def quality_score(markdown: str) -> float:
     score = 1.0
     if "|" in markdown and re.search(r"^\|", markdown, re.M):
         score -= 0.2
-    if "http" not in markdown:
+    if "http" not in markdown and not is_link_exempt_quiet_day(markdown):
         score -= 0.25
     if "Recommended action" not in markdown and "Recommended actions by owner" not in markdown:
         score -= 0.2
@@ -2932,7 +2940,7 @@ def validate_output(markdown: str, surface: str = "telegram") -> List[str]:
         errors.append("telegram_too_long")
     if "Recommended action" not in markdown and "Recommended actions by owner" not in markdown:
         errors.append("missing_action")
-    if "http" not in markdown:
+    if "http" not in markdown and not is_link_exempt_quiet_day(markdown):
         errors.append("missing_links")
     return errors
 

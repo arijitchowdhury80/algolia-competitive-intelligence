@@ -182,6 +182,26 @@ def test_daily_quiet_day_with_full_coverage_does_not_invent_repair_action(monkey
     assert "No immediate competitive action is recommended today" in markdown
     assert "repair or replace" not in markdown
     assert "because some source coverage needs repair" not in markdown
+    assert "missing_links" not in ci_core.validate_output(markdown)
+    assert ci_core.quality_score(markdown) >= 0.9
+
+
+def test_material_report_without_links_still_fails_link_gate(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+
+    markdown = """**Competitive pulse - 2026-06-29**
+
+**Bottom line**
+
+Constructor launched a new customer proof campaign.
+
+**Recommended action**
+
+Sales Enablement should review the playbook.
+"""
+
+    assert "missing_links" in ci_core.validate_output(markdown)
+    assert ci_core.quality_score(markdown) < 0.9
 
 
 def test_daily_quiet_day_with_failed_sources_routes_ci_ops_repair(monkeypatch, tmp_path):

@@ -69,15 +69,45 @@ run_self_check() {
     printf '[WARN] CI self-check script not found: %s\n' "$self_check"
     return 0
   fi
-  if ! "$PYTHON_BIN" "$self_check" \
+  self_check_output="$(
+    "$PYTHON_BIN" "$self_check" \
     --cadence daily \
     --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
     --markdown-path "$markdown_path" \
     --html-path "$html_path" \
     --dashboard-log "${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log" \
+    --run-output-file "$run_output_file" 2>&1
+  )" || {
+    printf '%s\n' "$self_check_output"
+    printf '[WARN] CI daily self-check failed. Inspect run-audits before trusting delivery.\n'
+    return 0
+  }
+  printf '%s\n' "$self_check_output"
+  audit_json="$(
+    printf '%s\n' "$self_check_output" | sed -n 's/^Audit JSON: //p' | tail -1
+  )"
+  run_post_review "$audit_json" "$run_output_file"
+}
+
+run_post_review() {
+  audit_json="$1"
+  run_output_file="$2"
+  review="$SKILL_ROOT/scripts/ci_run_review.py"
+  if [ ! -f "$review" ]; then
+    printf '[WARN] CI run review script not found: %s\n' "$review"
+    return 0
+  fi
+  if [ -z "$audit_json" ]; then
+    printf '[WARN] CI daily run review skipped because self-check audit path was missing.\n'
+    return 0
+  fi
+  if ! "$PYTHON_BIN" "$review" \
+    --cadence daily \
+    --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
+    --audit-json "$audit_json" \
     --run-output-file "$run_output_file"
   then
-    printf '[WARN] CI daily self-check failed. Inspect run-audits before trusting delivery.\n'
+    printf '[WARN] CI daily run review failed. Inspect run-reviews before trusting Argus learning state.\n'
   fi
 }
 
