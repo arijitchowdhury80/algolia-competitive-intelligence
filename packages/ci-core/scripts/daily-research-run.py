@@ -67,6 +67,7 @@ def parse_args():
     parser.add_argument("--direct-limit", type=int, help="Limit direct public-source fetches")
     parser.add_argument("--search-results", type=int, default=5, help="Max results per Parallel search query")
     parser.add_argument("--min-score", type=float, default=0.3, help="Minimum signal score for synthesis packet")
+    parser.add_argument("--fail-on-synthesis-error", action="store_true", help="Exit nonzero instead of falling back when Hermes synthesis fails")
     return parser.parse_args()
 
 
@@ -160,6 +161,10 @@ def main() -> int:
         try:
             markdown = synthesize_with_hermes(prompt)
         except Exception as exc:
+            if args.fail_on_synthesis_error:
+                print("[FATAL] Hermes synthesis failed: %s" % str(exc)[:500])
+                print("[FATAL] Production CI will not publish a fallback report. Fix provider/model availability and rerun.")
+                return 75
             print("[WARN] Hermes synthesis failed: %s" % str(exc)[:500])
             print("[WARN] Falling back to local synthesis so artifacts are still reviewable.")
             markdown = synthesize_local(packet, cadence="daily")

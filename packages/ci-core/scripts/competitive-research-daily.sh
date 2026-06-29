@@ -19,15 +19,18 @@ if [ -z "$WORKSPACE_ROOT" ]; then
 fi
 SKILL_ROOT="$WORKSPACE_ROOT/skills/competitive-research"
 
-if [ -f /root/.hermes/.env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  source /root/.hermes/.env
-  set +a
-fi
+for env_file in /opt/data/.env /root/.hermes/.env; do
+  if [ -f "$env_file" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+  fi
+done
 
 cd "$SKILL_ROOT"
 export COMPETITIVE_RESEARCH_OUTPUT_ROOT="$WORKSPACE_ROOT/artifacts/competitive-research"
+python3 "$SKILL_ROOT/scripts/ci-provider-preflight.py"
 
 publish_dashboard() {
   repo_root="${ALGOLIA_CI_REPO_ROOT:-/opt/data/apps/algolia-competitive-intelligence}"
@@ -51,7 +54,7 @@ publish_dashboard() {
 }
 
 output="$(
-  python3 "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors 2>&1
+  python3 "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors --fail-on-synthesis-error 2>&1
 )" || {
   printf '%s\n' "$output"
   exit 1

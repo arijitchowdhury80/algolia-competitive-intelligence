@@ -125,3 +125,15 @@ def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
     assert "publish-dashboard.py" in daily
     assert "publish_dashboard" in weekly
     assert "publish-dashboard.py" in weekly
+
+
+def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
+    daily = (SCRIPTS_DIR / "competitive-research-daily.sh").read_text()
+    weekly = (SCRIPTS_DIR / "competitive-research-weekly.sh").read_text()
+
+    assert "ci-provider-preflight.py" in daily
+    assert "ci-provider-preflight.py" in weekly
+    assert "/opt/data/.env" in daily
+    assert "/opt/data/.env" in weekly
+    assert "--fail-on-synthesis-error" in daily
+    assert "--fail-on-synthesis-error" in weekly

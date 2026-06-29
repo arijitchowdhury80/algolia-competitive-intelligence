@@ -50,6 +50,7 @@ def parse_args():
     parser.add_argument("--fixture", help="Replay fixture before synthesis")
     parser.add_argument("--local-synthesis", action="store_true", help="Use deterministic local synthesis for UX testing")
     parser.add_argument("--dry-run", action="store_true", help="Build packet and audit only")
+    parser.add_argument("--fail-on-synthesis-error", action="store_true", help="Exit nonzero instead of falling back when Hermes synthesis fails")
     return parser.parse_args()
 
 
@@ -103,6 +104,10 @@ def main() -> int:
         try:
             markdown = synthesize_with_hermes(prompt)
         except Exception as exc:
+            if args.fail_on_synthesis_error:
+                print("[FATAL] Hermes synthesis failed: %s" % str(exc)[:500])
+                print("[FATAL] Production CI will not publish a fallback report. Fix provider/model availability and rerun.")
+                return 75
             print("[WARN] Hermes synthesis failed: %s" % str(exc)[:500])
             print("[WARN] Falling back to local synthesis so artifacts are still reviewable.")
             markdown = synthesize_local(packet, cadence="weekly")
