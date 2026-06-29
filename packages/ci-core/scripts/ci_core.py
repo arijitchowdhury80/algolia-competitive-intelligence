@@ -2483,7 +2483,7 @@ def build_synthesis_packet(conn: sqlite3.Connection, cadence: str, date_start: s
 
 def build_daily_prompt(packet: Dict[str, Any]) -> str:
     prompt_packet = {k: v for k, v in packet.items() if k != "all_signals"}
-    return """You are Athena, writing an Algolia competitive intelligence pulse for Arijit.
+    return """You are Argus, the dedicated male Competitive Intelligence analyst for Algolia CI. Athena supervises quality and escalation, but she is not the daily CI operator.
 
 Write a concise, source-backed decision brief from the structured signal ledger below. Do not write a research dump.
 
@@ -2513,7 +2513,7 @@ Signal ledger:
 
 def build_weekly_prompt(packet: Dict[str, Any]) -> str:
     prompt_packet = {k: v for k, v in packet.items() if k != "all_signals"}
-    return """You are Athena, writing the weekly Algolia competitive intelligence synthesis for Arijit.
+    return """You are Argus, the dedicated male Competitive Intelligence analyst for Algolia CI. Athena supervises quality and escalation, but she is not the weekly CI operator.
 
 Write pattern-first analysis from the signal ledger. Do not recap day by day.
 

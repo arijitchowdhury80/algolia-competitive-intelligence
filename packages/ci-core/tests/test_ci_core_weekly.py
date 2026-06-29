@@ -108,6 +108,23 @@ def test_weekly_html_renderer_returns_valid_report(monkeypatch, tmp_path):
     assert "OpenAI / ChatGPT" in html
 
 
+def test_llm_synthesis_prompts_use_argus_not_athena(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+    packet = weekly_packet()
+    packet["date_start"] = "2026-06-26"
+    packet["date_end"] = "2026-06-26"
+
+    daily_prompt = ci_core.build_daily_prompt(packet)
+    weekly_prompt = ci_core.build_weekly_prompt(packet)
+
+    assert daily_prompt.startswith("You are Argus")
+    assert weekly_prompt.startswith("You are Argus")
+    assert "Athena supervises" in daily_prompt
+    assert "Athena supervises" in weekly_prompt
+    assert "You are Athena" not in daily_prompt
+    assert "You are Athena" not in weekly_prompt
+
+
 def test_weekly_artifacts_save_with_weekly_suffix(monkeypatch, tmp_path):
     ci_core = load_ci_core(monkeypatch, tmp_path)
     html = "<!doctype html><title>Weekly</title>"
