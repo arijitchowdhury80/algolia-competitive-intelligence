@@ -60,6 +60,27 @@ publish_dashboard() {
   fi
 }
 
+run_self_check() {
+  markdown_path="$1"
+  html_path="$2"
+  run_output_file="$3"
+  self_check="$SKILL_ROOT/scripts/ci_run_self_check.py"
+  if [ ! -f "$self_check" ]; then
+    printf '[WARN] CI self-check script not found: %s\n' "$self_check"
+    return 0
+  fi
+  if ! "$PYTHON_BIN" "$self_check" \
+    --cadence daily \
+    --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
+    --markdown-path "$markdown_path" \
+    --html-path "$html_path" \
+    --dashboard-log "${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log" \
+    --run-output-file "$run_output_file"
+  then
+    printf '[WARN] CI daily self-check failed. Inspect run-audits before trusting delivery.\n'
+  fi
+}
+
 output="$(
   "$PYTHON_BIN" "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors --fail-on-synthesis-error 2>&1
 )" || {
@@ -68,6 +89,16 @@ output="$(
 }
 
 publish_dashboard
+run_output_file="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/daily-run-latest-output.log"
+mkdir -p "$(dirname "$run_output_file")"
+printf '%s\n' "$output" >"$run_output_file"
+markdown_path="$(
+  printf '%s\n' "$output" | sed -n 's/^Markdown saved: //p' | tail -1
+)"
+html_path="$(
+  printf '%s\n' "$output" | sed -n 's/^HTML saved: //p' | tail -1
+)"
+run_self_check "$markdown_path" "$html_path" "$run_output_file"
 
 pulse="$(
   printf '%s\n' "$output" | awk '
