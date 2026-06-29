@@ -2,11 +2,11 @@
 
 **Bottom line**
 
-No material public competitive signal was stored in the ledger today. Direct source collection checked 39 of 39 enabled sources; 39 succeeded, 0 failed, and 0 were missing from the collection window. Treat this as a quiet day with medium confidence until failed sources are repaired.
+No material public competitive signal was stored in the ledger today. Direct source collection checked 39 of 39 enabled sources; 39 succeeded, 0 failed, and 0 were missing from the collection window. Treat this as a quiet day with medium confidence: collection completed, but public-source CI can still miss gated or delayed market movement.
 
 **Recommended action**
 
-Competitive Intelligence should repair or replace the failed sources before treating quiet days as confirmed market quiet.
+No immediate competitive action is recommended today. Maintain the watchlist and wait for a material semantic delta before changing sales, PMM, or product guidance.
 
 **Evidence**
 
@@ -14,7 +14,7 @@ Competitive Intelligence should repair or replace the failed sources before trea
 
 **Watch trigger**
 
-- If any failed tier 1 or AI-native source returns on the next run and produces a changed signal, treat it as time-delayed and review the source same day.
+- If tomorrow's run produces a material semantic delta from a tier 1, customer-proof, AI/search, or pricing source, review it same day and route it to the relevant owner.
 
 **Research coverage**
 
