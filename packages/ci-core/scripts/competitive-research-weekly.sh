@@ -37,7 +37,37 @@ export COMPETITIVE_RESEARCH_OUTPUT_ROOT="$WORKSPACE_ROOT/artifacts/competitive-r
 export CI_MODEL_PROVIDER="${CI_MODEL_PROVIDER:-gemini}"
 export COMPETITIVE_RESEARCH_PROVIDER="${COMPETITIVE_RESEARCH_PROVIDER:-gemini}"
 export COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"
-"$PYTHON_BIN" "$SKILL_ROOT/scripts/ci-provider-preflight.py"
+mkdir -p "${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw"
+
+argus_fault() {
+  title="$1"
+  detail="$2"
+  log_path="$3"
+  cat <<EOF
+Argus did not publish the weekly synthesis.
+
+What broke
+$title
+
+Why it matters
+$detail
+
+Next move
+I saved the machine-room output here:
+$log_path
+
+Strategy built on a failed run is just theatre with charts. Fix this first.
+EOF
+}
+
+preflight_log="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/weekly-provider-preflight-latest.log"
+if ! "$PYTHON_BIN" "$SKILL_ROOT/scripts/ci-provider-preflight.py" >"$preflight_log" 2>&1; then
+  argus_fault \
+    "Provider preflight failed." \
+    "Weekly synthesis needs a healthy model/provider path. Without that, the archive may exist but the executive interpretation is not trustworthy." \
+    "$preflight_log"
+  exit 1
+fi
 
 publish_dashboard() {
   repo_root="${ALGOLIA_CI_REPO_ROOT:-/opt/data/apps/algolia-competitive-intelligence}"
@@ -56,7 +86,7 @@ publish_dashboard() {
     --repo-root "$repo_root" \
     --commit-message "Update weekly CI dashboard" >"$log_path" 2>&1
   then
-    printf '[WARN] Dashboard publish failed. Log: %s\n' "$log_path"
+    printf 'Argus note: dashboard publish failed. The weekly synthesis exists, but the dashboard may be stale. Inspect %s\n' "$log_path"
   fi
 }
 
@@ -66,7 +96,7 @@ run_self_check() {
   run_output_file="$3"
   self_check="$SKILL_ROOT/scripts/ci_run_self_check.py"
   if [ ! -f "$self_check" ]; then
-    printf '[WARN] CI self-check script not found: %s\n' "$self_check"
+    printf 'Argus note: CI self-check script is missing. The weekly synthesis exists, but quality verification did not run. Inspect %s\n' "$self_check"
     return 0
   fi
   self_check_output="$(
@@ -78,11 +108,11 @@ run_self_check() {
     --dashboard-log "${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log" \
     --run-output-file "$run_output_file" 2>&1
   )" || {
-    printf '%s\n' "$self_check_output"
-    printf '[WARN] CI weekly self-check failed. Inspect run-audits before trusting delivery.\n'
+    printf '%s\n' "$self_check_output" >"${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/weekly-self-check-latest.log"
+    printf 'Argus note: weekly self-check failed. Treat this synthesis as unverified until run-audits are inspected.\n'
     return 0
   }
-  printf '%s\n' "$self_check_output"
+  printf '%s\n' "$self_check_output" >"${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/weekly-self-check-latest.log"
   audit_json="$(
     printf '%s\n' "$self_check_output" | sed -n 's/^Audit JSON: //p' | tail -1
   )"
@@ -94,43 +124,45 @@ run_post_review() {
   run_output_file="$2"
   review="$SKILL_ROOT/scripts/ci_run_review.py"
   if [ ! -f "$review" ]; then
-    printf '[WARN] CI run review script not found: %s\n' "$review"
+    printf 'Argus note: run-review script is missing. I could not record the learning loop for this weekly run.\n'
     return 0
   fi
   if [ -z "$audit_json" ]; then
-    printf '[WARN] CI weekly run review skipped because self-check audit path was missing.\n'
+    printf 'Argus note: run review skipped because the self-check audit path was missing.\n'
     return 0
   fi
   if ! "$PYTHON_BIN" "$review" \
     --cadence weekly \
     --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
     --audit-json "$audit_json" \
-    --run-output-file "$run_output_file"
+    --run-output-file "$run_output_file" >"${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/weekly-review-latest.log" 2>&1
   then
-    printf '[WARN] CI weekly run review failed. Inspect run-reviews before trusting Argus learning state.\n'
+    printf 'Argus note: weekly run review failed. Inspect run-reviews before trusting my learning state.\n'
   fi
 }
 
 print_delivery_status() {
   cat <<'EOF'
-Delivery status
-Operator: Argus generated and reviewed this CI run.
-Current delivery path: dedicated Argus Telegram gateway.
-Athena role: supervisor only, not weekly CI operator.
+Argus weekly synthesis
+Generated and reviewed by Argus. Athena supervises quality; she is not the weekly operator.
 
 EOF
 }
 
-output="$(
-  "$PYTHON_BIN" "$SKILL_ROOT/scripts/weekly-review.py" --fail-on-synthesis-error 2>&1
-)" || {
-  printf '%s\n' "$output"
-  exit 1
-}
-
-publish_dashboard
 run_output_file="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/weekly-run-latest-output.log"
 mkdir -p "$(dirname "$run_output_file")"
+if ! output="$(
+  "$PYTHON_BIN" "$SKILL_ROOT/scripts/weekly-review.py" --fail-on-synthesis-error 2>&1
+)"; then
+  printf '%s\n' "$output" >"$run_output_file"
+  argus_fault \
+    "Weekly CI generation failed." \
+    "I am not sending a ceremonial executive brief over a broken synthesis. The weekly interpretation is not trustworthy until this is repaired." \
+    "$run_output_file"
+  exit 1
+fi
+
+publish_dashboard
 printf '%s\n' "$output" >"$run_output_file"
 
 period="$(
@@ -163,12 +195,15 @@ cat <<EOF
 Weekly competitive readout - $period
 
 Bottom line
-The structured HTML report is ready. Use it as the decision artifact; this Telegram message is only the delivery wrapper.
+The decision artifact is ready. I am keeping Telegram short: this is the handle, not the whole knife.
 
-Ledger
+Signal map
 Signals in window: ${signals:-unknown}
 Owner coverage: ${owners:-not generated}
 Category coverage: ${categories:-not generated}
+
+Recommended use
+Open the HTML report, review owner routes, and act only on evidence-backed deltas. If a finding is just noise wearing a blazer, leave it in the archive.
 
 Artifacts
 Markdown: ${markdown_path:-not generated}

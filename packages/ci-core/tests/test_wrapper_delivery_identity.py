@@ -8,16 +8,16 @@ SCRIPTS = SKILL_ROOT / "scripts"
 def test_daily_wrapper_declares_argus_delivery_identity():
     text = (SCRIPTS / "competitive-research-daily.sh").read_text()
 
-    assert "Delivery status" in text
-    assert "Operator: Argus generated and reviewed this CI run." in text
-    assert "dedicated Argus Telegram gateway" in text
-    assert "Athena role: supervisor only, not daily CI operator." in text
+    assert "Argus daily pulse" in text
+    assert "Generated and reviewed by Argus." in text
+    assert "Athena supervises quality; she is not the daily operator." in text
+    assert "Delivery status" not in text
 
 
 def test_weekly_wrapper_declares_argus_delivery_identity():
     text = (SCRIPTS / "competitive-research-weekly.sh").read_text()
 
-    assert "Delivery status" in text
-    assert "Operator: Argus generated and reviewed this CI run." in text
-    assert "dedicated Argus Telegram gateway" in text
-    assert "Athena role: supervisor only, not weekly CI operator." in text
+    assert "Argus weekly synthesis" in text
+    assert "Generated and reviewed by Argus." in text
+    assert "Athena supervises quality; she is not the weekly operator." in text
+    assert "Delivery status" not in text

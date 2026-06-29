@@ -1,7 +1,7 @@
 ---
 name: competitive-research
 description: Daily competitive intelligence brief for Algolia's search/discovery landscape. Use when Arijit asks for the morning competitive update, or when building/editing the competitive research cron job. Covers Coveo, Bloomreach, Constructor, Google Vertex AI, Elastic, Meilisearch, Typesense, Perplexity, ChatGPT, and AI agent threats. Sources are MANDATORY for every claim.
-version: 1.3.3
+version: 1.3.4
 author: Argus (Competitive Intelligence), supervised by Athena (Chowmes)
 license: MIT
 metadata:

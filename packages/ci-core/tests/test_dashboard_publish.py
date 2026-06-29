@@ -125,6 +125,14 @@ def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
     assert "publish-dashboard.py" in daily
     assert "publish_dashboard" in weekly
     assert "publish-dashboard.py" in weekly
+    assert "daily-self-check-latest.log" in daily
+    assert "weekly-self-check-latest.log" in weekly
+    assert "CI self-check daily:" not in daily
+    assert "CI self-check weekly:" not in weekly
+    assert "Delivery status" not in daily
+    assert "Delivery status" not in weekly
+    assert "Argus daily pulse" in daily
+    assert "Argus weekly synthesis" in weekly
 
 
 def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
@@ -145,6 +153,8 @@ def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
     assert 'COMPETITIVE_RESEARCH_MODEL="${COMPETITIVE_RESEARCH_MODEL:-gemini-2.5-flash}"' in weekly
     assert "--fail-on-synthesis-error" in daily
     assert "--fail-on-synthesis-error" in weekly
+    assert "Argus did not publish the daily brief." in daily
+    assert "Argus did not publish the weekly synthesis." in weekly
 
 
 def test_dashboard_publish_rebases_before_push(monkeypatch, tmp_path):
