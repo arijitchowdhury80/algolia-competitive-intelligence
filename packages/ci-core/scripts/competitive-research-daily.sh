@@ -111,6 +111,16 @@ run_post_review() {
   fi
 }
 
+print_delivery_status() {
+  cat <<'EOF'
+Delivery status
+Operator: Argus generated and reviewed this CI run.
+Current delivery path: temporary default Chowmes Telegram gateway until the dedicated Argus bot token/channel is configured.
+Athena role: supervisor only, not daily CI operator.
+
+EOF
+}
+
 output="$(
   "$PYTHON_BIN" "$SKILL_ROOT/scripts/daily-research-run.py" --skip-search --skip-monitors --fail-on-synthesis-error 2>&1
 )" || {
@@ -129,6 +139,7 @@ html_path="$(
   printf '%s\n' "$output" | sed -n 's/^HTML saved: //p' | tail -1
 )"
 run_self_check "$markdown_path" "$html_path" "$run_output_file"
+print_delivery_status
 
 pulse="$(
   printf '%s\n' "$output" | awk '

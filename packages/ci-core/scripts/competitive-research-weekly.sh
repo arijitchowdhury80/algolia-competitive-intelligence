@@ -111,6 +111,16 @@ run_post_review() {
   fi
 }
 
+print_delivery_status() {
+  cat <<'EOF'
+Delivery status
+Operator: Argus generated and reviewed this CI run.
+Current delivery path: temporary default Chowmes Telegram gateway until the dedicated Argus bot token/channel is configured.
+Athena role: supervisor only, not weekly CI operator.
+
+EOF
+}
+
 output="$(
   "$PYTHON_BIN" "$SKILL_ROOT/scripts/weekly-review.py" --fail-on-synthesis-error 2>&1
 )" || {
@@ -146,6 +156,8 @@ categories="$(
 if [ -z "$period" ]; then
   period="latest weekly window"
 fi
+
+print_delivery_status
 
 cat <<EOF
 Weekly competitive readout - $period
