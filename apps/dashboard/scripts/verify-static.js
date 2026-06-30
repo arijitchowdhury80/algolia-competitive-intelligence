@@ -39,6 +39,32 @@ if (!latestData.report_count || latestData.report_count < 1) {
 if (!latestData.archive_range || !latestData.reports || !latestData.reports.length) {
   throw new Error("Dashboard data export is missing archive metadata.");
 }
+if (latestData.semantic_dashboard !== "data/semantic-dashboard.json") {
+  throw new Error("Dashboard latest.json is not wired to semantic-dashboard.json.");
+}
+
+const semanticDataPath = path.join(__dirname, "..", "public", "data", "semantic-dashboard.json");
+if (!fs.existsSync(semanticDataPath)) {
+  throw new Error("Dashboard semantic export is missing: data/semantic-dashboard.json");
+}
+const semanticData = JSON.parse(fs.readFileSync(semanticDataPath, "utf8"));
+for (const key of [
+  "daily_state",
+  "weekly_state",
+  "material_deltas",
+  "suppressed_diagnostics",
+  "source_health",
+  "action_queue",
+  "delivery_status",
+  "coverage_limits"
+]) {
+  if (!(key in semanticData)) {
+    throw new Error(`Dashboard semantic export is missing: ${key}`);
+  }
+}
+if (!semanticData.coverage_limits || semanticData.coverage_limits.private_sources_connected !== false) {
+  throw new Error("Dashboard semantic export must state public-source-only coverage limits.");
+}
 
 for (const token of [
   "Attention queue",

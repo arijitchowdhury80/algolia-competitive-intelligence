@@ -24,6 +24,7 @@ from ci_core import (
     build_synthesis_packet,
     build_weekly_prompt,
     connect_db,
+    create_action_items_from_semantic_deltas,
     date_today,
     date_window,
     flatten_sources,
@@ -121,7 +122,8 @@ def main() -> int:
     html_path = save_html(html_text, end_date, cadence="weekly")
     score = quality_score(markdown)
     signal_ids = [s["id"] for s in packet.get("signals", [])]
-    record_synthesis_run(conn, "weekly", start_date, end_date, signal_ids, markdown_path, html_path, score)
+    report_id = record_synthesis_run(conn, "weekly", start_date, end_date, signal_ids, markdown_path, html_path, score)
+    create_action_items_from_semantic_deltas(conn, report_id, packet.get("semantic_deltas", []))
 
     print("Markdown saved: %s" % markdown_path)
     print("HTML saved: %s" % html_path)

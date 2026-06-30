@@ -320,7 +320,7 @@ Weekly synthesis format:
 
 1. **What changed**
 2. **Strategic pattern**
-3. **Recommended actions by owner**
+3. **Workflow action candidates**
 4. **Battlecard updates**
 5. **Coverage gaps**
 
@@ -349,7 +349,8 @@ Failure modes to detect and patch:
 - `references/sources.yaml` — Complete source URLs, search queries, executive tracker
 - `references/signal-taxonomy.md` — Signal categories, scoring, and action-owner routing
 - `references/methodology.md` — Public-source CI operating model
-- `references/output-template.md` — Brief format with 7 labeled sections
+- `references/output-template.md` — Brief format with labeled sections
+- `references/data-contract.md` — Ledger-backed semantic dashboard, action item, and delivery observability contract
 - `references/first-run-baseline.md` — Results from the first dry-run (2026-06-16); use as a smoke-test reference
 - `scripts/ci_core.py` — SQLite ledger, source loading, fetch/diff, normalization, scoring, rendering
 - `scripts/daily-research-run.py` — Main daily pipeline
@@ -393,7 +394,9 @@ Failure modes to detect and patch:
 - [ ] Fixture run works: `python3 scripts/daily-research-run.py --fixture "$COMPETITIVE_RESEARCH_OUTPUT_ROOT/raw/2026-06-17.json" --local-synthesis`
 - [ ] Direct fetch smoke run works: `python3 scripts/daily-research-run.py --direct-limit 5 --skip-search --local-synthesis`
 - [ ] First real run produces the daily pulse: Bottom line, Recommended action, Evidence, Watch trigger, Research coverage
-- [ ] Weekly run produces: What changed, Strategic pattern, Recommended actions by owner, Battlecard updates, Coverage gaps
+- [ ] Weekly run produces: What changed, Strategic pattern, Workflow action candidates, Battlecard updates, Coverage gaps
+- [ ] Weekly owner routing appears only when backed by `action_items` records created from material semantic deltas
+- [ ] Latest daily and weekly wrapper runs write `bot_deliveries` records for Argus Telegram handoff
 - [ ] Brief contains synthesized narratives, not listed findings
 - [ ] Every material claim has an inline source link and a date
 - [ ] No `date not found` appears in Bottom line or Evidence behind the recommendation

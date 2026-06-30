@@ -141,6 +141,49 @@ run_post_review() {
   fi
 }
 
+record_delivery() {
+  markdown_path="$1"
+  html_path="$2"
+  "$PYTHON_BIN" - "$SKILL_ROOT" "$markdown_path" "$html_path" <<'PY' || {
+    printf 'Argus note: delivery observability write failed. The Telegram handoff continues, but bot_deliveries is stale.\n'
+    return 0
+  }
+import os
+import sys
+from pathlib import Path
+
+skill_root, markdown_path, html_path = sys.argv[1:4]
+sys.path.insert(0, str(Path(skill_root) / "scripts"))
+from ci_core import connect_db, record_bot_delivery
+
+conn = connect_db()
+row = conn.execute(
+    "select id from report_index where cadence = ? and markdown_path = ? order by id desc limit 1",
+    ("weekly", markdown_path),
+).fetchone()
+recipient = (
+    os.environ.get("ARGUS_TELEGRAM_HOME_CHANNEL")
+    or os.environ.get("TELEGRAM_HOME_CHANNEL")
+    or os.environ.get("TELEGRAM_ALLOWED_USERS")
+    or "argus-telegram"
+)
+record_bot_delivery(
+    conn,
+    report_id=int(row["id"]) if row else None,
+    cadence="weekly",
+    bot_profile="argus",
+    channel="telegram",
+    recipient=recipient,
+    status="queued_for_telegram",
+    markdown_path=markdown_path,
+    html_path=html_path,
+    dashboard_url="https://ci.chowmes.com/",
+    artifact_paths=[p for p in [markdown_path, html_path] if p],
+    delivery_metadata={"source": "argus_cron_stdout", "wrapper": "competitive-research-weekly.sh"},
+)
+PY
+}
+
 print_delivery_status() {
   cat <<'EOF'
 Argus weekly synthesis
@@ -175,6 +218,7 @@ html_path="$(
   printf '%s\n' "$output" | sed -n 's/^HTML saved: //p' | tail -1
 )"
 run_self_check "$markdown_path" "$html_path" "$run_output_file"
+record_delivery "$markdown_path" "$html_path"
 signals="$(
   printf '%s\n' "$output" | sed -n 's/^Signals in window: //p' | tail -1
 )"

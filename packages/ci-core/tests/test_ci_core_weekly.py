@@ -312,6 +312,19 @@ def test_v1_dashboard_tables_exist(monkeypatch, tmp_path):
         "acquisition_json",
     }.issubset(snapshot_columns)
     assert {"collector", "duration_ms", "quality_score"}.issubset(health_columns)
+    action_columns = {row["name"] for row in conn.execute("pragma table_info(action_items)").fetchall()}
+    delivery_columns = {row["name"] for row in conn.execute("pragma table_info(bot_deliveries)").fetchall()}
+    assert {"source_delta_ids", "due_window", "confidence"}.issubset(action_columns)
+    assert {
+        "cadence",
+        "message_kind",
+        "markdown_path",
+        "html_path",
+        "dashboard_url",
+        "artifact_paths",
+        "delivery_metadata",
+        "updated_at",
+    }.issubset(delivery_columns)
 
 
 def test_source_registry_adds_collector_strategy(monkeypatch, tmp_path):
@@ -696,7 +709,7 @@ def test_record_synthesis_run_updates_report_index(monkeypatch, tmp_path):
     markdown_path.write_text(WEEKLY_MARKDOWN)
     html_path.write_text("<!doctype html><title>Weekly</title>")
 
-    ci_core.record_synthesis_run(
+    report_id = ci_core.record_synthesis_run(
         conn,
         "weekly",
         "2026-06-20",
@@ -708,6 +721,7 @@ def test_record_synthesis_run_updates_report_index(monkeypatch, tmp_path):
     )
 
     row = conn.execute("select * from report_index where cadence = 'weekly'").fetchone()
+    assert row["id"] == report_id
     assert row["date_start"] == "2026-06-20"
     assert row["date_end"] == "2026-06-26"
     assert row["markdown_path"].endswith("2026-06-26-weekly.md")
@@ -749,6 +763,115 @@ def test_report_archive_and_action_queue_helpers(monkeypatch, tmp_path):
     assert actions[0]["id"] == action_id
     assert actions[0]["status"] == "proposed"
     assert actions[0]["owner"] == "Competitive Intelligence"
+
+
+def test_delivery_record_written_for_report(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+    conn = ci_core.connect_db()
+    report_id = ci_core.record_synthesis_run(
+        conn,
+        "daily",
+        "2026-06-29",
+        "2026-06-29",
+        [],
+        tmp_path / "briefs" / "2026-06-29.md",
+        tmp_path / "reports" / "2026-06-29.html",
+        1.0,
+    )
+
+    delivery_id = ci_core.record_bot_delivery(
+        conn,
+        report_id=report_id,
+        cadence="daily",
+        bot_profile="argus",
+        channel="telegram",
+        recipient="6789423537",
+        status="queued_for_telegram",
+        markdown_path="/briefs/2026-06-29.md",
+        html_path="/reports/2026-06-29.html",
+        dashboard_url="https://ci.chowmes.com/",
+        artifact_paths=["/briefs/2026-06-29.md", "/reports/2026-06-29.html"],
+        delivery_metadata={"source": "cron_stdout"},
+    )
+
+    rows = ci_core.list_bot_deliveries(conn, cadence="daily")
+    assert rows[0]["id"] == delivery_id
+    assert rows[0]["report_id"] == report_id
+    assert rows[0]["bot_profile"] == "argus"
+    assert rows[0]["channel"] == "telegram"
+    assert rows[0]["status"] == "queued_for_telegram"
+    assert rows[0]["dashboard_url"] == "https://ci.chowmes.com/"
+    assert json.loads(rows[0]["artifact_paths"]) == ["/briefs/2026-06-29.md", "/reports/2026-06-29.html"]
+
+
+def test_action_items_created_only_from_publishable_semantic_deltas(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+    conn = ci_core.connect_db()
+    report_id = ci_core.record_synthesis_run(
+        conn,
+        "weekly",
+        "2026-06-23",
+        "2026-06-29",
+        [],
+        tmp_path / "briefs" / "2026-06-29-weekly.md",
+        tmp_path / "reports" / "2026-06-29-weekly.html",
+        0.94,
+    )
+
+    created = ci_core.create_action_items_from_semantic_deltas(conn, report_id, [
+        {
+            "id": 17,
+            "quality_status": "publish",
+            "action_owner": "Sales Enablement",
+            "recommended_action": "Validate Constructor customer proof against active objection handling.",
+            "delta_summary": "Constructor added Petco proof.",
+            "materiality_score": 0.82,
+            "evidence_urls": ["https://constructor.com/customers"],
+        },
+        {
+            "id": 18,
+            "quality_status": "suppressed",
+            "action_owner": "Product Marketing",
+            "recommended_action": "Ignore cookie-banner movement.",
+            "delta_summary": "Cookie copy changed.",
+            "materiality_score": 0.0,
+            "evidence_urls": ["https://example.com"],
+        },
+    ])
+
+    assert len(created) == 1
+    action = ci_core.list_action_items(conn)[0]
+    assert action["owner"] == "Sales Enablement"
+    assert action["source_delta_ids"] == "[17]"
+    assert action["due_window"] == "next business day"
+    assert action["confidence"] == 0.82
+
+
+def test_weekly_semantic_report_uses_workflow_backed_action_candidates(monkeypatch, tmp_path):
+    ci_core = load_ci_core(monkeypatch, tmp_path)
+    packet = weekly_packet()
+    packet["semantic_deltas"] = [
+        {
+            "id": 17,
+            "competitor": "Constructor",
+            "delta_type": "new_customer_proof",
+            "delta_summary": "Constructor added Petco proof.",
+            "algolia_implication": "Sales should validate whether this changes proof pressure.",
+            "action_owner": "Sales Enablement",
+            "recommended_action": "Validate the proof against active objection handling.",
+            "evidence_urls": ["https://constructor.com/customers"],
+            "quality_status": "publish",
+            "materiality_score": 0.82,
+        }
+    ]
+    packet["suppressed_deltas"] = []
+
+    markdown = ci_core.synthesize_local(packet, cadence="weekly")
+
+    assert "Workflow action candidates" in markdown
+    assert "Recommended actions by owner" not in markdown
+    assert "Sales Enablement" in markdown
+    assert "Action records should be created from these material semantic deltas" in markdown
 
 
 def test_source_health_summary_uses_coverage(monkeypatch, tmp_path):

@@ -94,9 +94,12 @@ Pattern-first summary of the strongest source-backed changes.
 
 Explain what the changes imply for Algolia. Separate confirmed fact, public-evidence inference, and unknown when needed.
 
-### Recommended actions by owner
+### Workflow action candidates
 
-Group actions by Product, Product Marketing, Sales Enablement, Partner Enablement, Competitive Intelligence, or Executive Review.
+List only action candidates backed by material semantic deltas and durable `action_items` rows.
+Allowed owners are Product, Product Marketing, Sales Enablement, Partner Enablement,
+Competitive Intelligence, and Executive Review. If no material semantic delta exists,
+say no workflow-backed action candidate exists; do not invent owner routing as prose.
 
 ### Battlecard updates
 

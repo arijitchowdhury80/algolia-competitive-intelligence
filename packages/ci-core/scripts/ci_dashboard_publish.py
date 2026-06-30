@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 DATE_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})(?P<weekly>-weekly)?\.md$")
@@ -145,6 +145,13 @@ def bullet_lines(section: str, limit: int = 6) -> List[str]:
     return lines[:limit]
 
 
+def workflow_action_section(markdown: str) -> str:
+    return (
+        parse_section(markdown, "Workflow action candidates")
+        or parse_section(markdown, "Recommended actions by owner")
+    )
+
+
 def report_files(output_root: Path) -> List[ReportFile]:
     briefs_dir = output_root / "briefs"
     reports: List[ReportFile] = []
@@ -232,7 +239,7 @@ def render_evidence(links: Sequence[Tuple[str, str]], fallback_href: str) -> str
 def render_finding_cards(weekly: Optional[ReportFile], daily: Optional[ReportFile]) -> str:
     cards: List[str] = []
     if weekly:
-        actions = bullet_lines(parse_section(weekly.text, "Recommended actions by owner"), limit=4)
+        actions = bullet_lines(workflow_action_section(weekly.text), limit=4)
         for action in actions:
             owner = "Review"
             title = strip_markdown(action)
@@ -329,7 +336,7 @@ def render_intelligence_lanes(weekly: Optional[ReportFile]) -> str:
     customer = parse_section(weekly.text, "Customer proof movement") if weekly else ""
     narrative = parse_section(weekly.text, "Content/narrative movement") if weekly else ""
     opportunities = parse_section(weekly.text, "Campaign opportunities") if weekly else ""
-    decisions = parse_section(weekly.text, "Recommended actions by owner") if weekly else ""
+    decisions = workflow_action_section(weekly.text) if weekly else ""
     suppressed = parse_section(weekly.text, "Suppressed weak signals") if weekly else ""
     return """
         <section class="panel lane" aria-labelledby="customer-proof-title">
@@ -399,6 +406,328 @@ def render_report_history(reports: Sequence[ReportFile]) -> str:
     return "\n".join(rows) or '<div class="empty">No archived reports yet.</div>'
 
 
+def report_summary(report: Optional[ReportFile], section: str, fallback: str) -> str:
+    if not report:
+        return fallback
+    return decision_safe_text(first_paragraph(parse_section(report.text, section)), fallback) or fallback
+
+
+def daily_status(daily: Optional[ReportFile], material_deltas: Sequence[Dict[str, Any]]) -> str:
+    if material_deltas:
+        return "material"
+    text = strip_markdown(daily.text if daily else "").lower()
+    if "no material public competitive signal" in text or "no immediate competitive action" in text:
+        return "quiet"
+    return "review"
+
+
+def compact_text(text: str, length: int = 220) -> str:
+    clean = strip_markdown(text)
+    return clean if len(clean) <= length else clean[: length - 3].rstrip() + "..."
+
+
+def semantic_dashboard_payload(
+    output_root: Path,
+    reports: Sequence[ReportFile],
+    daily: Optional[ReportFile],
+    weekly: Optional[ReportFile],
+    generated_at: str,
+) -> Dict[str, Any]:
+    try:
+        import ci_core
+
+        conn = ci_core.connect_db(output_root / "ci.sqlite")
+        date_start = min((report.date for report in reports), default=generated_at[:10])
+        date_end = max((report.date for report in reports), default=generated_at[:10])
+        material_deltas = ci_core.get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="publish", limit=20)
+        suppressed_deltas = ci_core.get_semantic_deltas(conn, date_start=date_start, date_end=date_end, quality_status="suppressed", limit=20)
+        actions = ci_core.list_action_items(conn, limit=20)
+        deliveries = ci_core.list_bot_deliveries(conn, limit=10)
+        source_health = ci_core.list_source_health(conn, date_start, date_end)[:20]
+    except Exception:
+        material_deltas = []
+        suppressed_deltas = []
+        actions = []
+        deliveries = []
+        source_health = []
+
+    daily_summary = report_summary(daily, "Bottom line", "No daily competitive pulse has been archived yet.")
+    weekly_summary = report_summary(weekly, "What changed", "No weekly competitive synthesis has been archived yet.")
+    weekly_pattern = report_summary(weekly, "Strategic pattern", "No weekly pattern has been validated yet.")
+    daily_action = report_summary(daily, "Recommended action", "Wait for the next complete CI run before changing guidance.")
+
+    return {
+        "generated_at": generated_at,
+        "archive_range": covered_range(reports),
+        "daily_state": {
+            "cadence": "daily",
+            "date": daily.date if daily else None,
+            "status": daily_status(daily, material_deltas),
+            "summary": daily_summary,
+            "recommended_action": daily_action,
+            "archive_path": "archive/%s" % daily.path.name if daily else None,
+        },
+        "weekly_state": {
+            "cadence": "weekly",
+            "date": weekly.date if weekly else None,
+            "summary": weekly_summary,
+            "strategic_pattern": weekly_pattern,
+            "archive_path": "archive/%s" % weekly.path.name if weekly else None,
+        },
+        "material_deltas": material_deltas,
+        "suppressed_diagnostics": {
+            "count": len(suppressed_deltas),
+            "samples": suppressed_deltas[:6],
+        },
+        "source_health": source_health,
+        "action_queue": actions,
+        "delivery_status": deliveries,
+        "report_archive": [
+            {"date": report.date, "cadence": report.cadence, "path": "archive/%s" % report.path.name}
+            for report in sorted(reports, key=lambda item: (item.date, item.cadence), reverse=True)
+        ],
+        "coverage_limits": {
+            "private_sources_connected": False,
+            "public_source_only": True,
+            "not_connected": ["Gong", "Salesforce", "Slack", "G2 paid API", "Semrush API", "internal win/loss"],
+            "note": "Private field, CRM, call, paid review, and paid traffic data are intentionally absent.",
+        },
+    }
+
+
+def render_semantic_cards(items: Sequence[Dict[str, Any]]) -> str:
+    if not items:
+        return '<div class="empty">No material semantic delta is available right now.</div>'
+    cards = []
+    for item in items[:6]:
+        urls = item.get("evidence_urls") or [item.get("source_url", "#")]
+        url = urls[0] if urls else "#"
+        cards.append(
+            """
+            <article class="mini-card">
+              <strong>{owner}</strong>
+              <p><a href="{url}">{summary}</a></p>
+              <p class="note">{implication}</p>
+            </article>
+            """.format(
+                owner=escape(str(item.get("action_owner") or "Competitive Intelligence")),
+                url=escape(str(url), quote=True),
+                summary=escape(compact_text(str(item.get("delta_summary") or "Material semantic delta"))),
+                implication=escape(compact_text(str(item.get("algolia_implication") or item.get("recommended_action") or ""), 180)),
+            )
+        )
+    return "\n".join(cards)
+
+
+def render_action_cards(actions: Sequence[Dict[str, Any]]) -> str:
+    if not actions:
+        return '<div class="empty">No workflow-backed action is open. Quiet is allowed; fake urgency is not.</div>'
+    cards = []
+    for action in actions[:6]:
+        cards.append(
+            """
+            <article class="mini-card">
+              <strong>{owner}</strong>
+              <p>{title}</p>
+              <p class="note">Status: {status} · Priority {priority} · {due}</p>
+            </article>
+            """.format(
+                owner=escape(str(action.get("owner") or "Competitive Intelligence")),
+                title=escape(compact_text(str(action.get("recommendation") or action.get("title") or "Review action"))),
+                status=escape(str(action.get("status") or "proposed")),
+                priority=escape(str(action.get("priority") or "")),
+                due=escape(str(action.get("due_window") or action.get("due_date") or "no due window")),
+            )
+        )
+    return "\n".join(cards)
+
+
+def render_delivery_rows(deliveries: Sequence[Dict[str, Any]]) -> str:
+    if not deliveries:
+        return '<div class="empty">No Telegram delivery record has been written yet.</div>'
+    rows = []
+    for row in deliveries[:4]:
+        rows.append(
+            """
+            <div class="quality-row"><div class="mark">✓</div><div><strong>{cadence} via {bot}</strong><span>{status} · {delivered}</span></div></div>
+            """.format(
+                cadence=escape(str(row.get("cadence") or row.get("message_kind") or "run")),
+                bot=escape(str(row.get("bot_profile") or "argus")),
+                status=escape(str(row.get("status") or "unknown")),
+                delivered=escape(str(row.get("delivered_at") or row.get("created_at") or "")),
+            )
+        )
+    return "\n".join(rows)
+
+
+def render_semantic_dashboard_html(semantic: Dict[str, Any], reports: Sequence[ReportFile]) -> str:
+    daily = semantic["daily_state"]
+    weekly = semantic["weekly_state"]
+    quiet = daily.get("status") == "quiet"
+    primary_title_text = "Quiet today" if quiet else "Material signal needs review"
+    material_deltas = semantic.get("material_deltas") or []
+    actions = semantic.get("action_queue") or []
+    deliveries = semantic.get("delivery_status") or []
+    suppressed = semantic.get("suppressed_diagnostics") or {}
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base target="_blank">
+  <title>Algolia Competitive Intelligence</title>
+  <style>
+    :root {{
+      --blue: #003dff; --ink: #06133f; --body: #2f374e; --muted: #68748c; --line: #d9e1ef;
+      --canvas: #f6f8fc; --paper: #ffffff; --soft: #fbfcff; --blue-soft: #eef3ff;
+      --green: #087f5b; --green-soft: #e9fbf3; --amber: #9a6700; --amber-soft: #fff5d6;
+      --shadow: 0 12px 30px rgba(6, 19, 63, .08); --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    * {{ box-sizing: border-box; }}
+    html, body {{ max-width: 100%; overflow-x: hidden; }}
+    body {{ margin: 0; background: var(--canvas); color: var(--body); }}
+    a {{ color: var(--blue); font-weight: 760; text-decoration: none; overflow-wrap: anywhere; }}
+    a:hover {{ text-decoration: underline; }}
+    h1, h2, h3, p {{ margin-top: 0; }}
+    h1 {{ margin-bottom: 8px; color: var(--ink); font-size: clamp(34px, 5vw, 58px); line-height: 1; letter-spacing: 0; }}
+    h2 {{ margin-bottom: 12px; color: var(--ink); font-size: 22px; line-height: 1.2; letter-spacing: 0; }}
+    h3 {{ margin-bottom: 8px; color: var(--ink); font-size: 17px; line-height: 1.25; letter-spacing: 0; }}
+    p {{ margin-bottom: 12px; line-height: 1.5; }}
+    .shell {{ width: min(1280px, 100%); margin: 0 auto; padding: 28px; }}
+    .topbar {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }}
+    .eyebrow {{ color: var(--blue); font-size: 12px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }}
+    .meta {{ color: var(--muted); font-size: 13px; line-height: 1.5; text-align: right; }}
+    .layout {{ display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }}
+    .main {{ display: grid; gap: 18px; min-width: 0; }}
+    .side {{ position: sticky; top: 18px; display: grid; gap: 14px; min-width: 0; }}
+    .hero, .panel, .side-panel, .report-row {{ border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); box-shadow: var(--shadow); }}
+    .hero {{ padding: 24px; border-top: 5px solid var(--blue); }}
+    .answer {{ margin-bottom: 14px; color: var(--ink); font-size: clamp(24px, 3vw, 38px); line-height: 1.08; font-weight: 900; letter-spacing: 0; overflow-wrap: anywhere; }}
+    .panel, .side-panel {{ padding: 20px; }}
+    .section-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }}
+    .mini-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }}
+    .mini-card, .empty {{ border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 12px; }}
+    .mini-card strong {{ display: inline-flex; width: fit-content; margin-bottom: 8px; border-radius: var(--radius); background: var(--blue-soft); color: var(--blue); padding: 5px 8px; font-size: 11px; line-height: 1; }}
+    .mini-card p {{ margin: 0 0 8px; color: var(--ink); font-size: 14px; line-height: 1.45; font-weight: 680; }}
+    .empty {{ color: var(--muted); font-size: 13px; }}
+    .pill {{ min-height: 26px; display: inline-flex; align-items: center; border-radius: 999px; padding: 0 9px; font-size: 12px; font-weight: 850; white-space: nowrap; background: var(--blue-soft); color: var(--blue); }}
+    .pill.green {{ background: var(--green-soft); color: var(--green); }}
+    .pill.amber {{ background: var(--amber-soft); color: var(--amber); }}
+    .note {{ margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; font-weight: 500; }}
+    .quality-list, .report-list {{ display: grid; gap: 9px; }}
+    .quality-row {{ display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 10px; }}
+    .mark {{ width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--green-soft); color: var(--green); font-weight: 900; }}
+    .mark.warn {{ background: var(--amber-soft); color: var(--amber); }}
+    .quality-row strong {{ display: block; color: var(--ink); font-size: 14px; }}
+    .quality-row span {{ display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }}
+    .report-row {{ display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; box-shadow: none; }}
+    .report-row time {{ color: var(--muted); font-size: 12px; font-weight: 850; }}
+    .report-row b {{ display: block; color: var(--ink); margin-bottom: 3px; }}
+    .report-row span {{ display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }}
+    details {{ margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }}
+    summary {{ width: fit-content; color: var(--blue); cursor: pointer; font-weight: 850; }}
+    @media (max-width: 980px) {{ .layout {{ grid-template-columns: 1fr; }} .side {{ position: static; }} }}
+    @media (max-width: 680px) {{ .shell {{ padding: 16px; }} .topbar, .report-row {{ grid-template-columns: 1fr; }} .meta {{ text-align: left; }} .mini-grid {{ grid-template-columns: 1fr; }} }}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div><div class="eyebrow">Algolia competitive intelligence</div><h1>Competitive Brief</h1></div>
+      <div class="meta">
+        <div>Actual archive: {archive_range}</div>
+        <div>Generated from archived CI briefs, not mock data</div>
+        <div>Last generated at {generated_at}</div>
+      </div>
+    </header>
+    <div class="layout">
+      <div class="main">
+        <section class="hero" id="primary-daily" aria-labelledby="daily-title">
+          <div class="eyebrow">Primary finding</div>
+          <h2 class="answer" id="daily-title">{primary_title}</h2>
+          <h3>What happened</h3>
+          <p>{daily_summary}</p>
+          <h3>Why it matters</h3>
+          <p>{why_matters}</p>
+          <h3>Recommended response</h3>
+          <p>{daily_action}</p>
+          <p class="note"><a href="{daily_archive}">Open latest daily brief</a></p>
+        </section>
+        <section class="panel" id="weekly-pattern" aria-labelledby="weekly-title">
+          <div class="section-head"><div><div class="eyebrow">Weekly pattern</div><h2 id="weekly-title">Strategic context</h2></div><span class="pill">Separate from today</span></div>
+          <p>{weekly_summary}</p>
+          <p class="note">{weekly_pattern}</p>
+        </section>
+        <section class="panel" aria-labelledby="customer-proof-title">
+          <div class="section-head"><div><div class="eyebrow">Customer proof intelligence</div><h2 id="customer-proof-title">Customer Proof Radar</h2></div><span class="pill green">Sales impact</span></div>
+          <div class="mini-grid">{material_cards}</div>
+        </section>
+        <section class="panel" aria-labelledby="narrative-title">
+          <div class="section-head"><div><div class="eyebrow">Content and narrative intelligence</div><h2 id="narrative-title">Narrative And Content Radar</h2></div><span class="pill">PMM impact</span></div>
+          <div class="mini-grid">{material_cards}</div>
+        </section>
+        <section class="panel" aria-labelledby="decision-title">
+          <div class="section-head"><div><div class="eyebrow">What should happen next</div><h2 id="decision-title">Decision Queue</h2></div><span class="pill">Workflow backed</span></div>
+          <div class="mini-grid">{action_cards}</div>
+        </section>
+        <section class="panel" aria-labelledby="suppressed-title">
+          <div class="section-head"><div><div class="eyebrow">Trust diagnostics</div><h2 id="suppressed-title">Suppressed Signals</h2></div><span class="pill amber">Not findings</span></div>
+          <p>{suppressed_count} suppressed source movements stayed out of the executive view because they did not pass semantic materiality gates.</p>
+        </section>
+        <section class="panel" aria-labelledby="history-title">
+          <div class="section-head"><div><div class="eyebrow">Where this came from</div><h2 id="history-title">Report history</h2></div><span class="pill">Automated archive</span></div>
+          <div class="report-list">{report_history}</div>
+        </section>
+      </div>
+      <aside class="side" aria-label="Data reliability">
+        <section class="side-panel">
+          <div class="eyebrow">Telegram delivery</div>
+          <h2>Delivery status</h2>
+          <div class="quality-list">{delivery_rows}</div>
+        </section>
+        <section class="side-panel">
+          <div class="eyebrow">Can I trust this?</div>
+          <h2>Data limits</h2>
+          <div class="quality-list">
+            <div class="quality-row"><div class="mark">✓</div><div><strong>Uses semantic ledger objects</strong><span>Dashboard data comes from structured CI state, not mock controls.</span></div></div>
+            <div class="quality-row"><div class="mark warn">!</div><div><strong>Public-source only</strong><span>Gong, Salesforce, Slack, G2 paid API, Semrush API, and internal win/loss are not connected.</span></div></div>
+          </div>
+          <details><summary>Show collection details</summary><p class="note">Collection context is captured in the CI ledger and source health events. This public dashboard shows the executive brief first and keeps collection mechanics secondary.</p></details>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <script>
+    document.querySelectorAll("a[href]").forEach((link) => {{
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }});
+  </script>
+</body>
+</html>
+""".format(
+        archive_range=escape(str(semantic.get("archive_range") or "")),
+        generated_at=escape(str(semantic.get("generated_at") or "")),
+        primary_title=escape(primary_title_text),
+        daily_summary=markdown_inline_to_html(str(daily.get("summary") or "")),
+        why_matters=markdown_inline_to_html(
+            "No daily action changes. The system checked public sources and found no material semantic delta."
+            if quiet
+            else str(weekly.get("strategic_pattern") or "No validated strategic pattern yet.")
+        ),
+        daily_action=markdown_inline_to_html(str(daily.get("recommended_action") or "")),
+        daily_archive=escape(str(daily.get("archive_path") or "latest-daily.md"), quote=True),
+        weekly_summary=markdown_inline_to_html(str(weekly.get("summary") or "")),
+        weekly_pattern=markdown_inline_to_html(str(weekly.get("strategic_pattern") or "")),
+        material_cards=render_semantic_cards(material_deltas),
+        action_cards=render_action_cards(actions),
+        suppressed_count=int(suppressed.get("count") or 0),
+        report_history=render_report_history(reports),
+        delivery_rows=render_delivery_rows(deliveries),
+    )
+
+
 def render_dashboard_html(
     reports: Sequence[ReportFile],
     daily: Optional[ReportFile],
@@ -434,7 +763,7 @@ def render_dashboard_html(
     evidence = evidence_links(daily.text if daily else "", limit=4)
     daily_href = "archive/%s" % daily.path.name if daily else "latest-daily.md"
     headline = primary_title(daily, what)
-    weekly_actions = bullet_lines(parse_section(weekly.text, "Recommended actions by owner") if weekly else "")
+    weekly_actions = bullet_lines(workflow_action_section(weekly.text) if weekly else "")
     battlecard_updates = bullet_lines(parse_section(weekly.text, "Battlecard updates") if weekly else "")
     daily_count = len([report for report in reports if report.cadence == "daily"])
     weekly_count = len([report for report in reports if report.cadence == "weekly"])
@@ -662,7 +991,9 @@ def export_dashboard_assets(output_root: Path, repo_root: Path, generated_at: Op
     copy_archive(reports, public_dir)
     copy_latest(daily, public_dir, "latest-daily.md")
     copy_latest(weekly, public_dir, "latest-weekly.md")
-    html_text = render_dashboard_html(reports, daily, weekly, generated)
+    semantic_payload = semantic_dashboard_payload(output_root, reports, daily, weekly, generated)
+    (data_dir / "semantic-dashboard.json").write_text(json.dumps(semantic_payload, indent=2, sort_keys=True, default=str) + "\n")
+    html_text = render_semantic_dashboard_html(semantic_payload, reports)
     (public_dir / "index.html").write_text(html_text)
 
     payload: Dict[str, object] = {
@@ -675,6 +1006,7 @@ def export_dashboard_assets(output_root: Path, repo_root: Path, generated_at: Op
             {"date": report.date, "cadence": report.cadence, "path": "archive/%s" % report.path.name}
             for report in sorted(reports, key=lambda item: (item.date, item.cadence), reverse=True)
         ],
+        "semantic_dashboard": "data/semantic-dashboard.json",
     }
     (data_dir / "latest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload

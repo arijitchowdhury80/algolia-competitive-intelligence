@@ -56,7 +56,7 @@ Weekly reports should answer:
 - Customer proof movement
 - Content/narrative movement
 - Campaign opportunities
-- Recommended actions by owner
+- Workflow action candidates backed by `action_items`
 - Battlecard updates
 - Suppressed weak signals
 - Coverage gaps

@@ -1,0 +1,52 @@
+{
+  "action_queue": [],
+  "archive_range": "2026-06-17 to 2026-06-29",
+  "coverage_limits": {
+    "not_connected": [
+      "Gong",
+      "Salesforce",
+      "Slack",
+      "G2 paid API",
+      "Semrush API",
+      "internal win/loss"
+    ],
+    "note": "Private field, CRM, call, paid review, and paid traffic data are intentionally absent.",
+    "private_sources_connected": false,
+    "public_source_only": true
+  },
+  "daily_state": {
+    "archive_path": "archive/2026-06-29.md",
+    "cadence": "daily",
+    "date": "2026-06-29",
+    "recommended_action": "Wait for a material semantic delta before changing sales, PMM, or product guidance.",
+    "status": "quiet",
+    "summary": "Seed semantic export. The live Chowmes run rewrites this from the CI ledger."
+  },
+  "delivery_status": [],
+  "generated_at": "2026-06-29T19:31:08",
+  "material_deltas": [],
+  "report_archive": [
+    {
+      "cadence": "weekly",
+      "date": "2026-06-29",
+      "path": "archive/2026-06-29-weekly.md"
+    },
+    {
+      "cadence": "daily",
+      "date": "2026-06-29",
+      "path": "archive/2026-06-29.md"
+    }
+  ],
+  "source_health": [],
+  "suppressed_diagnostics": {
+    "count": 0,
+    "samples": []
+  },
+  "weekly_state": {
+    "archive_path": "archive/2026-06-29-weekly.md",
+    "cadence": "weekly",
+    "date": "2026-06-29",
+    "strategic_pattern": "Seed semantic export. The live Chowmes run rewrites this from the CI ledger.",
+    "summary": "Seed semantic export. The live Chowmes run rewrites this from the CI ledger."
+  }
+}

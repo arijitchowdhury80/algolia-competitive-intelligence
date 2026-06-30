@@ -10,6 +10,7 @@
     "path": "latest-weekly.md"
   },
   "report_count": 11,
+  "semantic_dashboard": "data/semantic-dashboard.json",
   "reports": [
     {
       "cadence": "weekly",

@@ -419,6 +419,17 @@ def init_db(conn: sqlite3.Connection) -> None:
     ensure_column(conn, "source_health_events", "duration_ms", "integer")
     ensure_column(conn, "source_health_events", "quality_score", "real")
     ensure_column(conn, "source_health_events", "recommended_collector", "text")
+    ensure_column(conn, "action_items", "source_delta_ids", "text")
+    ensure_column(conn, "action_items", "due_window", "text")
+    ensure_column(conn, "action_items", "confidence", "real")
+    ensure_column(conn, "bot_deliveries", "cadence", "text")
+    ensure_column(conn, "bot_deliveries", "message_kind", "text")
+    ensure_column(conn, "bot_deliveries", "markdown_path", "text")
+    ensure_column(conn, "bot_deliveries", "html_path", "text")
+    ensure_column(conn, "bot_deliveries", "dashboard_url", "text")
+    ensure_column(conn, "bot_deliveries", "artifact_paths", "text")
+    ensure_column(conn, "bot_deliveries", "delivery_metadata", "text")
+    ensure_column(conn, "bot_deliveries", "updated_at", "text")
     conn.commit()
 
 
@@ -2521,7 +2532,7 @@ Use exactly these Markdown sections:
 **Weekly competitive synthesis - {date_start} to {date_end}**
 **What changed**
 **Strategic pattern**
-**Recommended actions by owner**
+**Workflow action candidates**
 **Battlecard updates**
 **Coverage gaps**
 
@@ -2531,7 +2542,9 @@ Rules:
 - Never recommend battlecard updates from baseline captures, collector changes, hash-only movement, or generic page-change signals.
 - Return only the final Markdown report. Do not include reasoning notes, preambles, or statements about what you are about to do.
 - Every material claim must link to a source URL from the signal ledger.
-- Group recommendations by owner.
+- Do not invent ownership as prose. Weekly owner routing is accepted only when backed by durable action_items records created from material semantic deltas.
+- If the packet has material semantic_deltas, list workflow action candidates with owner, recommendation, evidence URL, confidence, and due window.
+- If no material semantic_delta exists, say no workflow-backed action candidate exists.
 - Separate confirmed fact, public-evidence inference, and unknown.
 - Coverage gaps must be supported by the packet. Do not say a competitor or source type is not configured if it appears in source_inventory. If it has no stored signal in this window, say "no stored signal this week" instead.
 - Use source_coverage to distinguish collection health from market quiet. If a source was checked successfully and produced no changed signal, call it quiet. If it was not checked, call it missing coverage. If it failed, call it collection failure.
@@ -2661,7 +2674,7 @@ def synthesize_local(packet: Dict[str, Any], cadence: str = "daily") -> str:
 
 - Product Marketing should turn the strongest narrative deltas into content hypotheses only where the evidence shows a clear AI/search/product-discovery claim.
 
-**Recommended actions by owner**
+**Workflow action candidates**
 
 {action_lines}
 
@@ -2676,6 +2689,8 @@ def synthesize_local(packet: Dict[str, Any], cadence: str = "daily") -> str:
 **Coverage gaps**
 
 This run remains public-source only. Internal win/loss, CRM, Gong, Slack, paid review exports, and paid traffic data are not included.
+
+Action records should be created from these material semantic deltas before any owner route is treated as accepted workflow.
 """.format(
                 date_start=packet["date_start"],
                 date_end=packet["date_end"],
@@ -2737,9 +2752,9 @@ No material public signals were stored in the ledger for this period.
 
 No pattern is strong enough to act on.
 
-**Recommended actions by owner**
+**Workflow action candidates**
 
-- **Competitive Intelligence:** Review source coverage and confirm collectors are running.
+- No workflow-backed action candidate exists because no material semantic delta was stored.
 
 **Battlecard updates**
 
@@ -2803,14 +2818,6 @@ Daily synthesis uses direct public-source diffs only. Broad search discovery and
     owner = top["action_owner"]
     confidence = confidence_label(float(top["confidence"]))
     if cadence == "weekly":
-        grouped = group_by_owner(signals)
-        action_lines = []
-        for group_owner, items in grouped.items():
-            sample = items[0]
-            action_lines.append(
-                "- **%s:** Act on %s by validating whether [%s](%s) changes positioning, battlecards, roadmap questions, or partner enablement. Evidence summary: %s."
-                % (group_owner, display_label(sample["category"]), sample["title"], sample["source_url"], sample["summary"])
-            )
         evidence_links = "\n".join(
             "- **%s:** [%s](%s) - %s"
             % (s["competitor"], s["title"], s["source_url"], s["summary"])
@@ -2829,9 +2836,9 @@ The ledger captured {total} public signals. AI visibility is the dominant moveme
 
 The pattern is named AI search packaging. Competitors are not just describing features; they are giving AI search and retrieval a marketable wrapper across MCP, agent, commerce reasoning, personalization, and product-discovery narratives. Treat this as a Product Marketing-led positioning problem first, then escalate to Product only where internal validation shows a real capability delta.
 
-**Recommended actions by owner**
+**Workflow action candidates**
 
-{actions}
+- No workflow-backed action candidate was created from legacy raw signals alone. Promote only material semantic deltas into `action_items`.
 
 **Battlecard updates**
 
@@ -2852,7 +2859,6 @@ This v1 run uses public sources only. It does not include Gong, Salesforce, Slac
             pricing_count=pricing_count,
             category=display_label(top["category"]),
             confidence=confidence,
-            actions="\n".join(action_lines),
             evidence=evidence_links,
         )
 
@@ -2929,7 +2935,11 @@ def quality_score(markdown: str) -> float:
         score -= 0.2
     if "http" not in markdown and not is_link_exempt_quiet_day(markdown):
         score -= 0.25
-    if "Recommended action" not in markdown and "Recommended actions by owner" not in markdown:
+    if (
+        "Recommended action" not in markdown
+        and "Recommended actions by owner" not in markdown
+        and "Workflow action candidates" not in markdown
+    ):
         score -= 0.2
     if "lacks MCP" in markdown or "Algolia does not have MCP" in markdown:
         score -= 0.4
@@ -2946,7 +2956,11 @@ def validate_output(markdown: str, surface: str = "telegram") -> List[str]:
         errors.append("unsupported_algolia_gap")
     if surface == "telegram" and len(markdown.split()) > 520:
         errors.append("telegram_too_long")
-    if "Recommended action" not in markdown and "Recommended actions by owner" not in markdown:
+    if (
+        "Recommended action" not in markdown
+        and "Recommended actions by owner" not in markdown
+        and "Workflow action candidates" not in markdown
+    ):
         errors.append("missing_action")
     if "http" not in markdown and not is_link_exempt_quiet_day(markdown):
         errors.append("missing_links")
@@ -2978,7 +2992,7 @@ def record_synthesis_run(
     markdown_path: Path,
     html_path: Path,
     score: float,
-) -> None:
+) -> int:
     conn.execute(
         """
         insert into synthesis_runs (cadence, date_start, date_end, input_signal_ids, markdown_path, html_path, quality_score)
@@ -2986,7 +3000,7 @@ def record_synthesis_run(
         """,
         (cadence, date_start, date_end, json.dumps(list(signal_ids)), str(markdown_path), str(html_path), score),
     )
-    conn.execute(
+    cur = conn.execute(
         """
         insert into report_index (cadence, date_start, date_end, markdown_path, html_path, quality_score, top_signal_ids, status)
         values (?, ?, ?, ?, ?, ?, ?, 'generated')
@@ -2994,6 +3008,7 @@ def record_synthesis_run(
         (cadence, date_start, date_end, str(markdown_path), str(html_path), score, json.dumps(list(signal_ids))),
     )
     conn.commit()
+    return int(cur.lastrowid)
 
 
 def list_report_archive(conn: sqlite3.Connection, limit: int = 50) -> List[Dict[str, Any]]:
@@ -3033,12 +3048,15 @@ def create_action_item(
     report_id: Optional[int] = None,
     priority: int = 3,
     due_date: Optional[str] = None,
+    source_delta_ids: Optional[Sequence[int]] = None,
+    due_window: Optional[str] = None,
+    confidence: Optional[float] = None,
 ) -> int:
     cur = conn.execute(
         """
         insert into action_items
-          (report_id, title, owner, recommendation, evidence_signal_ids, status, priority, due_date)
-        values (?, ?, ?, ?, ?, 'proposed', ?, ?)
+          (report_id, title, owner, recommendation, evidence_signal_ids, status, priority, due_date, source_delta_ids, due_window, confidence)
+        values (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?)
         """,
         (
             report_id,
@@ -3048,10 +3066,117 @@ def create_action_item(
             json.dumps(list(evidence_signal_ids)),
             priority,
             due_date,
+            json.dumps(list(source_delta_ids or [])),
+            due_window,
+            confidence,
         ),
     )
     conn.commit()
     return int(cur.lastrowid)
+
+
+def create_action_items_from_semantic_deltas(
+    conn: sqlite3.Connection,
+    report_id: int,
+    deltas: Sequence[Dict[str, Any]],
+) -> List[int]:
+    created: List[int] = []
+    for delta in deltas:
+        if delta.get("quality_status") != "publish":
+            continue
+        owner = delta.get("action_owner") or "Competitive Intelligence"
+        if owner not in ACTION_OWNERS:
+            owner = "Competitive Intelligence"
+        delta_id = int(delta.get("id") or 0)
+        confidence = float(delta.get("materiality_score") or 0)
+        priority = 1 if confidence >= 0.8 else 2 if confidence >= 0.6 else 3
+        created.append(
+            create_action_item(
+                conn,
+                title=clean_generated_text(delta.get("delta_summary") or "Review material semantic delta"),
+                owner=owner,
+                recommendation=clean_generated_text(delta.get("recommended_action") or "Review and validate this semantic delta."),
+                evidence_signal_ids=[],
+                report_id=report_id,
+                priority=priority,
+                source_delta_ids=[delta_id] if delta_id else [],
+                due_window="next business day" if priority <= 2 else "next weekly review",
+                confidence=confidence,
+            )
+        )
+    return created
+
+
+def record_bot_delivery(
+    conn: sqlite3.Connection,
+    *,
+    report_id: Optional[int],
+    cadence: str,
+    bot_profile: str,
+    channel: str,
+    recipient: str = "",
+    status: str,
+    delivered_at: Optional[str] = None,
+    error: str = "",
+    message_kind: Optional[str] = None,
+    markdown_path: str = "",
+    html_path: str = "",
+    dashboard_url: str = "",
+    artifact_paths: Optional[Sequence[str]] = None,
+    delivery_metadata: Optional[Dict[str, Any]] = None,
+) -> int:
+    now = now_iso()
+    cur = conn.execute(
+        """
+        insert into bot_deliveries
+          (report_id, bot_profile, channel, recipient, status, delivered_at, error, cadence, message_kind,
+           markdown_path, html_path, dashboard_url, artifact_paths, delivery_metadata, updated_at)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            report_id,
+            bot_profile,
+            channel,
+            recipient,
+            status,
+            delivered_at or now,
+            error,
+            cadence,
+            message_kind or cadence,
+            markdown_path,
+            html_path,
+            dashboard_url,
+            json.dumps(list(artifact_paths or [])),
+            json.dumps(delivery_metadata or {}, sort_keys=True),
+            now,
+        ),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def list_bot_deliveries(
+    conn: sqlite3.Connection,
+    cadence: Optional[str] = None,
+    limit: int = 20,
+) -> List[Dict[str, Any]]:
+    params: List[Any] = []
+    where = ""
+    if cadence:
+        where = "where cadence = ?"
+        params.append(cadence)
+    params.append(limit)
+    rows = conn.execute(
+        """
+        select *
+        from bot_deliveries
+        {where}
+        order by datetime(coalesce(delivered_at, created_at)) desc, id desc
+        limit ?
+        """.format(where=where),
+        params,
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def list_action_items(conn: sqlite3.Connection, status: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:

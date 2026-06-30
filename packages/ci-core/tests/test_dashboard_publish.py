@@ -1,4 +1,5 @@
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -71,7 +72,14 @@ def load_publish_module():
     return importlib.import_module("ci_dashboard_publish")
 
 
-def test_export_dashboard_assets_uses_latest_real_reports(tmp_path):
+def load_ci_core(monkeypatch, output_root):
+    monkeypatch.setenv("COMPETITIVE_RESEARCH_OUTPUT_ROOT", str(output_root))
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    sys.modules.pop("ci_core", None)
+    return importlib.import_module("ci_core")
+
+
+def test_export_dashboard_assets_uses_latest_real_reports(monkeypatch, tmp_path):
     publish = load_publish_module()
     output_root = tmp_path / "competitive-research"
     repo_root = tmp_path / "repo"
@@ -83,6 +91,31 @@ def test_export_dashboard_assets_uses_latest_real_reports(tmp_path):
     (output_root / "briefs" / "2026-06-28-weekly.md").write_text(WEEKLY)
     (output_root / "reports" / "2026-06-28.html").write_text("<!doctype html><title>Daily</title>")
     (output_root / "reports" / "2026-06-28-weekly.html").write_text("<!doctype html><title>Weekly</title>")
+    ci_core = load_ci_core(monkeypatch, output_root)
+    conn = ci_core.connect_db()
+    report_id = ci_core.record_synthesis_run(
+        conn,
+        "daily",
+        "2026-06-28",
+        "2026-06-28",
+        [],
+        output_root / "briefs" / "2026-06-28.md",
+        output_root / "reports" / "2026-06-28.html",
+        0.95,
+    )
+    ci_core.record_bot_delivery(
+        conn,
+        report_id=report_id,
+        cadence="daily",
+        bot_profile="argus",
+        channel="telegram",
+        recipient="6789423537",
+        status="queued_for_telegram",
+        markdown_path=str(output_root / "briefs" / "2026-06-28.md"),
+        html_path=str(output_root / "reports" / "2026-06-28.html"),
+        dashboard_url="https://ci.chowmes.com/",
+        artifact_paths=[str(output_root / "briefs" / "2026-06-28.md")],
+    )
 
     result = publish.export_dashboard_assets(
         output_root=output_root,
@@ -100,7 +133,14 @@ def test_export_dashboard_assets_uses_latest_real_reports(tmp_path):
     assert (public / "archive" / "2026-06-28.md").read_text() == DAILY
     assert (public / "archive" / "2026-06-28-weekly.md").read_text() == WEEKLY
     assert (public / "data" / "latest.json").exists()
+    semantic = json.loads((public / "data" / "semantic-dashboard.json").read_text())
+    assert semantic["daily_state"]["cadence"] == "daily"
+    assert semantic["delivery_status"][0]["bot_profile"] == "argus"
+    assert semantic["coverage_limits"]["private_sources_connected"] is False
+    assert "Gong" in semantic["coverage_limits"]["not_connected"]
     assert "Competitive Brief" in html
+    assert "Telegram delivery" in html
+    assert "Public-source only" in html
     assert "Generated from archived CI briefs, not mock data" in html
     assert "Constructor added customer proof for Petco." in html
     assert "What happened" in html
@@ -117,14 +157,67 @@ def test_export_dashboard_assets_uses_latest_real_reports(tmp_path):
     assert "case_study" not in html
 
 
+def test_quiet_day_dashboard_keeps_weekly_pattern_out_of_daily_hero(monkeypatch, tmp_path):
+    publish = load_publish_module()
+    output_root = tmp_path / "competitive-research"
+    repo_root = tmp_path / "repo"
+    (output_root / "briefs").mkdir(parents=True)
+    (output_root / "reports").mkdir(parents=True)
+    (repo_root / "apps" / "dashboard" / "public").mkdir(parents=True)
+    quiet_daily = """**Competitive pulse - 2026-06-29**
+
+**Bottom line**
+
+No material public competitive signal was stored in the ledger today. Direct source collection checked 39 of 39 enabled sources; 39 succeeded, 0 failed, and 0 were missing from the collection window.
+
+**Recommended action**
+
+No immediate competitive action is recommended today.
+"""
+    weekly = """**Weekly competitive synthesis - 2026-06-23 to 2026-06-29**
+
+**What changed**
+
+Google Vertex AI Search changed its AI search positioning.
+
+**Strategic pattern**
+
+Competitors are investing in AI messaging and customer proof.
+"""
+    (output_root / "briefs" / "2026-06-29.md").write_text(quiet_daily)
+    (output_root / "briefs" / "2026-06-29-weekly.md").write_text(weekly)
+    (output_root / "reports" / "2026-06-29.html").write_text("<!doctype html><title>Daily</title>")
+    (output_root / "reports" / "2026-06-29-weekly.html").write_text("<!doctype html><title>Weekly</title>")
+    ci_core = load_ci_core(monkeypatch, output_root)
+    ci_core.connect_db()
+
+    publish.export_dashboard_assets(output_root=output_root, repo_root=repo_root, generated_at="2026-06-29T19:31:08")
+
+    public = repo_root / "apps" / "dashboard" / "public"
+    semantic = json.loads((public / "data" / "semantic-dashboard.json").read_text())
+    html = (public / "index.html").read_text()
+
+    assert semantic["daily_state"]["status"] == "quiet"
+    assert semantic["daily_state"]["summary"].startswith("No material public competitive signal")
+    assert semantic["weekly_state"]["summary"].startswith("Google Vertex AI Search")
+    assert "Quiet today" in html
+    assert "Weekly pattern" in html
+    primary = html.split('id="primary-daily"')[1].split('id="weekly-pattern"')[0]
+    assert "Competitors are investing in AI messaging" not in primary
+
+
 def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
     daily = (SCRIPTS_DIR / "competitive-research-daily.sh").read_text()
     weekly = (SCRIPTS_DIR / "competitive-research-weekly.sh").read_text()
 
     assert "publish_dashboard" in daily
     assert "publish-dashboard.py" in daily
+    assert "record_delivery" in daily
+    assert "record_bot_delivery" in daily
     assert "publish_dashboard" in weekly
     assert "publish-dashboard.py" in weekly
+    assert "record_delivery" in weekly
+    assert "record_bot_delivery" in weekly
     assert "daily-self-check-latest.log" in daily
     assert "weekly-self-check-latest.log" in weekly
     assert "CI self-check daily:" not in daily
