@@ -81,10 +81,16 @@ publish_dashboard() {
   fi
   log_path="${COMPETITIVE_RESEARCH_OUTPUT_ROOT}/raw/dashboard-publish-latest.log"
   mkdir -p "$(dirname "$log_path")"
+  publish_args=(
+    --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT"
+    --repo-root "$repo_root"
+    --commit-message "Update weekly CI dashboard"
+  )
+  if [ "${DASHBOARD_GIT_PUBLISH:-0}" != "1" ]; then
+    publish_args+=(--no-git)
+  fi
   if ! "$PYTHON_BIN" "$publisher" \
-    --output-root "$COMPETITIVE_RESEARCH_OUTPUT_ROOT" \
-    --repo-root "$repo_root" \
-    --commit-message "Update weekly CI dashboard" >"$log_path" 2>&1
+    "${publish_args[@]}" >"$log_path" 2>&1
   then
     printf 'Argus note: dashboard publish failed. The weekly synthesis exists, but the dashboard may be stale. Inspect %s\n' "$log_path"
   fi

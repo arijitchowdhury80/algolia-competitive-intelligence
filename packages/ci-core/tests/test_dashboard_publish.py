@@ -212,10 +212,14 @@ def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
 
     assert "publish_dashboard" in daily
     assert "publish-dashboard.py" in daily
+    assert "DASHBOARD_GIT_PUBLISH" in daily
+    assert "--no-git" in daily
     assert "record_delivery" in daily
     assert "record_bot_delivery" in daily
     assert "publish_dashboard" in weekly
     assert "publish-dashboard.py" in weekly
+    assert "DASHBOARD_GIT_PUBLISH" in weekly
+    assert "--no-git" in weekly
     assert "record_delivery" in weekly
     assert "record_bot_delivery" in weekly
     assert "daily-self-check-latest.log" in daily
