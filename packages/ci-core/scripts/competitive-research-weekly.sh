@@ -212,7 +212,6 @@ if ! output="$(
   exit 1
 fi
 
-publish_dashboard
 printf '%s\n' "$output" >"$run_output_file"
 
 period="$(
@@ -226,6 +225,7 @@ html_path="$(
 )"
 run_self_check "$markdown_path" "$html_path" "$run_output_file"
 record_delivery "$markdown_path" "$html_path"
+publish_dashboard
 signals="$(
   printf '%s\n' "$output" | sed -n 's/^Signals in window: //p' | tail -1
 )"

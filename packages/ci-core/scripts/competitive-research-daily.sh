@@ -212,7 +212,6 @@ if ! output="$(
   exit 1
 fi
 
-publish_dashboard
 printf '%s\n' "$output" >"$run_output_file"
 markdown_path="$(
   printf '%s\n' "$output" | sed -n 's/^Markdown saved: //p' | tail -1
@@ -222,6 +221,7 @@ html_path="$(
 )"
 run_self_check "$markdown_path" "$html_path" "$run_output_file"
 record_delivery "$markdown_path" "$html_path"
+publish_dashboard
 print_delivery_status
 
 pulse="$(

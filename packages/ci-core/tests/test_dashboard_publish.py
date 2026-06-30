@@ -231,6 +231,8 @@ def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
     assert "Delivery status" not in weekly
     assert "Argus daily pulse" in daily
     assert "Argus weekly synthesis" in weekly
+    assert daily.rfind('record_delivery "$markdown_path" "$html_path"') < daily.rfind("publish_dashboard")
+    assert weekly.rfind('record_delivery "$markdown_path" "$html_path"') < weekly.rfind("publish_dashboard")
 
 
 def test_cron_wrappers_are_valid_bash():
