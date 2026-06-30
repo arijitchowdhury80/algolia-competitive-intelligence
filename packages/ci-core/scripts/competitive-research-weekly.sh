@@ -150,10 +150,7 @@ run_post_review() {
 record_delivery() {
   markdown_path="$1"
   html_path="$2"
-  "$PYTHON_BIN" - "$SKILL_ROOT" "$markdown_path" "$html_path" <<'PY' || {
-    printf 'Argus note: delivery observability write failed. The Telegram handoff continues, but bot_deliveries is stale.\n'
-    return 0
-  }
+  if ! "$PYTHON_BIN" - "$SKILL_ROOT" "$markdown_path" "$html_path" <<'PY'
 import os
 import sys
 from pathlib import Path
@@ -188,6 +185,10 @@ record_bot_delivery(
     delivery_metadata={"source": "argus_cron_stdout", "wrapper": "competitive-research-weekly.sh"},
 )
 PY
+  then
+    printf 'Argus note: delivery observability write failed. The Telegram handoff continues, but bot_deliveries is stale.\n'
+    return 0
+  fi
 }
 
 print_delivery_status() {

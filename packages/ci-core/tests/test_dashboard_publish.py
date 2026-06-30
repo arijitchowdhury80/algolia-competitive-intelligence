@@ -1,5 +1,6 @@
 import importlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -230,6 +231,12 @@ def test_cron_wrappers_call_dashboard_publisher_after_successful_runs():
     assert "Delivery status" not in weekly
     assert "Argus daily pulse" in daily
     assert "Argus weekly synthesis" in weekly
+
+
+def test_cron_wrappers_are_valid_bash():
+    for name in ["competitive-research-daily.sh", "competitive-research-weekly.sh"]:
+        result = subprocess.run(["bash", "-n", str(SCRIPTS_DIR / name)], text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
 
 
 def test_cron_wrappers_fail_closed_on_provider_credit_or_synthesis_failure():
