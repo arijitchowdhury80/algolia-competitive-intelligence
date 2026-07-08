@@ -128,7 +128,10 @@ from cios.platform.models.types import ModelRequest
 LLM_BUDGET = 25
 LLM_CALLS = {"count": 0}
 
-DAILY_MARKER = "ARGUS V2 (parallel run - old system still primary)"
+# Cutover 2026-07-08 (Arijit's explicit order): V2 IS the system. V0 cron
+# jobs are paused (argus profile, ids 19930dfa21e5 / 03671620cd60) — resume
+# them for rollback.
+DAILY_MARKER = "ARGUS — Daily Competitive Brief"
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "tenants-sources.yaml"
 
