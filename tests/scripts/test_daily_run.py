@@ -31,16 +31,22 @@ def test_config_loads_expected_shape():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
-    assert set(data.keys()) == {"algolia", "spryker", "amplitude"}
-    for slug, sources in data.items():
+    # own_brand is a separate section (src/cios/ownbrand) keyed by tenant,
+    # not one of daily_production_run's competitor source lists.
+    tenant_plans = {k: v for k, v in data.items() if k != "own_brand"}
+
+    assert set(tenant_plans.keys()) == {"algolia", "spryker", "amplitude"}
+    for slug, sources in tenant_plans.items():
         assert len(sources) <= 6
         for source in sources:
             assert set(source.keys()) == {"name", "domain", "url", "family"}
 
+    assert set(data["own_brand"].keys()) == {"algolia", "spryker", "amplitude"}
+
 
 def test_build_daily_message_starts_with_marker(daily_run):
     message = daily_run.build_daily_message("some brief body")
-    assert message.startswith("ARGUS V2 (parallel run - old system still primary)")
+    assert message.startswith("ARGUS — Daily Competitive Brief")
     assert "some brief body" in message
 
 
