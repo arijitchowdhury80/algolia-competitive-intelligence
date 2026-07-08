@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "is_quiet": false,
-  "top_attention_level": "watch",
+  "top_attention_level": "act_now",
   "tenant_id": 1,
   "cadence": "daily",
-  "generated_at": "2026-07-08T06:31:05.756735Z",
+  "generated_at": "2026-07-08T07:32:36.225111Z",
   "argus_read": {
-    "useful_truth": "Argus daily brief for algolia.",
+    "useful_truth": "## Your competitive picture -- 2026-07-08",
     "what_changed": null,
     "why_it_matters": null,
     "what_not_to_overbelieve": null,
@@ -41,15 +41,15 @@
     {
       "competitor_id": 3,
       "competitor_name": "Coveo",
-      "attention_score": 65.0,
-      "attention_level": "watch",
-      "action_cue": "Develop counter-positioning on agentic search for commerce. Clarify where Algolia's approach differs or leads. PMM should draft talking points for sales on agent-based discovery before Coveo's narrative gains traction.",
-      "top_signal_headline": "Coveo published content positioning around 'agentic commerce' with a 10-paper research roundup. Key framing: 'Large Language Models are no longer used only to generate content or answer questions. Increasingly, they are used to act: to browse, evaluate, plan, compare, retrieve, decide, and execute multi-step tasks.'",
-      "what_changed": "Coveo published content positioning around 'agentic commerce' with a 10-paper research roundup. Key framing: 'Large Language Models are no longer used only to generate content or answer questions. Increasingly, they are used to act: to browse, evaluate, plan, compare, retrieve, decide, and execute multi-step tasks.'",
-      "why_it_matters": "Coveo is attempting to own the 'agentic AI for commerce' narrative before competitors consolidate positioning. This aligns with broader market shift toward AI agents that take action, not just answer questions.",
-      "recommended_action": "Develop counter-positioning on agentic search for commerce. Clarify where Algolia's approach differs or leads. PMM should draft talking points for sales on agent-based discovery before Coveo's narrative gains traction.",
-      "materiality_score": 0.65,
-      "confidence": 0.8,
+      "attention_score": 75.0,
+      "attention_level": "act_now",
+      "action_cue": "PMM should audit whether Algolia has a point of view on agentic commerce and consider publishing competing thought leadership before Coveo's framing calcifies in analyst and buyer minds.",
+      "top_signal_headline": "Coveo published a 10-paper research roundup positioning 'agentic commerce' as a distinct category, with framing that LLMs are now 'used to act: to browse, evaluate, plan, compare, retrieve, decide, and execute multi-step tasks.'",
+      "what_changed": "Coveo published a 10-paper research roundup positioning 'agentic commerce' as a distinct category, with framing that LLMs are now 'used to act: to browse, evaluate, plan, compare, retrieve, decide, and execute multi-step tasks.'",
+      "why_it_matters": "This reads as category creation, not product marketing. Coveo is attempting to own the narrative around AI agents in commerce before competitors define the space. The academic-paper-roundup format signals an intent to be seen as the definitive voice on agentic commerce.",
+      "recommended_action": "PMM should audit whether Algolia has a point of view on agentic commerce and consider publishing competing thought leadership before Coveo's framing calcifies in analyst and buyer minds.",
+      "materiality_score": 0.75,
+      "confidence": 0.85,
       "evidence_ids": [
         "https://www.coveo.com/blog/agentic-commerce-research-papers"
       ],
@@ -59,19 +59,37 @@
     {
       "competitor_id": 3,
       "competitor_name": "Coveo",
-      "attention_score": 55.0,
+      "attention_score": 65.0,
       "attention_level": "watch",
-      "action_cue": "Sales Enablement should prepare objection handling for 'trade-off' framing. Clarify Algolia's conversational and hybrid search capabilities to neutralize this positioning.",
-      "top_signal_headline": "Coveo published positioning claiming 'Enterprise Search Has Always Forced a Trade-Off. Conversational Search Ends It.' and 'For decades, enterprise search required users to meet the system halfway. AI just changed that contract - for good.'",
-      "what_changed": "Coveo published positioning claiming 'Enterprise Search Has Always Forced a Trade-Off. Conversational Search Ends It.' and 'For decades, enterprise search required users to meet the system halfway. AI just changed that contract - for good.'",
-      "why_it_matters": "This is competitive framing that positions legacy search vendors (including Algolia for enterprise use cases) as forcing 'trade-offs' that conversational AI eliminates. It is a direct attack on keyword-first search paradigms.",
-      "recommended_action": "Sales Enablement should prepare objection handling for 'trade-off' framing. Clarify Algolia's conversational and hybrid search capabilities to neutralize this positioning.",
-      "materiality_score": 0.55,
-      "confidence": 0.75,
+      "action_cue": "Sales Enablement should prepare a counter-narrative and talk track for when prospects reference Coveo's 'conversational search ends trade-offs' claim.",
+      "top_signal_headline": "Coveo published content claiming 'Enterprise Search Has Always Forced a Trade-Off' and 'Conversational Search Ends It,' with the assertion that 'AI just changed that contract - for good.'",
+      "what_changed": "Coveo published content claiming 'Enterprise Search Has Always Forced a Trade-Off' and 'Conversational Search Ends It,' with the assertion that 'AI just changed that contract - for good.'",
+      "why_it_matters": "This is a narrative land-grab. Coveo is positioning conversational search as the successor to traditional enterprise search, implying legacy search vendors are obsolete. The 'contract changed for good' framing signals they want to reset buyer expectations.",
+      "recommended_action": "Sales Enablement should prepare a counter-narrative and talk track for when prospects reference Coveo's 'conversational search ends trade-offs' claim.",
+      "materiality_score": 0.65,
+      "confidence": 0.8,
       "evidence_ids": [
         "https://www.coveo.com/blog/coveo-conversational-search"
       ],
       "delta_id": 231,
+      "thesis_id": null
+    },
+    {
+      "competitor_id": 3,
+      "competitor_name": "Coveo",
+      "attention_score": 45.0,
+      "attention_level": "monitor",
+      "action_cue": "Content team should monitor whether this becomes a product announcement and consider whether Algolia should have a point of view on AI-discoverability for video content.",
+      "top_signal_headline": "Coveo published content explaining that 'LLMs skip JavaScript and iframes, leaving most videos invisible' and that 'YouTube is blocked from ChatGPT's browsing tools,' positioning transcripts as the solution.",
+      "what_changed": "Coveo published content explaining that 'LLMs skip JavaScript and iframes, leaving most videos invisible' and that 'YouTube is blocked from ChatGPT's browsing tools,' positioning transcripts as the solution.",
+      "why_it_matters": "This is an SEO play for 'AI search optimization' queries. Coveo is educating buyers on a problem most have not yet considered, which builds trust and positions them as forward-thinking on AI discoverability.",
+      "recommended_action": "Content team should monitor whether this becomes a product announcement and consider whether Algolia should have a point of view on AI-discoverability for video content.",
+      "materiality_score": 0.45,
+      "confidence": 0.7,
+      "evidence_ids": [
+        "https://www.coveo.com/blog/video-seo"
+      ],
+      "delta_id": 232,
       "thesis_id": null
     }
   ],
@@ -80,21 +98,21 @@
       "thesis_id": 1,
       "competitor_id": 3,
       "competitor_name": "Coveo",
-      "thesis": "Coveo is racing to own the \"agentic commerce\" category narrative before the market consolidates, signaling they view autonomous multi-step LLM workflows as the next defensible moat beyond traditional search relevance.",
+      "thesis": "Coveo is racing commercetools for category ownership of \"agentic commerce,\" signaling that the next enterprise search battleground is not relevance but who controls the execution layer when LLMs become the buyer.",
       "status": "active",
       "confidence": 0.55,
       "supporting_delta_count": 1,
       "contradicting_delta_count": 0,
-      "updated_at": "2026-07-08T06:31:05.717643Z"
+      "updated_at": "2026-07-08T07:32:36.124355Z"
     }
   ],
   "run_health": {
-    "run_id": "gate7-algolia-1783492181",
+    "run_id": "gate7-algolia-1783495854",
     "report_id": 1,
-    "generated_at": "2026-07-08T06:31:05.742779Z",
+    "generated_at": "2026-07-08T07:32:36.183968Z",
     "model_tier": "judgment",
     "source_family_count": 3,
-    "material_delta_count": 2,
+    "material_delta_count": 3,
     "delivery_status": "sent",
     "quality_review_status": "passed"
   },
@@ -108,7 +126,8 @@
   },
   "material_delta_ids": [
     230,
-    231
+    231,
+    232
   ],
   "action_item_ids": [],
   "delivery_ids": [

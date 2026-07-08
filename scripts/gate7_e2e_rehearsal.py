@@ -67,7 +67,8 @@ from cios.brain.fn_auditor import (
 from cios.brain.quality import QualityReviewer, UnparseableVerdict, extract_json_object
 from cios.brain.synthesizer import Synthesizer
 from cios.brain.thesis import ThesisEngine
-from cios.brain.types import CoverageReport, LaneStatus, SynthesisInput, Verdict
+from cios.brain.brief import compose_daily_brief
+from cios.brain.types import CoverageReport, LaneStatus, Signal, SynthesisInput, Verdict
 from cios.collect.article_resolver import resolve_article_links
 from cios.collect.extract import canonical_url, semantic_diff
 from cios.collect.fetcher import HttpContentFetcher, ProbeFetcherAdapter
@@ -671,15 +672,17 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
         insert_claim(app_conn, tenant_id, comp_ids[first["name"]],
                      f"{first['name']} maintains an active content narrative", [canonical_url(first["url"])])
 
-    # quality review (real deterministic + LIVE Claude)
-    reader_lines = [f"Argus daily brief for {slug}.", ""]
-    claims_for_review: list = []
-    for s in promoted:
-        reader_lines.append(f"{s['headline']}: {s['what_changed']} Action: {s.get('recommended_action','')} ({s['evidence_urls'][0]})")
-        claims_for_review.append(_ReviewClaim(s["headline"], s["evidence_urls"][0] if s["evidence_urls"] else None))
-    if not promoted:
-        reader_lines.append("No material signals promoted this cycle. Coverage limits recorded below.")
-    reader_text = "\n".join(reader_lines)
+    # quality review (real deterministic + LIVE Claude). The reviewed text is
+    # the doctrine-shaped CMO brief (brain/brief.py), not an analyst dump.
+    claims_for_review = [
+        _ReviewClaim(s["headline"], s["evidence_urls"][0] if s["evidence_urls"] else None)
+        for s in promoted
+    ]
+    reader_text = compose_daily_brief(
+        [Signal(**{k: v for k, v in s.items() if k in Signal.model_fields}) for s in promoted],
+        tenant_name=slug,
+        brief_date=date.today(),
+    )
     quality_reviewer = QualityReviewer(llm_reviewer=ClaudeQualityReviewer(
         os.environ.get("CIOS_CLAUDE_SHIM_URL", "http://127.0.0.1:8663"), model_alias="opus"))
     qr = quality_reviewer.review(_ReviewInput(tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
@@ -714,12 +717,15 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
             if promoted2:
                 promoted = promoted2
                 res.promoted_signals = promoted
-                reader_lines = [f"Argus daily brief for {slug}.", ""]
-                claims_for_review = []
-                for s in promoted:
-                    reader_lines.append(f"{s['headline']}: {s['what_changed']} Action: {s.get('recommended_action','')} ({s['evidence_urls'][0]})")
-                    claims_for_review.append(_ReviewClaim(s["headline"], s["evidence_urls"][0] if s["evidence_urls"] else None))
-                reader_text = "\n".join(reader_lines)
+                claims_for_review = [
+                    _ReviewClaim(s["headline"], s["evidence_urls"][0] if s["evidence_urls"] else None)
+                    for s in promoted
+                ]
+                reader_text = compose_daily_brief(
+                    [Signal(**{k: v for k, v in s.items() if k in Signal.model_fields}) for s in promoted],
+                    tenant_name=slug,
+                    brief_date=date.today(),
+                )
                 qr = quality_reviewer.review(_ReviewInput(
                     tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
                     reader_text=reader_text, quiet_verdict=False,
