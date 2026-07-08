@@ -1,11 +1,11 @@
 # CI-OS Handoff
 
 Date: 2026-07-01
-Status: Ready for build goal
+Status: Design paused; not ready for build goal
 
 ## One-Line Handoff
 
-Build CI-OS from the disk planning packet, starting with platform foundation and stopping at each gate for validation.
+Resume CI-OS dashboard/app design from the disk planning packet. Do not start the full build yet.
 
 ## Start Here
 
@@ -16,6 +16,10 @@ Read:
 Then read every linked planning, workspace, mockup, and skills document before implementing.
 
 Do not build from chat memory.
+
+Current pause note:
+
+The dashboard cockpit design is still under active critique. Many sections and route-level experiences remain unanswered. Continue design tomorrow before launching any implementation goal.
 
 ## Canonical Paths
 
@@ -31,8 +35,14 @@ Dashboard mockup:
 
 `/Users/arijitchowdhury/Dropbox/AI-Development/CI-OS/docs/mockups/ci-os-dashboard-app-mockup.html`
 
+Dashboard design checkpoint:
+
+`/Users/arijitchowdhury/Dropbox/AI-Development/CI-OS/docs/planning/CI-OS-dashboard-design-checkpoint-2026-07-01.md`
+
 ## Required Execution Posture
 
+- Do not push to GitHub yet.
+- Do not start the full CI-OS build goal until dashboard/app design is reviewed further.
 - Use `dev-loop` for the build lifecycle.
 - Use test-driven development for implementation.
 - Use the official skill-creator workflow for every Argus skill.
@@ -44,6 +54,8 @@ Dashboard mockup:
 - Do not reduce Argus to a generic assistant.
 
 ## Build Order
+
+This build order remains directionally useful, but it is not yet authorized as the next step. Finish dashboard/app design first.
 
 1. Platform foundation:
    - tenants
@@ -81,9 +93,11 @@ Dashboard mockup:
 
 4. Dashboard and app:
    - route model
+   - Marketing, Sales, and Product role lenses
    - Google login / OIDC foundation
    - command cockpit
-   - Market Field
+   - Competitor Attention Barometer
+   - concrete hero read with competitor, score, confidence, and per-lens implications
    - signals
    - sources
    - content
@@ -112,7 +126,7 @@ At each gate, report:
 
 Do not advance past a gate if the foundation below it is not verified.
 
-## Goal Prompt To Use
+## Future Goal Prompt To Use After Design Is Approved
 
 ```text
 /goal Build CI-OS end to end from the planning packet at /Users/arijitchowdhury/Dropbox/AI-Development/CI-OS.
@@ -146,11 +160,15 @@ Build the CI-OS software, skills, database, dashboard, delivery loop, model esca
 
 ## Current Best Next Step
 
-Start the build goal and complete Gate 0 only:
+Continue dashboard/app design review, section by section:
 
-- read the entire planning packet
-- map the existing local and Chowmes/Hermes implementation state
-- write an implementation plan
-- identify required repo/app scaffold
-- stop for human review before writing production code
-
+- revisit the current cockpit mockup in browser
+- decide the full Signals page
+- decide the Reports archive and report-detail experience
+- decide the Actions workflow UI
+- decide the Sources ledger UI
+- decide Content Intelligence and next-week recommendations
+- decide Admin, identity, SSO, channel, and model-provider screens
+- decide quiet, degraded, empty, and failed-run states
+- decide screenshot/export flows for Telegram, WhatsApp, and executive sharing
+- update the UX spec and mockup after each accepted decision

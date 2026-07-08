@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CI-OS Competitive Intelligence Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;650;780&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
   <style>
     :root {
       --ink: #0b1020;
@@ -113,14 +116,14 @@
       margin-top: 2px;
     }
 
-    .nav {
+    .role-rail {
       display: flex;
       gap: 4px;
       justify-content: center;
       flex-wrap: wrap;
     }
 
-    .nav a {
+    .role-rail a {
       padding: 9px 10px;
       border-radius: 8px;
       font-size: 13px;
@@ -128,36 +131,41 @@
       font-weight: 650;
     }
 
-    .nav a.active {
+    .role-rail a.active {
       color: var(--ink);
       background: #eef2ff;
     }
 
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: flex-end;
-      min-width: 260px;
+    .role-rail a::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #b7c2d4;
+      margin-right: 7px;
+      vertical-align: 1px;
     }
+
+    .role-rail a.active::before { background: var(--blue); }
 
     .hero {
       margin-top: 22px;
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) minmax(430px, .9fr);
       gap: 18px;
-      align-items: stretch;
+      align-items: start;
     }
 
     .argus-read {
       background: var(--ink);
       color: #fff;
       border-radius: 18px;
-      padding: 28px;
-      min-height: 435px;
+      padding: 24px;
       box-shadow: var(--shadow);
       display: grid;
-      align-content: space-between;
+      align-content: start;
+      gap: 22px;
       position: relative;
       overflow: hidden;
     }
@@ -197,27 +205,48 @@
     }
 
     .argus-read h1 {
-      width: min(820px, 100%);
-      margin: 18px 0 18px;
-      font-size: clamp(34px, 5vw, 72px);
-      line-height: .94;
+      width: min(760px, 100%);
+      margin: 14px 0 12px;
+      font-size: clamp(34px, 3.8vw, 52px);
+      line-height: 1;
       letter-spacing: 0;
       font-weight: 820;
     }
 
-    .argus-read p {
-      width: min(720px, 100%);
-      color: #d6e3f8;
-      font-size: 17px;
-      line-height: 1.58;
-      margin: 0;
+    .hero-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .hero-stat {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .hero-stat strong {
+      display: block;
+      color: #fff;
+      font-size: 18px;
+      line-height: 1.1;
+    }
+
+    .hero-stat span {
+      display: block;
+      color: #92a6c5;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-top: 6px;
     }
 
     .brief-spine {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
-      margin-top: 28px;
     }
 
     .spine-item {
@@ -272,127 +301,81 @@
       margin-top: 5px;
     }
 
-    .confidence {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-
-    .confidence div {
+    .attention-board {
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px;
-      background: #fbfdff;
-    }
-
-    .confidence strong {
-      display: block;
-      font-size: 21px;
-      line-height: 1;
-    }
-
-    .confidence span {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 5px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-    }
-
-    .matrix {
-      display: grid;
-      grid-template-columns: 92px repeat(5, 1fr);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    .cell {
-      min-height: 54px;
-      border-right: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      display: grid;
-      place-items: center;
-      font-size: 12px;
-      color: #47546b;
-    }
-
-    .cell:nth-child(6n) { border-right: 0; }
-    .cell.row-end { border-bottom: 0; }
-
-    .axis {
-      background: #f3f6fb;
-      font-weight: 760;
-      color: #23324a;
-      padding: 0 8px;
-      text-align: center;
-    }
-
-    .signal {
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      display: block;
-      position: relative;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.8);
-    }
-
-    .signal::after {
-      content: attr(data-score);
-      position: absolute;
-      top: 29px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #526078;
-      font-size: 10px;
-    }
-
-    .s-high { background: var(--blue); }
-    .s-mid { background: var(--cyan); }
-    .s-low { background: #b9c7d8; }
-    .s-risk { background: var(--amber); }
-    .s-blind {
-      background: repeating-linear-gradient(45deg, #d8dee9, #d8dee9 4px, #fff 4px, #fff 8px);
-      border: 1px solid #aeb8c9;
-    }
-
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 14px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .legend span { display: inline-flex; align-items: center; gap: 6px; }
-    .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-
-    .field-detail {
-      margin-top: 16px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 16px;
       background: #fff;
       padding: 14px;
       display: grid;
-      grid-template-columns: 1fr auto;
       gap: 12px;
-      align-items: start;
     }
 
-    .field-detail h3 {
-      margin: 0 0 6px;
-      font-size: 14px;
+    .attention-row {
+      display: grid;
+      grid-template-columns: 154px 1fr 42px;
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      padding: 6px 4px;
+      border-radius: 12px;
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
     }
 
-    .field-detail p {
-      margin: 0;
-      color: var(--muted);
+    .attention-row:hover {
+      background: #f8fbff;
+    }
+
+    .competitor-label {
+      display: grid;
+      gap: 4px;
+    }
+
+    .competitor-name {
+      font-weight: 780;
       font-size: 13px;
-      line-height: 1.45;
+      color: var(--ink);
+    }
+
+    .attention-cue {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .attention-track {
+      height: 28px;
+      border-radius: 999px;
+      background: #edf2f8;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(11,16,32,.08);
+    }
+
+    .attention-bar {
+      height: 100%;
+      min-width: 28px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 820;
+    }
+
+    .attention-bar.red { background: var(--red); }
+    .attention-bar.amber { background: var(--amber); }
+    .attention-bar.blue { background: var(--blue); }
+    .attention-bar.green { background: var(--green); }
+
+    .attention-score {
+      font-size: 13px;
+      font-weight: 820;
+      color: var(--ink);
+      text-align: right;
     }
 
     .sections {
@@ -542,64 +525,814 @@
     .channel strong { font-size: 13px; }
     .channel span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
 
-    .route-map {
-      margin-top: 18px;
-      border-radius: 16px;
-      background: rgba(255,255,255,.92);
-      border: 1px solid rgba(11,16,32,.12);
-      box-shadow: var(--soft);
-      padding: 22px;
+    /* Maison editorial direction: intelligence as a front page, not a telemetry board. */
+    :root {
+      --ink: #1a1a1a;
+      --ink-2: #2b2824;
+      --paper: #f9f8f6;
+      --panel: #f9f8f6;
+      --line: rgba(26, 26, 26, .18);
+      --muted: #6c6863;
+      --gold: #d4af37;
+      --red: #9f342c;
+      --amber: #9a6517;
+      --blue: #31436d;
+      --cyan: #d4af37;
+      --green: #3d6650;
+      --shadow: 0 12px 36px rgba(26, 26, 26, .08);
+      --soft: 0 4px 20px rgba(26, 26, 26, .05);
+      --font-display: "Playfair Display", Georgia, serif;
+      --font-body: "Inter", system-ui, sans-serif;
     }
 
-    .route-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 16px;
+    body {
+      background:
+        linear-gradient(90deg, rgba(26,26,26,.08) 1px, transparent 1px) 0 0 / 25% 100%,
+        var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
     }
 
-    .route-head h2 {
-      margin: 0;
-      font-size: 20px;
-      letter-spacing: 0;
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .025;
+      z-index: 60;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
 
-    .route-grid {
+    button,
+    .control,
+    .topbar,
+    .argus-read,
+    .market-field,
+    .section,
+    .attention-board,
+    .hero-stat {
+      border-radius: 0;
+    }
+
+    .app {
+      width: min(1600px, calc(100vw - 72px));
+      margin-top: 28px;
+    }
+
+    .topbar {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+      align-items: center;
+      height: 64px;
+      border: 0;
+      border-bottom: 1px solid var(--ink);
+      background: rgba(249,248,246,.88);
+      box-shadow: none;
+      padding: 0;
+      top: 0;
+    }
+
+    .brand {
+      min-width: 240px;
       gap: 12px;
     }
 
-    .route-card {
-      border: 1px solid var(--line);
-      border-radius: 13px;
-      background: #fff;
-      min-height: 148px;
-      padding: 15px;
-      display: grid;
-      align-content: space-between;
-    }
-
-    .route-card strong {
+    .sigil {
+      width: 48px;
+      height: 48px;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      position: relative;
+      border: 0;
+      object-fit: contain;
       display: block;
-      font-size: 14px;
-      margin-bottom: 8px;
     }
 
-    .route-card p {
+    .sigil::before {
+      display: none;
+    }
+
+    .sigil::after {
+      display: none;
+    }
+
+    .brand strong {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 400;
+      letter-spacing: .18em;
+    }
+
+    .brand > span {
+      display: block;
+    }
+
+    .role-rail {
+      gap: 28px;
+      position: relative;
+      grid-column: 2;
+      justify-self: center;
+      --rail-x: 0px;
+      --rail-w: 0px;
+    }
+
+    .role-rail a {
+      border-radius: 0;
+      padding: 6px 2px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .2em;
+      color: var(--muted);
+      border-bottom: 1px solid transparent;
+      position: relative;
+      isolation: isolate;
+      transition: color 320ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .role-rail a[data-role="marketing"] {
+      --lens-wash: linear-gradient(120deg, rgba(212,175,55,.22), rgba(159,52,44,.05) 54%, rgba(249,248,246,0));
+    }
+
+    .role-rail a[data-role="sales"] {
+      --lens-wash: linear-gradient(120deg, rgba(159,52,44,.16), rgba(154,101,23,.08) 58%, rgba(249,248,246,0));
+    }
+
+    .role-rail a[data-role="product"] {
+      --lens-wash: linear-gradient(120deg, rgba(49,67,109,.15), rgba(61,102,80,.08) 58%, rgba(249,248,246,0));
+    }
+
+    .role-rail a.active {
+      background: transparent;
+      color: var(--ink);
+      border-bottom-color: transparent;
+    }
+
+    .role-rail a:hover,
+    .role-rail a:focus-visible {
+      color: var(--ink);
+      outline: 0;
+    }
+
+    .role-rail::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -1px;
+      width: var(--rail-w);
+      height: 1px;
+      background: var(--gold);
+      transform: translateX(var(--rail-x));
+      transition: transform 360ms cubic-bezier(.25,.46,.45,.94), width 360ms cubic-bezier(.25,.46,.45,.94), opacity 220ms ease;
+    }
+
+    .role-rail a::before {
+      content: "";
+      display: block;
+      position: absolute;
+      inset: -6px -12px 2px;
+      width: auto;
+      height: auto;
       margin: 0;
+      border-radius: 0;
+      z-index: -1;
+      opacity: 0;
+      background: var(--lens-wash);
+      border-top: 1px solid rgba(26,26,26,.06);
+      transition: opacity 320ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .role-rail a.active::before {
+      background: var(--lens-wash);
+    }
+
+    .role-rail a:hover::before,
+    .role-rail a:focus-visible::before,
+    .role-rail a.active::before {
+      opacity: 1;
+    }
+
+    .hero {
+      margin-top: 24px;
+      grid-template-columns: minmax(260px, 3.2fr) minmax(330px, 4fr) minmax(430px, 4.8fr);
+      gap: 34px;
+      align-items: start;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 24px;
+    }
+
+    .argus-read {
+      background: transparent;
+      color: var(--ink);
+      padding: 0;
+      box-shadow: none;
+      gap: 0;
+      overflow: visible;
+    }
+
+    .argus-read::after {
+      display: none;
+    }
+
+    .kicker {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: .24em;
+      gap: 14px;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 48px;
+      height: 1px;
+      background: var(--ink);
+      display: inline-block;
+    }
+
+    .dot {
+      display: none;
+    }
+
+    .argus-read h1 {
+      font-family: var(--font-display);
+      font-size: clamp(44px, 4.5vw, 74px);
+      line-height: .93;
+      letter-spacing: -.035em;
+      font-weight: 400;
+      margin: 24px 0 0;
+    }
+
+    .argus-read h1 em {
+      color: var(--gold);
+      font-style: italic;
+    }
+
+    .hero-strip {
+      grid-template-columns: 1fr;
+      gap: 0;
+      margin-top: 32px;
+      border-top: 1px solid var(--ink);
+    }
+
+    .hero-stat {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 18px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 0;
+    }
+
+    .hero-stat strong {
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 21px;
+      font-weight: 400;
+    }
+
+    .hero-stat span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .2em;
+    }
+
+    .brief-spine {
+      gap: 0;
+      border-top: 1px solid var(--ink);
+    }
+
+    .spine-item {
+      border-top: 0;
+      border-right: 1px solid var(--line);
+      padding: 18px 18px 0 0;
+    }
+
+    .spine-item:last-child {
+      border-right: 0;
+      padding-left: 18px;
+    }
+
+    .spine-item span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .22em;
+    }
+
+    .spine-item strong {
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 19px;
+      line-height: 1.22;
+      font-weight: 400;
+    }
+
+    .visual-story {
+      margin: 0;
+      position: relative;
+      align-self: start;
+      height: clamp(360px, 44vh, 430px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .visual-story img {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(.9);
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(26,26,26,.08);
+      transition: filter 1500ms cubic-bezier(.25,.46,.45,.94), transform 1500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .visual-story:hover img {
+      filter: grayscale(.15);
+      transform: scale(1.015);
+    }
+
+    .vertical-note {
+      position: absolute;
+      top: 24px;
+      left: -32px;
+      writing-mode: vertical-rl;
+      text-transform: uppercase;
+      letter-spacing: .24em;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .market-field {
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--ink);
+      padding: 28px 0 0;
+      box-shadow: none;
+      min-height: auto;
+      align-self: start;
+    }
+
+    .field-head {
+      display: block;
+      margin-bottom: 30px;
+    }
+
+    .field-head h2,
+    .section h2 {
+      font-family: var(--font-display);
+      font-size: 30px;
+      line-height: 1.05;
+      font-weight: 400;
+      letter-spacing: -.02em;
+    }
+
+    .caption {
       color: var(--muted);
       font-size: 13px;
-      line-height: 1.45;
+      line-height: 1.55;
+      max-width: 36rem;
+      margin-top: 10px;
     }
 
-    .route {
-      color: var(--blue);
-      font-weight: 760;
-      font-size: 12px;
+    .attention-board {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      gap: 0;
+    }
+
+    .attention-row {
+      display: block;
+      grid-template-columns: none;
+      gap: 0;
+      align-items: stretch;
+      min-height: 0;
+      padding: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+      color: inherit;
+      cursor: default;
+      scroll-margin-top: 92px;
+      position: relative;
+      isolation: isolate;
+      transform: translateZ(0);
+      transition: color 500ms cubic-bezier(.25,.46,.45,.94), background 700ms cubic-bezier(.25,.46,.45,.94), outline-color 500ms cubic-bezier(.25,.46,.45,.94), box-shadow 650ms cubic-bezier(.25,.46,.45,.94), transform 650ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-row::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      opacity: 0;
+      background:
+        linear-gradient(120deg, rgba(255,255,255,.72), rgba(249,248,246,.22) 48%, var(--action-wash, rgba(212,175,55,.08))),
+        rgba(255,255,255,.1);
+      backdrop-filter: blur(10px);
+      transition: opacity 520ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-row.action-act {
+      --action-wash: rgba(159,52,44,.12);
+      --action-shadow: 0 18px 42px rgba(159,52,44,.16), 0 2px 0 rgba(255,255,255,.55) inset;
+      --bar-depth: 0 9px 18px rgba(159,52,44,.18), inset 0 1px rgba(255,255,255,.32);
+    }
+
+    .attention-row.action-watch {
+      --action-wash: rgba(154,101,23,.11);
+      --action-shadow: 0 14px 32px rgba(154,101,23,.12), 0 2px 0 rgba(255,255,255,.45) inset;
+      --bar-depth: 0 7px 14px rgba(154,101,23,.15), inset 0 1px rgba(255,255,255,.3);
+    }
+
+    .attention-row.action-monitor {
+      --action-wash: rgba(49,67,109,.1);
+      --action-shadow: 0 12px 28px rgba(49,67,109,.12), 0 2px 0 rgba(255,255,255,.42) inset;
+      --bar-depth: 0 7px 14px rgba(49,67,109,.14), inset 0 1px rgba(255,255,255,.3);
+    }
+
+    .attention-row.action-normal {
+      --action-wash: rgba(61,102,80,.06);
+      --action-shadow: 0 8px 18px rgba(61,102,80,.07), 0 1px 0 rgba(255,255,255,.38) inset;
+      --bar-depth: inset 0 1px rgba(255,255,255,.25);
+    }
+
+    .attention-row[open],
+    .attention-row:hover,
+    .attention-row:focus-within {
+      background: rgba(235,229,222,.45);
+      outline: 1px solid rgba(184,142,34,.42);
+      outline-offset: -1px;
+      color: var(--gold);
+    }
+
+    .attention-row[open] {
+      box-shadow: var(--action-shadow);
+      transform: translateY(-1px);
+    }
+
+    .attention-row[open]::before,
+    .attention-row:hover::before,
+    .attention-row:focus-within::before {
+      opacity: 1;
+    }
+
+    .attention-summary {
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(180px, 1fr) 46px;
+      gap: 12px;
+      align-items: center;
+      min-height: 54px;
+      padding: 7px 0;
+      cursor: pointer;
+      list-style: none;
+      transition: padding 500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .attention-row:hover .attention-summary,
+    .attention-row:focus-within .attention-summary {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    .competitor-label {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .competitor-name {
+      font-family: var(--font-display);
+      color: var(--ink);
+      font-size: 21px;
+      font-weight: 400;
+    }
+
+    .attention-cue {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+      max-width: 145px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .attention-track {
+      height: 24px;
+      border-radius: 0;
+      background: linear-gradient(90deg, rgba(26,26,26,.045), rgba(26,26,26,.085));
+      box-shadow: inset 0 1px 2px rgba(26,26,26,.08), inset 0 -1px rgba(255,255,255,.55);
+      transform: translateZ(0);
+    }
+
+    .attention-bar {
+      border-radius: 0;
+      justify-content: flex-start;
+      padding-left: 12px;
+      padding-right: 0;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-size: 9px;
+      font-weight: 500;
+      box-shadow: var(--bar-depth);
+    }
+
+    .attention-score {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    .attention-proof {
+      scroll-margin-top: 92px;
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(180px, 1fr) 46px;
+      gap: 12px;
+      padding: 0 0 16px;
+    }
+
+    .attention-proof-inner {
+      grid-column: 1 / 3;
+      border: 1px solid rgba(26,26,26,.12);
+      border-top-color: rgba(255,255,255,.56);
+      background: linear-gradient(135deg, rgba(255,255,255,.64), rgba(249,248,246,.36));
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 32px rgba(26,26,26,.08), inset 0 1px rgba(255,255,255,.62);
+      padding: 12px 14px;
+    }
+
+    .proof-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
       margin-top: 13px;
-      letter-spacing: .02em;
+      padding-top: 10px;
+      border-top: 1px solid rgba(26,26,26,.1);
+    }
+
+    .deep-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid rgba(26,26,26,.22);
+      background: rgba(255,255,255,.58);
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      text-decoration: none;
+      box-shadow: 0 8px 20px rgba(26,26,26,.06), inset 0 1px rgba(255,255,255,.65);
+      transition: transform 280ms cubic-bezier(.25,.46,.45,.94), background 280ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .deep-link:hover,
+    .deep-link:focus-visible {
+      background: rgba(255,255,255,.82);
+      transform: translateY(-1px);
+      outline: 1px solid rgba(184,142,34,.42);
+      outline-offset: 2px;
+    }
+
+    .proof-meta {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .inline-brief {
+      margin-top: 12px;
+      border-top: 1px solid rgba(26,26,26,.1);
+      padding-top: 10px;
+    }
+
+    .inline-brief > summary {
+      width: fit-content;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .inline-brief > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .inline-brief[open] > summary {
+      background: rgba(255,255,255,.86);
+    }
+
+    .brief-article {
+      margin-top: 14px;
+      border: 1px solid rgba(26,26,26,.14);
+      background:
+        linear-gradient(135deg, rgba(159,52,44,.06), rgba(212,175,55,.06) 42%, rgba(255,255,255,.42)),
+        rgba(249,248,246,.68);
+      box-shadow: 0 14px 32px rgba(26,26,26,.07), inset 0 1px rgba(255,255,255,.62);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .brief-article h4 {
+      margin: 9px 0 12px;
+      font-family: var(--font-display);
+      font-size: clamp(25px, 2.4vw, 38px);
+      line-height: 1;
+      font-weight: 400;
+      letter-spacing: -.025em;
+      color: var(--ink);
+    }
+
+    .brief-article p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .brief-kicker {
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .attention-proof h3 {
+      margin: 0 0 7px;
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1.1;
+    }
+
+    .attention-proof p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .attention-proof span {
+      display: inline-block;
+      margin-bottom: 9px;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .section {
+      background: transparent;
+      box-shadow: none;
+      border: 0;
+      border-top: 1px solid var(--ink);
+      padding: 28px 0 0;
+    }
+
+    .role-section {
+      scroll-margin-top: 92px;
+      transition: background 500ms cubic-bezier(.25,.46,.45,.94), outline-color 500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .sections .role-section {
+      --lens-panel: linear-gradient(135deg, rgba(255,255,255,.64), rgba(249,248,246,.18));
+      background: var(--lens-panel);
+      border-top-color: rgba(26,26,26,.78);
+      box-shadow: inset 0 1px rgba(255,255,255,.55);
+      padding-inline: 14px;
+      padding-bottom: 14px;
+    }
+
+    .sections [data-role-section="marketing"] {
+      --lens-panel: linear-gradient(135deg, rgba(212,175,55,.14), rgba(255,255,255,.56) 40%, rgba(249,248,246,.12));
+    }
+
+    .sections [data-role-section="sales"] {
+      --lens-panel: linear-gradient(135deg, rgba(159,52,44,.1), rgba(154,101,23,.07) 42%, rgba(255,255,255,.5));
+    }
+
+    .sections [data-role-section="product"] {
+      --lens-panel: linear-gradient(135deg, rgba(49,67,109,.1), rgba(61,102,80,.07) 42%, rgba(255,255,255,.5));
+    }
+
+    .lens-proofline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(26,26,26,.12);
+    }
+
+    .lens-proofline span {
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border: 1px solid rgba(26,26,26,.12);
+      background: rgba(255,255,255,.46);
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .role-section.is-role-active {
+      background: rgba(235,229,222,.28);
+      outline: 1px solid rgba(184,142,34,.32);
+      outline-offset: 8px;
+    }
+
+    .sections .role-section.is-role-active {
+      background: var(--lens-panel);
+    }
+
+    .evidence-strip {
+      grid-template-columns: 1fr;
+      margin-top: 18px;
+    }
+
+    #trust-state {
+      background:
+        linear-gradient(135deg, rgba(212,175,55,.11), rgba(49,67,109,.06) 46%, rgba(61,102,80,.055)),
+        rgba(255,255,255,.34);
+      border-top-color: var(--ink);
+      padding-inline: 14px;
+      padding-bottom: 14px;
+    }
+
+    #trust-state .caption {
+      max-width: 48rem;
+    }
+
+    .evidence-grid {
+      background: rgba(255,255,255,.52);
+      backdrop-filter: blur(8px);
+      border-radius: 0;
+    }
+
+    .report-card {
+      border: 1px solid rgba(26,26,26,.15);
+      background: rgba(255,255,255,.5);
+      backdrop-filter: blur(10px);
+      padding: 16px;
+      box-shadow: 0 16px 34px rgba(26,26,26,.07), inset 0 1px rgba(255,255,255,.64);
+    }
+
+    .report-card h3 {
+      margin: 0 0 10px;
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    .report-card p,
+    .report-card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .bibliography {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .bibliography li {
+      display: grid;
+      grid-template-columns: 72px 1fr auto;
+      gap: 10px;
+      align-items: baseline;
+      border-top: 1px solid rgba(26,26,26,.1);
+      padding-top: 9px;
+    }
+
+    .bibliography strong,
+    .bibliography em {
+      color: var(--ink);
+      font-style: normal;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .bibliography a {
+      color: var(--ink);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
     }
 
     @media (max-width: 1180px) {
@@ -609,57 +1342,101 @@
         grid-template-columns: 1fr;
       }
 
-      .route-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-
       .market-field,
       .argus-read {
         min-height: auto;
+      }
+
+      .visual-story,
+      .visual-story img {
+        min-height: 0;
+        height: clamp(340px, 48vh, 430px);
+      }
+
+      .visual-story {
+        max-width: 720px;
       }
     }
 
     @media (max-width: 860px) {
       .app { width: min(100vw - 24px, 1480px); margin-top: 12px; }
       .topbar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
         height: auto;
         align-items: flex-start;
-        flex-direction: column;
         padding: 14px;
         position: static;
       }
 
-      .brand,
-      .actions {
+      .brand {
         min-width: 0;
         width: 100%;
       }
 
-      .actions { justify-content: flex-start; flex-wrap: wrap; }
-      .nav { justify-content: flex-start; }
-      .matrix { grid-template-columns: 80px repeat(5, minmax(54px, 1fr)); overflow-x: auto; }
+      .role-rail { grid-column: 1; justify-self: start; justify-content: flex-start; }
       .brief-spine,
-      .confidence,
       .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { gap: 32px; margin-top: 36px; }
+      .brief-article { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 560px) {
       .argus-read,
       .market-field,
-      .section,
-      .route-map {
-        padding: 18px;
-        border-radius: 12px;
+      .section {
+        padding: 18px 0;
+        border-radius: 0;
       }
 
       .argus-read h1 { font-size: 34px; }
       .brief-spine,
-      .confidence,
-      .evidence-grid,
-      .route-grid { grid-template-columns: 1fr; }
+      .evidence-grid { grid-template-columns: 1fr; }
       .evidence { border-right: 0; border-bottom: 1px solid var(--line); }
       .evidence:last-child { border-bottom: 0; }
       .intel { grid-template-columns: 6px 1fr; }
       .intel .chip { grid-column: 2; justify-self: start; }
-      .field-detail { grid-template-columns: 1fr; }
+      .attention-summary { grid-template-columns: minmax(0, 1fr) 34px; gap: 8px; min-height: 58px; }
+      .attention-track { grid-column: 1 / -1; }
+      .attention-proof { grid-template-columns: 1fr; }
+      .attention-proof-inner { grid-column: 1; }
+      .competitor-label { gap: 8px; }
+      .attention-cue { max-width: min(42vw, 160px); }
+      .app { width: min(100vw - 28px, 1480px); }
+      .hero { padding-bottom: 36px; }
+      .visual-story,
+      .visual-story img { min-height: 320px; height: 320px; }
+      .vertical-note { display: none; }
+      .hero-stat { grid-template-columns: 1fr; gap: 4px; }
+      .spine-item { border-right: 0; padding-right: 0; }
+      .spine-item:last-child { padding-left: 0; }
+      .brand strong { font-size: 25px; }
+      .role-rail { gap: 22px; }
+      .proof-actions,
+      .brief-article {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .bibliography li {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .attention-row,
+      .attention-row::before,
+      .attention-summary,
+      .attention-bar,
+      .visual-story img,
+      .role-rail::after {
+        transition: none;
+      }
+
+      .attention-row[open] {
+        transform: none;
+      }
     }
   </style>
 </head>
@@ -667,304 +1444,502 @@
   <div class="app">
     <header class="topbar">
       <a class="brand" href="#command" aria-label="CI-OS Command Center">
-        <span class="sigil" aria-hidden="true"></span>
+        <img class="sigil" src="assets/argus-logo-mark.png" alt="" aria-hidden="true" />
         <span>
-          <strong>Argus CI-OS</strong>
-          <span>Competitive Intelligence Cockpit</span>
+          <strong>Argus</strong>
         </span>
       </a>
-      <nav class="nav" aria-label="Primary">
-        <a class="active" href="#command">Command</a>
-        <a href="#signals">Signals</a>
-        <a href="#sources">Sources</a>
-        <a href="#content">Content</a>
-        <a href="#actions">Actions</a>
-        <a href="#reports">Reports</a>
-        <a href="#admin">Admin</a>
+      <nav class="role-rail" aria-label="Role-aware command rail">
+        <a class="active" href="#role-marketing" data-role="marketing" aria-current="true">Marketing</a>
+        <a href="#role-sales" data-role="sales">Sales</a>
+        <a href="#role-product" data-role="product">Product</a>
       </nav>
-      <div class="actions" aria-label="Controls">
-        <div class="control">Daily</div>
-        <div class="control">All competitors</div>
-        <button class="primary">Open brief</button>
-      </div>
     </header>
 
     <main>
       <section class="hero" id="command">
         <article class="argus-read">
           <div>
-            <div class="kicker"><span class="dot"></span>Argus read - July 1, 2026</div>
-            <h1>The market is not quiet. Our certainty is not yet earned.</h1>
-            <p>Useful truth first: no material action should ship from today's run until social, executive speech, and source-discovery lanes finish cleanly. The evidence is not empty. It is uneven. That distinction is the difference between intelligence and a spreadsheet wearing a tie.</p>
-          </div>
-          <div class="brief-spine" aria-label="Argus response spine">
-            <div class="spine-item"><span>What changed</span><strong>Elastic messaging tilted harder toward operational AI search.</strong></div>
-            <div class="spine-item"><span>Why it matters</span><strong>The category is being reframed around operating models, not features.</strong></div>
-            <div class="spine-item"><span>Do not over-believe</span><strong>Coverage is strong on owned web, weaker on executive speech.</strong></div>
-            <div class="spine-item"><span>Move</span><strong>Prepare a PMM counter-angle, hold publication until recheck.</strong></div>
+            <div class="kicker"><span class="dot"></span>Marketing lens - Daily read</div>
+            <h1>AWS pricing pressure needs <em>verification</em> before action.</h1>
           </div>
         </article>
 
-        <section class="market-field" id="market" aria-labelledby="field-title">
+        <figure class="visual-story" aria-label="Search Intelligence Weekly editorial market brief">
+          <img src="assets/argus-search-intelligence-weekly.png" alt="Editorial intelligence desk with Search Intelligence Weekly, market brief notes, pricing signal papers, evidence trail, and next action cards." />
+          <span class="vertical-note">№ 01 — Search intelligence weekly</span>
+        </figure>
+
+        <section class="market-field role-section" id="role-marketing-command" data-role-section="marketing" aria-labelledby="field-title">
           <div class="field-head">
             <div>
-              <h2 id="field-title">Market field</h2>
-              <div class="caption">Competitor intensity by signal family. White hatching means blind spot, not quiet.</div>
+              <h2 id="field-title">Competitor Attention Barometer</h2>
             </div>
-            <span class="chip amber">coverage 82%</span>
           </div>
 
-          <div class="confidence" aria-label="Run confidence">
-            <div><strong>17</strong><span>fresh findings</span></div>
-            <div><strong>4</strong><span>material candidates</span></div>
-            <div><strong>2</strong><span>blind lanes</span></div>
-          </div>
-
-          <div class="matrix" role="img" aria-label="Market field showing competitor activity across signal families">
-            <div class="cell axis">Signal</div>
-            <div class="cell axis">Elastic</div>
-            <div class="cell axis">Coveo</div>
-            <div class="cell axis">Bloomreach</div>
-            <div class="cell axis">Constructor</div>
-            <div class="cell axis">Klevu</div>
-
-            <div class="cell axis">Product</div>
-            <div class="cell"><span class="signal s-mid" data-score="64"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="28"></span></div>
-            <div class="cell"><span class="signal s-mid" data-score="58"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="21"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="16"></span></div>
-
-            <div class="cell axis">GTM</div>
-            <div class="cell"><span class="signal s-high" data-score="81"></span></div>
-            <div class="cell"><span class="signal s-risk" data-score="67"></span></div>
-            <div class="cell"><span class="signal s-mid" data-score="55"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="32"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="24"></span></div>
-
-            <div class="cell axis">Content</div>
-            <div class="cell"><span class="signal s-mid" data-score="59"></span></div>
-            <div class="cell"><span class="signal s-high" data-score="78"></span></div>
-            <div class="cell"><span class="signal s-risk" data-score="62"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="19"></span></div>
-            <div class="cell"><span class="signal s-low" data-score="26"></span></div>
-
-            <div class="cell axis row-end">Speech</div>
-            <div class="cell row-end"><span class="signal s-blind" data-score="?"></span></div>
-            <div class="cell row-end"><span class="signal s-low" data-score="18"></span></div>
-            <div class="cell row-end"><span class="signal s-mid" data-score="49"></span></div>
-            <div class="cell row-end"><span class="signal s-blind" data-score="?"></span></div>
-            <div class="cell row-end"><span class="signal s-low" data-score="11"></span></div>
-          </div>
-
-          <div class="legend" aria-label="Legend">
-            <span><i style="background:var(--blue)"></i>Material heat</span>
-            <span><i style="background:var(--cyan)"></i>Watch</span>
-            <span><i style="background:var(--amber)"></i>Needs review</span>
-            <span><i style="background:repeating-linear-gradient(45deg,#d8dee9,#d8dee9 3px,#fff 3px,#fff 6px);border:1px solid #aeb8c9"></i>Blind lane</span>
-          </div>
-
-          <div class="field-detail">
-            <div>
-              <h3>Selected signal: Elastic / GTM</h3>
-              <p>AI search positioning intensified across campaign language and owned content. Argus recommends PMM prepare a counter-angle, but hold executive escalation until speech and social lanes complete.</p>
-            </div>
-            <span class="chip">evidence 6</span>
+          <div class="attention-board" aria-label="Competitor Attention Barometer ranking competitors by attention needed this week">
+            <details class="attention-row action-act" id="aws-evidence" open>
+              <summary class="attention-summary" aria-label="AWS, act now, score 92. Verify OpenSearch pricing trail.">
+                <div class="competitor-label">
+                  <span class="competitor-name">AWS</span>
+                  <span class="attention-cue">Verify pricing trail</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar red" style="width:92%">Act now</div></div>
+                <div class="attention-score">92</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>AWS / act now</span>
+                  <h3>Verify pricing trail.</h3>
+                  <p>OpenSearch pricing or packaging pressure is commercially material only after source confirmation. Build one shared response pack after proof clears.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-AWS-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-aws-pricing">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-AWS-01</div>
+                        <h4>AWS pricing pressure needs verification before field action.</h4>
+                        <p>This is the article behind the barometer summary. The signal is commercially material because a cheaper OpenSearch packaging story would pressure Algolia's economic narrative, but it is not yet safe for public messaging until the source trail confirms the exact packaging, service boundary, and buyer implication.</p>
+                        <p><strong>Argus read:</strong> prepare one internal response pack before any public counter-message. Marketing owns the value frame, Sales owns objection handling, and Product validates whether this is pricing, packaging, managed-service positioning, or a technical capability shift.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography" aria-label="Bibliographical source trail for AWS pricing report">
+                          <li><strong>owned web</strong><a href="#sources">AWS OpenSearch pricing or packaging page</a><em>verify</em></li>
+                          <li><strong>docs</strong><a href="#sources">OpenSearch service documentation and release notes</a><em>pending</em></li>
+                          <li><strong>market</strong><a href="#sources">Analyst or press mentions of OpenSearch economics</a><em>watch</em></li>
+                          <li><strong>field</strong><a href="#role-sales">Sales objection candidates and buyer-risk framing</a><em>draft</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+            <details class="attention-row action-watch" id="elastic-evidence">
+              <summary class="attention-summary" aria-label="Elastic, watch, score 76. Check executive and analyst narrative.">
+                <div class="competitor-label">
+                  <span class="competitor-name">Elastic</span>
+                  <span class="attention-cue">Read exec narrative</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar amber" style="width:76%">Watch</div></div>
+                <div class="attention-score">76</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>Elastic / watch</span>
+                  <h3>Read the executive narrative.</h3>
+                  <p>Elastic is worth watching if leadership and analyst language converge around operational AI search, not just campaign copy.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-ELS-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-elastic-narrative">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-ELS-01</div>
+                        <h4>Elastic narrative needs executive-speech confirmation.</h4>
+                        <p>Elastic is in watch state because the signal is narrative-led. Argus would compare leadership interviews, analyst mentions, blog language, and product messaging before deciding whether this becomes a real market-positioning shift.</p>
+                        <p><strong>Argus read:</strong> do not counter-message from campaign copy alone. Track whether leadership language, analyst language, and owned-site messaging converge around the same operating-model claim.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography">
+                          <li><strong>speech</strong><a href="#sources">Executive interview and transcript lane</a><em>degraded</em></li>
+                          <li><strong>analyst</strong><a href="#sources">Public analyst and market commentary</a><em>watch</em></li>
+                          <li><strong>owned web</strong><a href="#sources">Elastic blog and campaign pages</a><em>collect</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+            <details class="attention-row action-watch" id="coveo-evidence">
+              <summary class="attention-summary" aria-label="Coveo, watch, score 64. Inspect AI merchandising proof points.">
+                <div class="competitor-label">
+                  <span class="competitor-name">Coveo</span>
+                  <span class="attention-cue">Inspect AI merch proof</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar amber" style="width:64%">Watch</div></div>
+                <div class="attention-score">64</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>Coveo / watch</span>
+                  <h3>Inspect AI merchandising proof.</h3>
+                  <p>The signal matters if customer proof and content traction support the merchandising claim. Until then, it is narrative pressure, not a fact.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-COV-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-coveo-merchandising">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-COV-01</div>
+                        <h4>Coveo AI merchandising claim needs customer proof.</h4>
+                        <p>Coveo is in watch state because the market phrase is commercially interesting, but the proof standard is not met by positioning language alone. The claim becomes material when customer evidence, product detail, and traction signals converge.</p>
+                        <p><strong>Argus read:</strong> inspect whether "AI merchandising" is a defensible customer outcome or just a packaging phrase. Sales should not adjust enablement until proof clears.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography">
+                          <li><strong>owned web</strong><a href="#sources">Coveo AI merchandising pages</a><em>inspect</em></li>
+                          <li><strong>customer</strong><a href="#sources">Case studies and customer proof</a><em>needed</em></li>
+                          <li><strong>content</strong><a href="#role-marketing">Audience traction and message uptake</a><em>watch</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+            <details class="attention-row action-monitor" id="bloomreach-evidence">
+              <summary class="attention-summary" aria-label="Bloomreach, monitor, score 48. Track retail case study traction.">
+                <div class="competitor-label">
+                  <span class="competitor-name">Bloomreach</span>
+                  <span class="attention-cue">Track retail traction</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar blue" style="width:48%">Monitor</div></div>
+                <div class="attention-score">48</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>Bloomreach / monitor</span>
+                  <h3>Track retail traction.</h3>
+                  <p>Retail case-study motion is useful context for vertical messaging, but it does not yet change this week's response posture.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-BLR-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-bloomreach-retail">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-BLR-01</div>
+                        <h4>Bloomreach retail proof remains useful, not urgent.</h4>
+                        <p>Bloomreach remains in monitor state because retail proof can inform vertical messaging, but there is no current evidence that it changes Algolia's broader competitive posture this week.</p>
+                        <p><strong>Argus read:</strong> keep the signal in the vertical context file. Escalate only if retail wins cluster, if customer language starts repeating, or if the case-study motion becomes a sales objection.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography">
+                          <li><strong>customer</strong><a href="#sources">Retail case studies and win pages</a><em>monitor</em></li>
+                          <li><strong>content</strong><a href="#role-marketing">Retail messaging and campaign traction</a><em>track</em></li>
+                          <li><strong>field</strong><a href="#role-sales">Potential vertical objection language</a><em>low</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+            <details class="attention-row action-normal" id="constructor-evidence">
+              <summary class="attention-summary" aria-label="Constructor, normal, score 31. Keep integration watch.">
+                <div class="competitor-label">
+                  <span class="competitor-name">Constructor</span>
+                  <span class="attention-cue">Watch integrations</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar green" style="width:31%">Normal</div></div>
+                <div class="attention-score">31</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>Constructor / normal</span>
+                  <h3>Watch integrations.</h3>
+                  <p>Integration movement can turn quickly into sales relevance. Keep it in the source ledger, but do not escalate without new partner proof.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-CON-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-constructor-integrations">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-CON-01</div>
+                        <h4>Constructor integration watch stays normal until partner proof changes.</h4>
+                        <p>Constructor is in normal state because integration movement is strategically relevant but not currently urgent. The important watch is whether new partner proof changes sales relevance in commerce-platform conversations.</p>
+                        <p><strong>Argus read:</strong> keep scanning partner pages, ISV directories, docs, and changelogs. Escalate only when a new integration creates field risk or product-positioning pressure.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography">
+                          <li><strong>partner</strong><a href="#sources">ISV and commerce-platform partner pages</a><em>watch</em></li>
+                          <li><strong>docs</strong><a href="#sources">Integration docs and changelog movement</a><em>collect</em></li>
+                          <li><strong>sales</strong><a href="#role-sales">Partner proof entering deal cycles</a><em>low</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
+            <details class="attention-row action-normal" id="klevu-evidence">
+              <summary class="attention-summary" aria-label="Klevu, normal, score 24. No action unless new commerce wins appear.">
+                <div class="competitor-label">
+                  <span class="competitor-name">Klevu</span>
+                  <span class="attention-cue">Ignore unless new wins</span>
+                </div>
+                <div class="attention-track"><div class="attention-bar green" style="width:24%">Normal</div></div>
+                <div class="attention-score">24</div>
+              </summary>
+              <div class="attention-proof">
+                <div class="attention-proof-inner">
+                  <span>Klevu / normal</span>
+                  <h3>Ignore unless new wins appear.</h3>
+                  <p>No action should ship from this lane until fresh commerce wins or positioning changes create a real signal.</p>
+                  <div class="proof-actions">
+                    <div class="proof-meta">Report ID ARG-D-2026-07-01-KLV-01</div>
+                  </div>
+                  <details class="inline-brief" id="report-klevu-wins">
+                    <summary class="deep-link">Open brief</summary>
+                    <div class="brief-article">
+                      <article>
+                        <div class="brief-kicker">Daily report / ARG-D-2026-07-01-KLV-01</div>
+                        <h4>Klevu stays normal without fresh commerce wins.</h4>
+                        <p>Klevu is in normal state because no current win, pricing, product, or messaging movement rises above the action threshold in this mock run.</p>
+                        <p><strong>Argus read:</strong> ignore the lane unless new customer wins, positioning changes, or partner movement create a real signal. Attention is a scarce resource; spend it where the market is actually moving.</p>
+                      </article>
+                      <div class="report-card">
+                        <h3>Sources and bibliography</h3>
+                        <ul class="bibliography">
+                          <li><strong>news</strong><a href="#sources">Fresh customer wins and announcements</a><em>none</em></li>
+                          <li><strong>owned web</strong><a href="#sources">Positioning and product pages</a><em>stable</em></li>
+                          <li><strong>partner</strong><a href="#sources">Commerce ecosystem mentions</a><em>low</em></li>
+                        </ul>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </details>
           </div>
         </section>
       </section>
 
       <section class="sections" id="signals">
-        <article class="section">
-          <h2>What matters now</h2>
-          <div class="caption">Material candidates with evidence and restraint.</div>
-          <div class="lane">
-            <div class="intel">
-              <span class="bar"></span>
-              <div>
-                <h3>Elastic is pushing AI search as operating infrastructure</h3>
-                <p>Owned web and campaign language moved in the same direction. Strong enough to watch, not yet enough to brief as a settled thesis.</p>
-              </div>
-              <span class="chip">0.72</span>
-            </div>
-            <div class="intel">
-              <span class="bar green"></span>
-              <div>
-                <h3>Bloomreach remains anchored in retail personalization</h3>
-                <p>Stable narrative. Useful for Algolia counter-positioning around search relevance and implementation confidence.</p>
-              </div>
-              <span class="chip green">0.81</span>
-            </div>
-            <div class="intel">
-              <span class="bar amber"></span>
-              <div>
-                <h3>Coveo content is drawing attention around AI merchandising</h3>
-                <p>Traction signal exists, but source provenance needs one more pass before it becomes a recommendation.</p>
-              </div>
-              <span class="chip amber">review</span>
-            </div>
+        <article class="section role-section" id="role-marketing" data-role-section="marketing">
+          <h2>Marketing lens</h2>
+          <div class="caption">Messaging, narrative, momentum shifts, and next-week content direction.</div>
+          <div class="lens-proofline" aria-label="Marketing lens evidence summary">
+            <span>64 narrative sources</span>
+            <span>social lane degraded</span>
+            <span>high urgency</span>
           </div>
-        </article>
-
-        <article class="section" id="content">
-          <h2>Next-week content intelligence</h2>
-          <div class="caption">Argus turns competitor movement into Algolia content opportunities.</div>
           <div class="content-plan">
             <div class="content-line">
-              <strong>Hook: AI search is not a feature. It is a relevance operating model.</strong>
-              <span>Use market movement to frame Algolia as durable infrastructure rather than a bolt-on feature narrative.</span>
+              <strong>Message to prepare: cheaper search is not cheaper relevance.</strong>
+              <span>Frame Algolia around commercial outcomes, operational quality, and time-to-value instead of raw infrastructure price.</span>
             </div>
             <div class="content-line">
-              <strong>Format: executive LinkedIn post plus technical proof article</strong>
-              <span>Pair a sharp category stance with evidence-backed implementation depth for PMM, digital commerce, and product leaders.</span>
+              <strong>Pattern to watch: AI search narratives are becoming economic narratives.</strong>
+              <span>Competitors are not just selling capability; they are selling lower perceived cost and packaged simplicity.</span>
             </div>
             <div class="content-line">
-              <strong>Do not copy: competitor AI-merchandising language</strong>
-              <span>Borrow the market tension, not the phrasing. Argus recommends a relevance-first counter-frame.</span>
+              <strong>Content suggestion: the hidden cost of "cheap" search.</strong>
+              <span>Make the piece evidence-backed, not defensive. Show where relevance quality, merchandising control, and implementation risk affect total cost.</span>
             </div>
           </div>
         </article>
 
-        <aside class="section" id="actions">
-          <h2>Action rail</h2>
-          <div class="caption">Only workflow-backed actions appear here.</div>
+        <article class="section role-section" id="role-sales" data-role-section="sales">
+          <h2>Sales lens</h2>
+          <div class="caption">Competitive moves sales should know before the next deal cycle.</div>
+          <div class="lens-proofline" aria-label="Sales lens evidence summary">
+            <span>43 proof sources</span>
+            <span>pricing signal active</span>
+            <span>verify before field use</span>
+          </div>
           <div class="lane">
             <div class="intel">
               <span class="bar red"></span>
               <div>
-                <h3>Competitive Intelligence</h3>
-                <p>Resolve executive speech blind lanes before calling the week quiet.</p>
+                <h3>AWS pricing pressure needs objection handling</h3>
+                <p>If cheaper OpenSearch packaging is confirmed, sales needs a crisp economic-value response, not a feature comparison.</p>
               </div>
-              <span class="chip red">today</span>
-            </div>
-            <div class="intel">
-              <span class="bar"></span>
-              <div>
-                <h3>Product Marketing</h3>
-                <p>Draft relevance operating model counter-angle once evidence clears.</p>
-              </div>
-              <span class="chip">48h</span>
+              <span class="chip red">act</span>
             </div>
             <div class="intel">
               <span class="bar green"></span>
               <div>
-                <h3>Executive Review</h3>
-                <p>Weekly thesis review will use high-tier synthesis if material deltas hold.</p>
+                <h3>Bloomreach case-study motion remains retail-heavy</h3>
+                <p>Useful for vertical sales context, but not a broad displacement threat this week.</p>
               </div>
-              <span class="chip green">Fri</span>
+              <span class="chip green">normal</span>
+            </div>
+            <div class="intel">
+              <span class="bar amber"></span>
+              <div>
+                <h3>Coveo AI merchandising pitch is worth watching</h3>
+                <p>Potential objection: "AI merchandising" as a packaged buying narrative. Needs evidence before enablement update.</p>
+              </div>
+              <span class="chip amber">watch</span>
+            </div>
+          </div>
+        </article>
+
+        <aside class="section role-section" id="role-product" data-role-section="product">
+          <h2>Product lens</h2>
+          <div class="caption">Product, technical, integration, and partner movement that may affect roadmap or positioning.</div>
+          <div class="lens-proofline" aria-label="Product lens evidence summary">
+            <span>36 technical sources</span>
+            <span>docs watched</span>
+            <span>no launch emergency</span>
+          </div>
+          <div class="lane">
+            <div class="intel">
+              <span class="bar amber"></span>
+              <div>
+                <h3>Validate OpenSearch packaging details</h3>
+                <p>Product should verify whether the move is pricing-only, packaging, managed service, or technical capability.</p>
+              </div>
+              <span class="chip amber">watch</span>
+            </div>
+            <div class="intel">
+              <span class="bar"></span>
+              <div>
+                <h3>Partner integration watchlist</h3>
+                <p>Track new competitor integrations with Salesforce, commercetools, CMS, PIM, and commerce platforms.</p>
+              </div>
+              <span class="chip">monitor</span>
+            </div>
+            <div class="intel">
+              <span class="bar green"></span>
+              <div>
+                <h3>No confirmed product-launch emergency</h3>
+                <p>Current attention is commercial and messaging-led until technical evidence says otherwise.</p>
+              </div>
+              <span class="chip green">normal</span>
             </div>
           </div>
         </aside>
       </section>
 
       <section class="evidence-strip" id="sources">
-        <article class="section">
-          <h2>Evidence and coverage</h2>
-          <div class="caption">The cockpit exposes confidence, not just conclusions.</div>
+        <article class="section" id="trust-state">
+          <h2>The eye behind the lenses</h2>
+          <div class="caption">This is the quantified sightline behind Marketing, Sales, and Product: how much Argus saw, how healthy the source base is, and where confidence is constrained.</div>
           <div class="evidence-grid">
-            <div class="evidence"><strong>143</strong><span>active sources in ledger</span></div>
-            <div class="evidence"><strong>91%</strong><span>owned-web source health</span></div>
-            <div class="evidence"><strong>2</strong><span>channels degraded: speech, YouTube</span></div>
-            <div class="evidence"><strong>0</strong><span>private data connectors claimed</span></div>
-          </div>
-        </article>
-
-        <article class="section" id="admin">
-          <h2>Access and model control</h2>
-          <div class="caption">Multi-channel access without permission theatre.</div>
-          <div class="channels">
-            <div class="channel">
-              <div><strong>Google SSO</strong><span>OIDC live first, SAML and SCIM planned for IT adoption.</span></div>
-              <span class="chip green">ready</span>
-            </div>
-            <div class="channel">
-              <div><strong>Telegram</strong><span>First live channel, mapped to canonical user identities.</span></div>
-              <span class="chip green">live</span>
-            </div>
-            <div class="channel">
-              <div><strong>WhatsApp</strong><span>Cloud API adapter, opt-in and template rules required.</span></div>
-              <span class="chip amber">planned</span>
-            </div>
-            <div class="channel">
-              <div><strong>Apple Messages for Business</strong><span>Enterprise route for iMessage-style access.</span></div>
-              <span class="chip amber">planned</span>
-            </div>
-            <div class="channel">
-              <div><strong>Model provider</strong><span>Gemini first. OpenAI, Anthropic, and Azure OpenAI behind adapters.</span></div>
-              <span class="chip">agnostic</span>
-            </div>
+            <div class="evidence"><strong>143</strong><span>active sources feeding the lenses</span></div>
+            <div class="evidence"><strong>91%</strong><span>owned-web source health behind the read</span></div>
+            <div class="evidence"><strong>2</strong><span>degraded sightlines: speech, YouTube</span></div>
+            <div class="evidence"><strong>0</strong><span>private connectors claimed or implied</span></div>
           </div>
         </article>
       </section>
 
-      <section class="route-map" id="reports">
-        <div class="route-head">
-          <div>
-            <h2>Product route model</h2>
-            <div class="caption">In the real app, these are routes. In this static mockup, the top nav uses anchors only so the file can be browsed locally.</div>
-          </div>
-          <span class="chip">app IA</span>
-        </div>
-        <div class="route-grid">
-          <article class="route-card">
-            <div>
-              <strong>Login</strong>
-              <p>Pre-auth screen with Google SSO, access request, denied state, and no cockpit chrome.</p>
-            </div>
-            <div class="route">/login</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Command</strong>
-              <p>Argus read, Market Field, confidence state, blind lanes, and priority actions.</p>
-            </div>
-            <div class="route">/command</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Signals</strong>
-              <p>Material deltas, executive speech, GTM narrative, pricing, docs, and suppressed diagnostics.</p>
-            </div>
-            <div class="route">/signals</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Sources</strong>
-              <p>Source ledger, coverage matrix, source health, candidates, retirements, and blocked lanes.</p>
-            </div>
-            <div class="route">/sources</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Content</strong>
-              <p>Competitor content movement, traction signals, hooks, outlines, and weekly Algolia plan.</p>
-            </div>
-            <div class="route">/content</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Actions</strong>
-              <p>Workflow-backed owners, due windows, confidence, evidence, status, and review lifecycle.</p>
-            </div>
-            <div class="route">/actions</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Reports</strong>
-              <p>Daily, weekly, and monthly archive with quality review, delivery state, and exports.</p>
-            </div>
-            <div class="route">/reports</div>
-          </article>
-          <article class="route-card">
-            <div>
-              <strong>Admin</strong>
-              <p>Users, roles, SSO, channel identity linking, model providers, integrations, and schedules.</p>
-            </div>
-            <div class="route">/admin</div>
-          </article>
-        </div>
-      </section>
     </main>
   </div>
+  <script>
+    (() => {
+      const rail = document.querySelector('.role-rail');
+      if (!rail) return;
+
+      const links = [...rail.querySelectorAll('a[data-role]')];
+      const sections = [...document.querySelectorAll('[data-role-section]')];
+      const attentionRows = [...document.querySelectorAll('details.attention-row')];
+      const inlineBriefs = [...document.querySelectorAll('details.inline-brief')];
+      let activeRole = links.find((link) => link.classList.contains('active'))?.dataset.role || 'marketing';
+      let clickLockUntil = 0;
+
+      const linkFor = (role) => links.find((link) => link.dataset.role === role);
+
+      const moveUnderline = (link) => {
+        if (!link) return;
+        const railRect = rail.getBoundingClientRect();
+        const linkRect = link.getBoundingClientRect();
+        rail.style.setProperty('--rail-x', `${linkRect.left - railRect.left}px`);
+        rail.style.setProperty('--rail-w', `${linkRect.width}px`);
+      };
+
+      const setActiveRole = (role) => {
+        const activeLink = linkFor(role);
+        if (!activeLink) return;
+        activeRole = role;
+        links.forEach((link) => {
+          const isActive = link === activeLink;
+          link.classList.toggle('active', isActive);
+          if (isActive) link.setAttribute('aria-current', 'true');
+          else link.removeAttribute('aria-current');
+        });
+        sections.forEach((section) => {
+          section.classList.toggle('is-role-active', section.dataset.roleSection === role);
+        });
+        moveUnderline(activeLink);
+      };
+
+      const openAttentionRow = (row, updateHash = false) => {
+        if (!row) return;
+        attentionRows.forEach((other) => {
+          if (other !== row) other.open = false;
+        });
+        row.open = true;
+        if (updateHash && row.id) history.replaceState(null, '', `#${row.id}`);
+      };
+
+      const openInlineBrief = (brief, updateHash = false) => {
+        if (!brief) return;
+        const parentRow = brief.closest('details.attention-row');
+        if (parentRow) openAttentionRow(parentRow);
+        inlineBriefs.forEach((other) => {
+          if (other !== brief) other.open = false;
+        });
+        brief.open = true;
+        if (updateHash && brief.id) history.replaceState(null, '', `#${brief.id}`);
+      };
+
+      links.forEach((link) => {
+        link.addEventListener('mouseenter', () => moveUnderline(link));
+        link.addEventListener('focus', () => moveUnderline(link));
+        link.addEventListener('mouseleave', () => moveUnderline(linkFor(activeRole)));
+        link.addEventListener('blur', () => moveUnderline(linkFor(activeRole)));
+        link.addEventListener('click', () => {
+          clickLockUntil = Date.now() + 1200;
+          setActiveRole(link.dataset.role);
+        });
+      });
+
+      attentionRows.forEach((row) => {
+        row.addEventListener('toggle', () => {
+          if (row.open) openAttentionRow(row, true);
+        });
+      });
+
+      inlineBriefs.forEach((brief) => {
+        brief.addEventListener('toggle', () => {
+          if (brief.open) openInlineBrief(brief, true);
+        });
+      });
+
+      const observer = new IntersectionObserver((entries) => {
+        if (Date.now() < clickLockUntil) return;
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => Math.abs(a.boundingClientRect.top - 96) - Math.abs(b.boundingClientRect.top - 96));
+        if (visible[0]) setActiveRole(visible[0].target.dataset.roleSection);
+      }, { rootMargin: '-12% 0px -70% 0px', threshold: [0, .1, .25, .5] });
+
+      sections.forEach((section) => observer.observe(section));
+      window.addEventListener('hashchange', () => {
+        const target = document.querySelector(location.hash);
+        if (target?.matches('details.inline-brief')) {
+          openInlineBrief(target);
+          target.scrollIntoView({ block: 'nearest' });
+          return;
+        }
+        if (target?.matches('details.attention-row')) {
+          openAttentionRow(target);
+          return;
+        }
+        const role = target?.dataset.roleSection || linkFor(location.hash.replace('#role-', ''))?.dataset.role;
+        if (role) setActiveRole(role);
+      });
+      window.addEventListener('resize', () => moveUnderline(linkFor(activeRole)));
+      setActiveRole(activeRole);
+      const initialTarget = document.querySelector(location.hash);
+      if (initialTarget?.matches('details.inline-brief')) openInlineBrief(initialTarget);
+      if (initialTarget?.matches('details.attention-row')) openAttentionRow(initialTarget);
+    })();
+  </script>
 </body>
 </html>

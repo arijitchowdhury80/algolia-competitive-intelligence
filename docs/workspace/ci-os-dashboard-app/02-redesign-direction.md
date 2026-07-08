@@ -30,12 +30,13 @@ The first viewport should answer:
 
 ## Signature Element
 
-The cockpit gets a Market Field:
+The cockpit gets a Competitor Attention Barometer:
 
-- Competitors on one axis.
-- Signal families on the other.
-- Intensity, confidence, and blind spots visible together.
-- The field is not decorative; it is the visual grammar of the product.
+- One bar per competitor.
+- Score is attention needed this week, 0 to 100.
+- Color is a discrete state: green normal, blue monitor, amber watch, red act now.
+- The highest-priority competitor must be obvious without reading a legend.
+- The visual should be screenshot-ready for Telegram, WhatsApp, or executive brief sharing.
 
 ## Visual System
 
@@ -54,11 +55,12 @@ Layout:
 
 - Slim top command rail instead of heavy industrial sidebar.
 - Hero is Argus' strategic read, not a metric block.
-- Market Field sits in the first screen.
+- Competitor Attention Barometer sits in the first screen.
 - Supporting panels are dense but editorial.
 - Operator details exist, but below the executive cockpit.
 - Login is a separate pre-auth route, never embedded inside the authenticated cockpit.
-- Nav items are app routes in production; anchors exist only in the static mockup for browsing.
+- The top command rail is role-aware. Role pills act as navigation, anchors, and state setters; selected screens inherit the active role lens.
+- Product routes exist under the role lens; anchors exist only in the static mockup for browsing.
 
 Writing:
 
@@ -82,7 +84,7 @@ Not:
 Production routes:
 
 - `/login`: Google SSO, access request, and denied-state handling.
-- `/command`: Argus read, Market Field, priority actions, confidence state.
+- `/command`: Argus read, Competitor Attention Barometer, priority actions, confidence state.
 - `/signals`: material deltas, signal families, detail drawer, evidence.
 - `/sources`: source ledger, coverage, blind lanes, candidates, retirements.
 - `/content`: competitor content movement and Algolia content recommendations.
@@ -91,3 +93,32 @@ Production routes:
 - `/admin`: SSO, users, channels, model providers, integrations, schedules.
 
 The mockup should show the route model as a product map, not by placing every screen inside the command cockpit.
+
+## Role-Aware Command Rail
+
+The top rail should default to role lenses:
+
+- Marketing
+- Sales
+- Product
+
+Marketing covers product marketing, field marketing, content, brand, campaigns, messaging, positioning, audience attention, and momentum shifts. Do not fragment it into separate PMM and field-marketing rails.
+
+Sales covers pricing, offers, pitches, analyst movement, case studies, wins, proof points, objections, and other deal-facing competitive movement.
+
+Product covers product launches, technical recommendations, docs, changelogs, partner solutions, ISV integrations, and roadmap implications.
+
+Admin remains available as an operational route for users, SSO, channel identity, schedules, model providers, and integrations. It is not one of the three primary daily intelligence lenses.
+
+When a lens is selected, the current route should filter or reorder content to match that lens. This is now a global UX SOP directive, not a CI-OS-only decision.
+
+## Human-Readable Status Visuals
+
+The old dot matrix was rejected because it required too much decoding. The replacement must follow the global human-readable status visual SOP:
+
+- no subtle shade systems
+- no unexplained dots
+- no hidden metric colors
+- score meaning must be stated
+- colors must have text labels
+- visual must survive as a screenshot in chat

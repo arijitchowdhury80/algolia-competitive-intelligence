@@ -1,7 +1,7 @@
 # CI-OS Dashboard And App UX Spec
 
 Date: 2026-07-01
-Status: Planning baseline
+Status: Planning baseline; dashboard design still in progress
 Product: CI-OS
 Primary voice: Argus
 
@@ -10,6 +10,25 @@ Primary voice: Argus
 The CI-OS app is the executive and operator-facing surface where Argus publishes current intelligence, evidence, source health, workflow actions, and weekly content recommendations.
 
 It is not a vanity dashboard. It is the product face of the Competitive Intelligence OS.
+
+## Current Design Checkpoint
+
+As of 2026-07-01, the cockpit mockup is not final and should not be treated as build-ready.
+
+Read before continuing design:
+
+`docs/planning/CI-OS-dashboard-design-checkpoint-2026-07-01.md`
+
+The current accepted direction is a premium Argus cockpit with:
+
+- Luxury Editorial / Maison visual language
+- role-aware Marketing / Sales / Product command rail
+- Competitor Attention Barometer
+- in-row proof previews
+- inline report/article/source-bibliography expansion
+- evidence totality as `The eye behind the lenses`
+
+Remaining screens and states still need design work before implementation.
 
 ## User Types
 
@@ -34,7 +53,7 @@ Needs:
 - Strategic implications.
 - No raw implementation noise.
 
-### PMM / GTM User
+### Marketing User
 
 Needs:
 
@@ -43,6 +62,26 @@ Needs:
 - Claims and positioning changes.
 - Evidence links.
 - Suggested action queue.
+
+### Sales User
+
+Needs:
+
+- Pricing and packaging movement.
+- New competitor pitches.
+- Analyst rankings and awards.
+- New customer wins and case studies.
+- Deal-facing proof points and objections.
+
+### Product User
+
+Needs:
+
+- Product launches and technical changes.
+- Docs and changelog movement.
+- Partner and ISV integrations.
+- Technical claims and recommendations.
+- Roadmap and positioning implications.
 
 ### CI Operator / Admin
 
@@ -62,7 +101,7 @@ V1 login should use Google OAuth.
 Requirements:
 
 - Restrict by allowlisted Google accounts or approved email domains.
-- Roles: owner, executive_viewer, gtm_viewer, operator_admin.
+- Roles: owner, executive_viewer, marketing_viewer, sales_viewer, product_viewer, operator_admin.
 - Session expiration and logout.
 - No public access to sensitive operational views.
 - Public share links are out of scope for v1 unless explicitly approved.
@@ -82,12 +121,30 @@ Each channel may have different capabilities, but the same ACL and audit model a
 
 ## Navigation
 
-Primary nav should represent product routes, not one-page anchors.
+Primary navigation must follow the global Role-Aware Command Rail directive.
+
+The top command rail should be role-aware:
+
+- role pills are navigation, anchor points, and state setters
+- selecting a role changes what the current screen emphasizes
+- the selected role remains visible
+- UI cards, actions, and detail panels inherit that role lens
+- role availability respects ACL
+
+CI-OS role lenses:
+
+- Marketing: messaging shifts, what competitors are saying, audience attention, pattern shifts, momentum shifts, content angles, campaign posture, and positioning opportunities.
+- Sales: pricing changes, new offers, competitor pitches, analyst rankings, case studies, new wins, proof points, deal-facing objections, and commercial implications.
+- Product: competitor products, technical recommendations, integrations, partner solutions, ISV movement, docs and changelog changes, roadmap implications, and technical positioning.
+
+Admin is an operational control area for SSO, users, channels, integrations, model routing, and run health. It is not one of the three primary daily intelligence lenses.
+
+Primary app routes still exist, but they sit underneath the role lens.
 
 Production routes:
 
 - `/login`: pre-auth Google SSO and access request screen. No authenticated cockpit chrome.
-- `/command`: executive cockpit with Argus read, Market Field, trust state, and current priorities.
+- `/command`: role-aware cockpit with Argus read, Competitor Attention Barometer, trust state, and current priorities.
 - `/signals`: semantic deltas, executive speech, GTM narrative, product/docs, pricing, case studies, social/content signals, and suppressed diagnostics.
 - `/sources`: source ledger, coverage matrix, source family health, candidates, retirements, and blocked lanes.
 - `/content`: competitor content movement, traction signals, weekly Algolia content plan, hooks, outlines, and archive.
@@ -100,6 +157,7 @@ Static mockup rule:
 - The single-file HTML mockup may use anchors so it can be browsed locally.
 - The implemented app should use real routes or route-backed tabs.
 - Login must not appear inside the authenticated Command Center screen.
+- Top rail anchors in the static mockup represent role lenses; production should preserve route and role in the URL or state.
 
 Secondary controls:
 
@@ -134,6 +192,7 @@ First viewport:
 
 - Argus current read.
 - Trust bar: data freshness, source coverage, delivery status, model tier.
+- Competitor Attention Barometer: screenshot-ready ranked bar chart showing which competitor needs the most attention this week.
 - Material deltas.
 - Action queue preview.
 - Weekly content plan preview when cadence is weekly.
@@ -158,6 +217,31 @@ Data elements:
 - material delta count
 - false-negative audit status
 - delivery status
+
+Attention Barometer rules:
+
+- Score means attention needed this week, from 0 to 100.
+- Color states are discrete and labeled: green normal, blue monitor, amber watch, red act now.
+- The highest-attention competitor must be obvious without decoding a legend.
+- Clicking a competitor opens the reason: what changed, why it matters, evidence, recommended response, and confidence.
+- The section must be screenshot-ready for Telegram, WhatsApp, or executive brief sharing.
+- Do not duplicate the top competitor in a separate pill when the first row already communicates it.
+- Do not use separate stat boxes or legends that repeat the bar labels and row scores.
+- Each row must include an action cue so "watch" and "monitor" explain what the user should watch or monitor.
+- Every visible element must create a human reaction or action: notice, compare, click, verify, decide, or ignore.
+
+Hero rules:
+
+- Name the competitor that matters most.
+- State why it matters in business language.
+- Show or point to attention score and confidence without duplicating the adjacent barometer.
+- Show dominant threat category, decision posture, next artifact, or current constraint.
+- Show one action implication for Marketing, Sales, and Product.
+- Avoid dramatic but vague claims.
+- Avoid giant display copy that does not explain what happened.
+- Avoid repeating the selected barometer detail. The hero declares the read; the barometer detail explains the score.
+- Do not stretch the hero to fill vertical space if the adjacent intelligence visual is taller.
+- If the barometer sits beside the hero, the barometer owns the numeric score while the hero owns the operating posture.
 
 ## Screen 3: Signals
 
@@ -267,6 +351,7 @@ Purpose:
 Elements:
 
 - action queue
+- lens filter
 - owner filter
 - priority filter
 - status filter
@@ -286,6 +371,8 @@ Allowed owners:
 Rules:
 
 - No owner appears unless an `action_items` record exists.
+- Owners are workflow accountability labels, not top-rail navigation labels.
+- Marketing, Sales, and Product remain the primary user-facing lenses.
 - Quiet runs do not create fake actions.
 
 ## Screen 7: Reports
@@ -351,6 +438,31 @@ Use generated or rendered visuals when they clarify intelligence:
 - weekly content opportunity map
 
 Generated visuals must be labeled as generated and must never be treated as evidence.
+
+## Luxury Editorial Direction
+
+The cockpit should use the Luxury Editorial / Maison design system as the premium visual direction.
+
+Principles:
+
+- Intelligence is presented as a living market magazine, not an engineering status board.
+- Argus behaves like an intelligence editor: he finds the plot, names the characters, evaluates evidence, and recommends the next move.
+- The first viewport should combine editorial read, image-led story, and interactive attention index.
+- Typography, spacing, and imagery should carry the premium feel: Playfair Display, Inter, warm paper, charcoal ink, hairline rules, restrained gold, 0px radius.
+- Generated visuals are story surfaces, not evidence. Evidence opens through source/proof interactions.
+- No dense stat grids, duplicate metrics, generic AI dashboard copy, or decorative charts without action.
+
+## Brand And First-Viewport Restraint
+
+The app should present as `Argus` in user-facing chrome. `CI-OS` remains the planning/system name, not the primary product wordmark.
+
+Top chrome should contain only:
+
+- Argus wordmark and watch/aperture mark
+- role-aware lenses
+- quiet issue context such as cadence, scope, and date
+
+Avoid top-right command clutter unless the command is immediately meaningful and necessary. The first viewport should spend space on the logical reading path: editorial read, visual story, and action index.
 
 ## Dashboard Data Contract
 
