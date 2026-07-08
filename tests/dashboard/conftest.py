@@ -180,6 +180,29 @@ def thesis(
     }
 
 
+def prescription_row(
+    *,
+    title: str = "Brief sales on the pricing shift",
+    team: str = "Sales Enablement",
+    play: Optional[list[str]] = None,
+    urgency_window: str = "act_now",
+    expected_effect: str = "Sales stops improvising the response.",
+    evidence_urls: Optional[list[str]] = None,
+    effort: str = "S",
+    materiality_score: float = 0.8,
+) -> dict:
+    return {
+        "title": title,
+        "team": team,
+        "play": play if play is not None else ["Send a Slack summary", "Add a battlecard note"],
+        "urgency_window": urgency_window,
+        "expected_effect": expected_effect,
+        "evidence_urls": evidence_urls if evidence_urls is not None else ["https://rival.com/pricing"],
+        "effort": effort,
+        "materiality_score": materiality_score,
+    }
+
+
 def build_status_ok() -> dict:
     return {
         "build_id": "2026.07.08-1",

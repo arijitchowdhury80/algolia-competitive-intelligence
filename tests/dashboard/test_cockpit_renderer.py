@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from cios.dashboard.cockpit_renderer import _truncate, render_cockpit_html
-from cios.dashboard.types import AttentionLevel, DashboardState
+from cios.dashboard.types import AttentionLevel, DashboardState, PrescriptionSummary
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_STATE_PATH = (
@@ -352,7 +352,11 @@ def test_brief_link_falls_back_to_sibling_brief_html_when_published_today() -> N
     }]
     today_state = DashboardState.model_validate(payload)
     html_out = render_cockpit_html(today_state)
-    assert '<a class="deep-link" href="./brief.html">Open full brief</a>' in html_out
+    # Cache-busting fix: the sibling brief.html link is stamped with this
+    # run's generated_at epoch so a re-render always produces a fresh URL,
+    # never a link a stale cache/CDN could keep serving forever.
+    expected_version = int(today_state.generated_at.timestamp())
+    assert f'<a class="deep-link" href="./brief.html?v={expected_version}">Open full brief</a>' in html_out
     assert 'aria-disabled="true"' not in html_out
 
 
@@ -375,6 +379,144 @@ def test_brief_link_stays_no_brief_when_latest_report_is_not_today() -> None:
 
 
 # -- Bug 3: sources/bibliography accordion dedup -----------------------------
+
+
+# -- Plays UX fix (2026-07 findings): ranking, filtering, focus line --------
+
+
+def _make_prescription(**overrides) -> PrescriptionSummary:
+    base = dict(
+        title="Default play",
+        team="Marketing",
+        play=["Do the thing"],
+        urgency_window="this_month",
+        expected_effect="Some effect.",
+        evidence_urls=["https://example.com/a"],
+        effort="M",
+        materiality_score=0.5,
+        competitor_id=1,
+        competitor_name="AWS",
+    )
+    base.update(overrides)
+    return PrescriptionSummary(**base)
+
+
+def test_plays_are_ranked_by_urgency_then_materiality() -> None:
+    # Deliberately supplied out of order: lowest urgency/materiality first.
+    plays = [
+        _make_prescription(title="Low urgency, low materiality", urgency_window="this_month", materiality_score=0.1),
+        _make_prescription(title="Act now, low materiality", urgency_window="act_now", materiality_score=0.2),
+        _make_prescription(title="This week, high materiality", urgency_window="this_week", materiality_score=0.9),
+        _make_prescription(title="Act now, high materiality", urgency_window="act_now", materiality_score=0.8),
+    ]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+    marketing_start = html_out.index('id="role-marketing"')
+    sales_start = html_out.index('id="role-sales"')
+    marketing_html = html_out[marketing_start:sales_start]
+
+    order = [
+        marketing_html.index("Act now, high materiality"),
+        marketing_html.index("Act now, low materiality"),
+        marketing_html.index("This week, high materiality"),
+        marketing_html.index("Low urgency, low materiality"),
+    ]
+    assert order == sorted(order), "plays must render ranked by urgency then materiality"
+
+
+def test_top_three_plays_visible_rest_behind_more_expander() -> None:
+    plays = [
+        _make_prescription(title=f"Play {i}", urgency_window="this_month", materiality_score=1.0 - i / 10)
+        for i in range(5)
+    ]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+    marketing_start = html_out.index('id="role-marketing"')
+    sales_start = html_out.index('id="role-sales"')
+    marketing_html = html_out[marketing_start:sales_start]
+
+    for i in range(3):
+        assert f"Play {i}" in marketing_html
+    assert "Play 3" in marketing_html  # inside the +N more expander
+    assert "Play 4" in marketing_html
+    assert "+2 more play" in marketing_html
+
+
+def test_focus_here_first_line_on_top_ranked_play_only() -> None:
+    plays = [
+        _make_prescription(
+            title="Top play", urgency_window="act_now", materiality_score=0.9,
+            expected_effect="Reframes the pricing narrative before it hardens.",
+        ),
+        _make_prescription(
+            title="Second play", urgency_window="this_week", materiality_score=0.5,
+            expected_effect="A different effect that must not get the focus line.",
+        ),
+    ]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+    marketing_start = html_out.index('id="role-marketing"')
+    sales_start = html_out.index('id="role-sales"')
+    marketing_html = html_out[marketing_start:sales_start]
+
+    assert marketing_html.count("Focus here first:") == 1
+    assert "Focus here first: Reframes the pricing narrative before it hardens." in marketing_html
+    assert "Focus here first: A different effect" not in marketing_html
+
+
+def test_play_carries_data_competitor_attribute_for_client_side_filtering() -> None:
+    plays = [
+        _make_prescription(title="AWS play", competitor_id=1, competitor_name="AWS"),
+        _make_prescription(title="Unattributed play", competitor_id=None, competitor_name=None),
+    ]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+
+    assert 'data-competitor="1"' in html_out
+    assert 'data-competitor=""' in html_out
+    assert 'id="competitor-filter"' in html_out
+    assert 'id="clear-competitor-filter"' in html_out
+
+
+def test_barometer_row_carries_competitor_id_for_filter_selection() -> None:
+    cards = [_make_card(competitor_id=42, competitor_name="Elastic")]
+    state = DashboardState(tenant_id=1, cadence="daily", competitor_cards=cards)
+    html_out = render_cockpit_html(state)
+    assert 'data-competitor-id="42"' in html_out
+    assert 'data-competitor-name="Elastic"' in html_out
+
+
+def test_play_evidence_rendered_as_labeled_links_not_bare_urls() -> None:
+    plays = [_make_prescription(evidence_urls=["https://rival.com/pricing-page"])]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+    assert '<a href="https://rival.com/pricing-page" target="_blank" rel="noopener">rival.com</a>' in html_out
+
+
+def test_play_evidence_dedupes_duplicate_urls() -> None:
+    plays = [_make_prescription(evidence_urls=["https://rival.com/a", "https://rival.com/a", "https://rival.com/b"])]
+    state = DashboardState(tenant_id=1, cadence="daily", prescriptions=plays)
+    html_out = render_cockpit_html(state)
+    marketing_start = html_out.index('id="role-marketing"')
+    sales_start = html_out.index('id="role-sales"')
+    marketing_html = html_out[marketing_start:sales_start]
+    assert marketing_html.count('href="https://rival.com/a"') == 1
+    assert marketing_html.count('href="https://rival.com/b"') == 1
+
+
+def test_meta_cache_control_present() -> None:
+    state = _load_state()
+    html_out = render_cockpit_html(state)
+    assert '<meta http-equiv="Cache-Control" content="no-cache">' in html_out
+
+
+def test_generated_timestamp_visible_on_page_not_only_in_comment() -> None:
+    state = _load_state()
+    html_out = render_cockpit_html(state)
+    stamp = state.generated_at.strftime("%Y-%m-%d %H:%M UTC")
+    # Must be inside a visible element (generated-stamp span), not merely in
+    # an HTML comment.
+    assert f'<span class="generated-stamp">Generated {stamp}</span>' in html_out
 
 
 def test_bibliography_dedupes_duplicate_urls_preserving_first_occurrence() -> None:

@@ -244,6 +244,19 @@ class PrescriptionSummary(BaseModel):
     urgency_window: str  # act_now | this_week | this_month
     expected_effect: Optional[str] = None
     evidence_urls: list[str] = Field(default_factory=list)
+    effort: Optional[str] = None  # cios.prescribe.types.Effort value: S | M | L
+    materiality_score: Optional[float] = None
+    # Competitor attribution for the cockpit's barometer-row-filters-lenses
+    # interaction (2026-07 findings fix). Prescriptions carry no
+    # competitor_id of their own (cios.prescribe.types.Prescription is
+    # tenant-scoped, not competitor-scoped) -- the state builder derives
+    # this by tracing the prescription's own grounding evidence URLs back
+    # to whichever competitor's material-delta evidence cites the same
+    # URL. None when no match is found (honest "unattributed", never
+    # guessed): such plays are only visible in the "All competitors"
+    # default view, never claimed for a specific competitor filter.
+    competitor_id: Optional[int] = None
+    competitor_name: Optional[str] = None
 
 
 class DashboardState(BaseModel):

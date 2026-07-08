@@ -16,6 +16,7 @@ from .conftest import (
     build_status_ok,
     delta,
     full_coverage,
+    prescription_row,
     report_row,
     suppressed_row,
     thesis,
@@ -362,6 +363,47 @@ def test_signal_volume_contribution_is_capped():
     top_fewer = max(c.attention_score for c in state_fewer.competitor_cards)
     # 20 signals must not outscore 10 signals -- the cap makes them equal.
     assert top_many == top_fewer
+
+
+# -- prescription competitor attribution (barometer-filters-lenses fix) -----
+
+
+def test_prescription_is_attributed_to_the_competitor_whose_evidence_it_shares():
+    signals = {
+        1: [
+            delta(id=1, competitor_id=7, competitor_name="Coveo",
+                  evidence_ids=["https://coveo.com/pricing"]),
+        ]
+    }
+    prescriptions = {
+        1: [prescription_row(evidence_urls=["https://coveo.com/pricing"])],
+    }
+    builder = make_builder(coverage={1: full_coverage()}, signals=signals, prescriptions=prescriptions)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert len(state.prescriptions) == 1
+    play = state.prescriptions[0]
+    assert play.competitor_id == 7
+    assert play.competitor_name == "Coveo"
+
+
+def test_prescription_with_no_matching_evidence_is_honestly_unattributed():
+    signals = {1: [delta(id=1, competitor_id=7, evidence_ids=["https://coveo.com/pricing"])]}
+    prescriptions = {1: [prescription_row(evidence_urls=["https://unrelated.example.com/post"])]}
+    builder = make_builder(coverage={1: full_coverage()}, signals=signals, prescriptions=prescriptions)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert state.prescriptions[0].competitor_id is None
+    assert state.prescriptions[0].competitor_name is None
+
+
+def test_prescription_carries_effort_and_materiality_through():
+    prescriptions = {1: [prescription_row(effort="L", materiality_score=0.42)]}
+    builder = make_builder(coverage={1: full_coverage()}, prescriptions=prescriptions)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert state.prescriptions[0].effort == "L"
+    assert state.prescriptions[0].materiality_score == 0.42
 
 
 def test_different_stories_same_competitor_never_merge():

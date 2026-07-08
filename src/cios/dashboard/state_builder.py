@@ -177,7 +177,7 @@ class DashboardStateBuilder:
         build_status = self._build_build_status()
         report_history = self._build_report_history(tenant_id)
         suppressed_signals = self._build_suppressed_signals(tenant_id)
-        prescriptions = self._build_prescriptions(tenant_id)
+        prescriptions = self._build_prescriptions(tenant_id, deltas)
 
         return DashboardState(
             tenant_id=tenant_id,
@@ -369,7 +369,7 @@ class DashboardStateBuilder:
             for r in rows
         ]
 
-    def _build_prescriptions(self, tenant_id: int) -> list[PrescriptionSummary]:
+    def _build_prescriptions(self, tenant_id: int, deltas: list[dict]) -> list[PrescriptionSummary]:
         # No provider injected is not an error -- the prescription engine's
         # DB wiring is a tracked backlog item, not a schema table yet. The
         # cockpit renders the honest "no plays yet" empty state per lens
@@ -377,17 +377,59 @@ class DashboardStateBuilder:
         if self._prescriptions is None:
             return []
         rows = self._prescriptions.get_current_prescriptions(tenant_id)
-        return [
-            PrescriptionSummary(
-                title=r["title"],
-                team=r["team"],
-                play=list(r.get("play") or []),
-                urgency_window=r["urgency_window"],
-                expected_effect=r.get("expected_effect"),
-                evidence_urls=list((r.get("grounding") or {}).get("evidence_urls") or r.get("evidence_urls") or []),
+        evidence_to_competitor = self._evidence_to_competitor_map(deltas)
+        summaries: list[PrescriptionSummary] = []
+        for r in rows:
+            evidence_urls = list((r.get("grounding") or {}).get("evidence_urls") or r.get("evidence_urls") or [])
+            competitor_id, competitor_name = self._attribute_competitor(evidence_urls, evidence_to_competitor)
+            summaries.append(
+                PrescriptionSummary(
+                    title=r["title"],
+                    team=r["team"],
+                    play=list(r.get("play") or []),
+                    urgency_window=r["urgency_window"],
+                    expected_effect=r.get("expected_effect"),
+                    evidence_urls=evidence_urls,
+                    effort=r.get("effort"),
+                    materiality_score=r.get("materiality_score"),
+                    competitor_id=competitor_id,
+                    competitor_name=competitor_name,
+                )
             )
-            for r in rows
-        ]
+        return summaries
+
+    @staticmethod
+    def _evidence_to_competitor_map(deltas: list[dict]) -> dict[Any, tuple[Any, str]]:
+        """Maps each evidence URL a material delta cites to the competitor it
+        was cited for. Real backend attribution (not fabricated): a
+        prescription carries no competitor_id of its own
+        (cios.prescribe.types.Prescription is tenant-scoped only), so the
+        only truthful way to attribute a play to a competitor is to trace
+        its own grounding evidence URLs back to whichever signal(s) cited
+        that same URL. Built once per build() call from every delta this
+        cycle supplied (not just the merged/ranked cards), so a prescription
+        grounded in a duplicate-cluster member's evidence still resolves."""
+        mapping: dict[Any, tuple[Any, str]] = {}
+        for d in deltas:
+            competitor_id = d.get("competitor_id")
+            competitor_name = d.get("competitor_name") or f"Competitor {competitor_id}"
+            for url in d.get("evidence_ids") or []:
+                # First delta to cite a URL wins the attribution -- stable,
+                # deterministic, and matches the merge rule elsewhere in this
+                # module (best/first member's fields win over later dupes).
+                mapping.setdefault(url, (competitor_id, competitor_name))
+        return mapping
+
+    @staticmethod
+    def _attribute_competitor(
+        evidence_urls: list[str], evidence_to_competitor: dict[Any, tuple[Any, str]]
+    ) -> tuple[Optional[Any], Optional[str]]:
+        for url in evidence_urls:
+            match = evidence_to_competitor.get(url)
+            if match is not None:
+                return match
+        # No traceable overlap: an honest, unattributed play. Never guess.
+        return None, None
 
     def _build_build_status(self) -> BuildStatus:
         if self._build_status is None:

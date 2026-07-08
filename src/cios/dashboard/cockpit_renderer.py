@@ -1498,6 +1498,136 @@ _STYLE = """
       }
     }
 
+    /* Plays UX fix (2026-07 findings): .intel is now a <details> so each
+       play is clickable/expandable, following the same native-<details>
+       accordion pattern the mockup already uses for the barometer rows and
+       the inline "Sources" brief -- no new interaction model introduced. */
+    .intel {
+      display: block;
+      cursor: pointer;
+    }
+
+    .intel > summary {
+      display: grid;
+      grid-template-columns: 8px 1fr auto;
+      gap: 12px;
+      align-items: start;
+      padding: 14px 0;
+      list-style: none;
+    }
+
+    .intel > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .focus-line {
+      margin: 6px 0 0;
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .play-detail {
+      display: grid;
+      gap: 8px;
+      padding: 0 0 16px 20px;
+    }
+
+    .play-detail p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .play-detail strong {
+      color: var(--ink);
+    }
+
+    .play-steps {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .play-evidence {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 2px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .play-evidence a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 9px;
+      border: 1px solid rgba(26,26,26,.2);
+      color: var(--ink);
+      font-size: 10px;
+      letter-spacing: .04em;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+
+    .lens-more {
+      margin-top: 6px;
+    }
+
+    .lens-more > summary {
+      cursor: pointer;
+      list-style: none;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .lens-more > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .filter-chip {
+      grid-column: 1 / -1;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      width: fit-content;
+      margin: 0 0 18px;
+      padding: 7px 12px;
+      border: 1px solid var(--gold);
+      background: rgba(212,175,55,.09);
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+
+    .filter-chip button {
+      border: 0;
+      background: none;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .generated-stamp {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .attention-row,
       .attention-row::before,
@@ -1583,9 +1713,41 @@ _SCRIPT = """
         });
       });
 
+      const filterChip = document.getElementById('competitor-filter');
+      const filterLabel = document.getElementById('competitor-filter-label');
+      const clearFilterButton = document.getElementById('clear-competitor-filter');
+      const playItems = [...document.querySelectorAll('[data-competitor]')];
+
+      const clearCompetitorFilter = () => {
+        playItems.forEach((item) => { item.hidden = false; });
+        if (filterChip) filterChip.hidden = true;
+      };
+
+      const applyCompetitorFilter = (competitorId, competitorName) => {
+        if (!competitorId) {
+          clearCompetitorFilter();
+          return;
+        }
+        playItems.forEach((item) => {
+          item.hidden = item.dataset.competitor !== competitorId;
+        });
+        if (filterChip && filterLabel) {
+          filterLabel.textContent = `Filtering: ${competitorName || competitorId}`;
+          filterChip.hidden = false;
+        }
+      };
+
+      if (clearFilterButton) clearFilterButton.addEventListener('click', clearCompetitorFilter);
+
+      // Selecting a barometer row (click commits, per the design checkpoint)
+      // re-filters the three lens panels to that competitor's plays. Default
+      // is "All competitors" -- clearing the chip restores it.
       attentionRows.forEach((row) => {
         row.addEventListener('toggle', () => {
-          if (row.open) openAttentionRow(row, true);
+          if (row.open) {
+            openAttentionRow(row, true);
+            applyCompetitorFilter(row.dataset.competitorId, row.dataset.competitorName);
+          }
         });
       });
 
@@ -1656,6 +1818,17 @@ _URGENCY_CHIP: dict[str, tuple[str, str]] = {
     "this_month": ("green", "this month"),
 }
 
+# Same ordering as cios.prescribe.types.UrgencyWindow.weight, redeclared
+# here (dashboard has no import dependency on prescribe -- same convention
+# as every other mirrored enum in this package) so plays rank urgency-first,
+# materiality-second per the 2026-07 UX findings fix.
+_URGENCY_WEIGHT: dict[str, int] = {"act_now": 3, "this_week": 2, "this_month": 1}
+
+# Only the top-N ranked plays per lens are shown by default; the rest sit
+# behind a "+N more" expander (same <details> pattern as the rest of this
+# renderer -- no new interaction model).
+LENS_VISIBLE_LIMIT = 3
+
 
 def _esc(value: object) -> str:
     if value is None:
@@ -1720,7 +1893,16 @@ def _latest_report_link(state: DashboardState) -> tuple[str, Optional[str]]:
         return ("No brief on file yet for this cycle.", None)
     latest = state.report_history[0]
     meta = f"{latest.cadence.capitalize()} brief · {latest.report_date.isoformat()}"
-    href = latest.html_path or ("./brief.html" if latest.report_date == _date.today() else None)
+    if latest.html_path:
+        href = latest.html_path
+    elif latest.report_date == _date.today():
+        # Cache-busting fix (Arijit filed stale scores in production after a
+        # fix shipped): the sibling brief.html this same run publishes must
+        # not be served from a stale cache -- stamp the link with this run's
+        # generated_at epoch so a re-render always produces a fresh URL.
+        href = f"./brief.html?v={int(state.generated_at.timestamp())}"
+    else:
+        href = None
     return (meta, href)
 
 
@@ -1851,7 +2033,7 @@ def _render_barometer_row(state: DashboardState, group: _CompetitorGroup, *, is_
     aria_label = _esc(
         f"{group.competitor_name}, {bar_label.lower()}, score {score:g}. {cue_full}."
     )
-    return f"""<details class="attention-row {row_class}" id="{row_id}"{open_attr}>
+    return f"""<details class="attention-row {row_class}" id="{row_id}" data-competitor-id="{_esc(group.competitor_id)}" data-competitor-name="{_esc(group.competitor_name)}"{open_attr}>
   <summary class="attention-summary" aria-label="{aria_label}">
     <div class="competitor-label">
       <span class="competitor-name">{_esc(group.competitor_name)}</span>
@@ -1917,27 +2099,97 @@ def _render_lens_proofline(items: list[PrescriptionSummary]) -> str:
     return "".join(f"<span>{_esc(s)}</span>" for s in stats)
 
 
+def _play_rank_key(p: PrescriptionSummary) -> tuple[int, float]:
+    """Ranking key: urgency window first, materiality second (2026-07 UX
+    findings fix -- plays must be ranked, not shown in insertion order).
+    Python's sort is stable, so ties keep the builder's own deterministic
+    order rather than an arbitrary one."""
+    return (-_URGENCY_WEIGHT.get(p.urgency_window, 0), -(p.materiality_score or 0.0))
+
+
+def _rank_prescriptions(items: list[PrescriptionSummary]) -> list[PrescriptionSummary]:
+    return sorted(items, key=_play_rank_key)
+
+
+def _evidence_chip_label(url: str) -> str:
+    """A short, honest label for an evidence link chip -- the URL's own
+    host, never an invented source name."""
+    from urllib.parse import urlparse
+
+    host = urlparse(url).netloc or url
+    return host[4:] if host.startswith("www.") else host
+
+
+def _render_play_evidence(evidence_urls: list[str]) -> str:
+    # Per-play dedup, first-occurrence wins -- same rule as the barometer's
+    # bibliography (Bug 3 fix), applied here too so a play grounded in the
+    # same URL twice does not render two identical chips.
+    seen: set = set()
+    items: list[str] = []
+    for url in evidence_urls or []:
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        label = _esc(_evidence_chip_label(url))
+        items.append(f'<li><a href="{_esc(url)}" target="_blank" rel="noopener">{label}</a></li>')
+    if not items:
+        return '<ul class="play-evidence"><li><span>No evidence link on file for this play.</span></li></ul>'
+    return f'<ul class="play-evidence">{"".join(items)}</ul>'
+
+
+def _render_play(p: PrescriptionSummary, *, is_top: bool) -> str:
+    """One clickable/expandable play. Folded: title + urgency chip (+ the
+    "Focus here first" line on the #1 ranked play). Expanded: play steps,
+    expected effect, effort, urgency, and labeled evidence links -- per the
+    2026-07 findings fix (plays were previously a single collapsed line with
+    no drill-down)."""
+    color, label = _URGENCY_CHIP.get(p.urgency_window, ("", p.urgency_window))
+    bar_class = f" {color}" if color else ""
+    chip_class = f" {color}" if color else ""
+    steps = [s.strip() for s in p.play if s and s.strip()]
+    steps_html = "".join(f"<li>{_esc(step)}</li>" for step in steps) or "<li>No concrete step on file.</li>"
+    focus_line = (
+        f'<p class="focus-line">Focus here first: {_esc(p.expected_effect)}</p>'
+        if is_top and p.expected_effect
+        else ""
+    )
+    effort_label = _esc(p.effort) if p.effort else "unknown"
+    effect_text = _esc(p.expected_effect) if p.expected_effect else "Not on file."
+    competitor_attr = "" if p.competitor_id is None else _esc(p.competitor_id)
+    return (
+        f'<details class="intel" data-competitor="{competitor_attr}">\n'
+        "  <summary>\n"
+        f'    <span class="bar{bar_class}"></span>\n'
+        "    <div>\n"
+        f"      <h3>{_esc(p.title)}</h3>\n"
+        f"      {focus_line}\n"
+        "    </div>\n"
+        f'    <span class="chip{chip_class}">{_esc(label)}</span>\n'
+        "  </summary>\n"
+        '  <div class="play-detail">\n'
+        f'    <ol class="play-steps">{steps_html}</ol>\n'
+        f"    <p><strong>Expected effect:</strong> {effect_text}</p>\n"
+        f"    <p><strong>Effort:</strong> {effort_label} &middot; <strong>Urgency:</strong> {_esc(label)}</p>\n"
+        f"    {_render_play_evidence(p.evidence_urls)}\n"
+        "  </div>\n"
+        "</details>"
+    )
+
+
 def _render_lens_body(items: list[PrescriptionSummary]) -> str:
     if not items:
         return '<div class="lane"><p class="caption">No prescribed plays for this lens this cycle.</p></div>'
-    lines = []
-    for p in items:
-        color, label = _URGENCY_CHIP.get(p.urgency_window, ("", p.urgency_window))
-        bar_class = f" {color}" if color else ""
-        chip_class = f" {color}" if color else ""
-        steps = _esc(" ".join(step.strip() for step in p.play if step and step.strip()))
-        effect = f" {_esc(p.expected_effect)}" if p.expected_effect else ""
-        lines.append(
-            '<div class="intel">\n'
-            f'  <span class="bar{bar_class}"></span>\n'
-            "  <div>\n"
-            f"    <h3>{_esc(p.title)}</h3>\n"
-            f"    <p>{steps}{effect}</p>\n"
-            "  </div>\n"
-            f'  <span class="chip{chip_class}">{_esc(label)}</span>\n'
-            "</div>"
+    ranked = _rank_prescriptions(items)
+    visible = ranked[:LENS_VISIBLE_LIMIT]
+    rest = ranked[LENS_VISIBLE_LIMIT:]
+    body = "".join(_render_play(p, is_top=(i == 0)) for i, p in enumerate(visible))
+    if rest:
+        more_lines = "".join(_render_play(p, is_top=False) for p in rest)
+        body += (
+            f'<details class="lens-more"><summary>+{len(rest)} more play{"s" if len(rest) != 1 else ""}</summary>'
+            f'<div class="lane">{more_lines}</div></details>'
         )
-    return f'<div class="lane">{"".join(lines)}</div>'
+    return f'<div class="lane">{body}</div>'
 
 
 def _render_lens(
@@ -1980,7 +2232,18 @@ def _render_sections(state: DashboardState) -> str:
         caption="Product, technical, integration, and partner movement that may affect roadmap or positioning.",
         items=_lens_prescriptions(state, _PRODUCT_TEAMS),
     )
-    return f'<section class="sections" id="signals">\n{marketing}\n{sales}\n{product}\n</section>'
+    # Barometer-selection-filters-lenses chip (2026-07 findings fix). Default
+    # state is "All competitors" (hidden, no filter applied) -- JS shows it
+    # and fills in the name only once a barometer row is opened/selected.
+    filter_chip = (
+        '<div class="filter-chip" id="competitor-filter" hidden>\n'
+        '  <span id="competitor-filter-label"></span>\n'
+        '  <button type="button" id="clear-competitor-filter">All competitors</button>\n'
+        "</div>"
+    )
+    return (
+        f'<section class="sections" id="signals">\n{filter_chip}\n{marketing}\n{sales}\n{product}\n</section>'
+    )
 
 
 def _render_eye_behind_the_lenses(state: DashboardState) -> str:
@@ -2021,11 +2284,19 @@ def render_cockpit_html(state: DashboardState) -> str:
     else:
         logo_markup = '<span class="sigil sigil-fallback" aria-hidden="true">A</span>'
 
+    # Cache-busting fix (Arijit personally saw stale scores after a fix
+    # shipped, on a static-HTML-behind-Caddy setup that has no natural
+    # invalidation): no-cache directive in the head, this run's generated_at
+    # visible on the page itself (not just an HTML comment), and internal
+    # links stamped with the same epoch (see _latest_report_link).
+    generated_label = _esc(state.generated_at.strftime("%Y-%m-%d %H:%M UTC"))
+
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache">
   <title>Argus Competitive Intelligence Cockpit</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2039,6 +2310,7 @@ def render_cockpit_html(state: DashboardState) -> str:
         {logo_markup}
         <span>
           <strong>Argus</strong>
+          <span class="generated-stamp">Generated {generated_label}</span>
         </span>
       </a>
       <nav class="role-rail" aria-label="Role-aware command rail">
