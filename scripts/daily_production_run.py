@@ -718,9 +718,16 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
     for c in plan[:6]:
         competitor_id = comp_ids[c["name"]]
         vr = validator.validate(tenant_id, c["url"])
-        if not vr.accepted:
-            continue
-        source = lifecycle.upsert_validated(tenant_id, competitor_id, vr)
+        if vr.accepted:
+            source = lifecycle.upsert_validated(tenant_id, competitor_id, vr)
+        else:
+            # A duplicate is not a reason to skip COLLECTION -- the source
+            # already being in the ledger (e.g. via the V0 migration) is the
+            # normal steady state. Only skip when the source truly can't be
+            # collected (unreachable / invalid).
+            source = source_repo.get_by_normalized_url(tenant_id, normalize_url(c["url"]))
+            if source is None:
+                continue
         fetched = content_fetcher.fetch_content(c["url"])
         if fetched.status != FetchStatus.OK or not fetched.text:
             insert_health_event(app_conn, SourceHealthEvent(
