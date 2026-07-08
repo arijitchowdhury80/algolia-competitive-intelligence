@@ -25,8 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import psycopg
 from psycopg.rows import dict_row
 
-from cios.dashboard.cockpit_renderer import render_cockpit_html
-from cios.dashboard.html_renderer import render_dashboard_html
+from cios.dashboard.cockpit_renderer import render_brief_page, render_cockpit_html
 from cios.db.repos.dashboard import PgReportHistoryRepository, PgSuppressedSignalsRepository
 from cios.dashboard.state_builder import DashboardStateBuilder
 
@@ -88,16 +87,7 @@ def main() -> int:
             meta = json.loads(meta or "{}")
         brief_md = meta.get("reader_text") or meta.get("markdown") or ""
     if brief_md:
-        brief_html = runner.render_brief_page(brief_md, str(row["report_date"])) if hasattr(
-            runner, "render_brief_page"
-        ) else (
-            "<!doctype html><meta charset='utf-8'><title>Argus Daily Brief</title>"
-            "<body style=\"font-family:Georgia,serif;max-width:720px;margin:3rem auto;"
-            "line-height:1.6;color:#1a1a1a;background:#faf8f5;padding:0 1rem\">"
-            "<pre style='white-space:pre-wrap;font:inherit'>"
-            + brief_md.replace("&", "&amp;").replace("<", "&lt;")
-            + "</pre></body>"
-        )
+        brief_html = render_brief_page(brief_md, str(row["report_date"]))
         (out_dir / "brief.html").write_text(brief_html)
         print("brief.html written")
     else:

@@ -55,6 +55,7 @@ because dropping them would silently change the design's typography.
 from __future__ import annotations
 
 import html
+import re
 from dataclasses import dataclass
 from datetime import date as _date
 from typing import Optional
@@ -2340,6 +2341,137 @@ def render_cockpit_html(state: DashboardState) -> str:
     </main>
   </div>
   <script>{_SCRIPT}</script>
+</body>
+</html>
+"""
+
+
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_URL_RE = re.compile(r'(https?://[^\s<>"\']+)')
+
+
+def _inline_brief_md(text: str) -> str:
+    """Escapes then converts inline markdown: **bold** -> <strong>, bare
+    evidence URLs -> <a href>. Escaping first means the regexes never have
+    to worry about pre-existing HTML metacharacters (or about accidentally
+    unescaping something an attacker put in scraped evidence text)."""
+    escaped = html.escape(text)
+    escaped = _BOLD_RE.sub(r"<strong>\1</strong>", escaped)
+    escaped = _URL_RE.sub(r'<a href="\1" target="_blank" rel="noopener">\1</a>', escaped)
+    return escaped
+
+
+def _markdown_to_brief_html(markdown_text: str) -> str:
+    """Minimal, dependency-free markdown -> HTML for the reader_text/doctrine
+    brief (WHAT HAPPENED / WHERE TO PAY ATTENTION / YOUR PLAYS style
+    sections). No markdown package is already a dependency of this repo, and
+    the brief's markdown surface is small (headers, bold, paragraphs, bare
+    URLs), so a hand-rolled line-based parser is used instead of adding one.
+    '#'/'##' lines become <h1>/<h2>; blank lines separate paragraphs; every
+    other line is inline-processed and grouped into the current paragraph.
+    No raw '**' or leading '#' may survive into the output -- that literal
+    markdown leaking to the reader was the bug being fixed here."""
+    blocks: list[str] = []
+    current: list[str] = []
+
+    def flush() -> None:
+        if current:
+            para = " ".join(current)
+            blocks.append(f"<p>{_inline_brief_md(para)}</p>")
+            current.clear()
+
+    for raw_line in markdown_text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            flush()
+            continue
+        if stripped.startswith("## "):
+            flush()
+            blocks.append(f"<h2>{_inline_brief_md(stripped[3:].strip())}</h2>")
+        elif stripped.startswith("# "):
+            flush()
+            blocks.append(f"<h1>{_inline_brief_md(stripped[2:].strip())}</h1>")
+        else:
+            current.append(stripped)
+    flush()
+    return "\n".join(blocks)
+
+
+def render_brief_page(reader_text: str, report_date: str) -> str:
+    """Renders the reader_text/doctrine brief (the composed markdown-ish
+    "Your competitive picture" / WHAT HAPPENED / WHERE TO PAY ATTENTION /
+    YOUR PLAYS brief) into a real HTML page, using the SAME Luxury Editorial
+    design tokens as the cockpit (_STYLE above, verbatim -- not a new
+    design). This is the fix for the "unstyled raw markdown, literal '**'"
+    bug: no raw markdown syntax may reach the output, and the brief must
+    look like the same product as the cockpit, not a different one.
+
+    Gracefully honest when there is no content yet (new tenant, no reports
+    published) -- renders a plain "no brief content" line instead of an
+    empty white page or an exception."""
+    if not reader_text or not reader_text.strip():
+        body_html = '<p class="brief-empty">No brief content is available for this report yet.</p>'
+    else:
+        body_html = _markdown_to_brief_html(reader_text)
+
+    date_label = _esc(report_date)
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <title>Argus Daily Brief</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;650;780&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+  <style>
+    {_STYLE}
+    .brief-shell {{
+      width: min(760px, calc(100vw - 48px));
+      margin: 48px auto;
+      font-family: var(--font-body);
+      color: var(--ink);
+      background: var(--paper);
+    }}
+    .brief-shell .eyebrow {{
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }}
+    .brief-body h1, .brief-body h2 {{
+      font-family: var(--font-display);
+      color: var(--ink);
+      font-weight: 600;
+      margin: 32px 0 12px;
+    }}
+    .brief-body h1 {{ font-size: 28px; }}
+    .brief-body h2 {{ font-size: 20px; }}
+    .brief-body p {{
+      font-family: var(--font-body);
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--ink);
+      margin: 0 0 16px;
+    }}
+    .brief-body strong {{ color: var(--ink); font-weight: 650; }}
+    .brief-body a {{ color: var(--gold); text-decoration: underline; }}
+    .brief-empty {{ color: var(--muted); font-style: italic; }}
+  </style>
+</head>
+<body>
+  <div class="brief-shell">
+    <div class="eyebrow">Argus &middot; Daily Competitive Brief &middot; {date_label}</div>
+    <div class="brief-body">
+      {body_html}
+    </div>
+  </div>
 </body>
 </html>
 """

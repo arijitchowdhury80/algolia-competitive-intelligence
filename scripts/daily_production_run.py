@@ -451,6 +451,7 @@ class TenantResult:
         self.delivered = False
         self.deliveries: list[dict] = []
         self.dashboard_state = None
+        self.reader_text: Optional[str] = None
         self.errors: list[str] = []
 
 
@@ -1351,7 +1352,11 @@ async def run_tenant(
                                     new_evidence_ids=[s0["evidence_urls"][0]])
             insert_thesis(app_conn, tenant_id, s0["competitor_id"], updated.thesis, updated.confidence, updated.evidence_ids)
 
-    report_id = insert_report(app_conn, tenant_id, "daily", f"Argus daily brief - {slug}", reader_text[:200])
+    res.reader_text = reader_text
+    report_id = insert_report(
+        app_conn, tenant_id, "daily", f"Argus daily brief - {slug}", reader_text[:200],
+        metadata={"reader_text": reader_text},
+    )
 
     # Persist prescriptions as action_items (doctrine Addendum 2 point 3):
     # collateral generation is deliberately NOT triggered here (see
@@ -1469,15 +1474,16 @@ async def main() -> int:
 
         delivered_result = next((r for r in results if r.slug == deliver_tenant), None)
         if delivered_result is not None and delivered_result.dashboard_state is not None:
-            from cios.dashboard.cockpit_renderer import render_cockpit_html
-            from cios.dashboard.html_renderer import render_dashboard_html
+            from cios.dashboard.cockpit_renderer import render_brief_page, render_cockpit_html
 
-            # Two artifacts, same DashboardState: the cockpit (Arijit's
-            # designed Luxury Editorial surface) is the primary index page;
-            # the existing brief renderer is what the cockpit's "Open full
-            # brief" links point at. Neither replaces the other -- the
-            # publish-to-web-root cp lines that decide which file serves at
-            # the public URL live in the VPS shell orchestrator, not here.
+            # Two artifacts, same run: the cockpit (Arijit's designed Luxury
+            # Editorial surface, built from DashboardState) is the primary
+            # index page; brief.html is the composed reader_text/doctrine
+            # brief (WHAT HAPPENED / WHERE TO PAY ATTENTION / YOUR PLAYS)
+            # that the cockpit's "Open full brief" links point at -- NOT a
+            # re-render of the DashboardState. Neither replaces the other --
+            # the publish-to-web-root cp lines that decide which file serves
+            # at the public URL live in the VPS shell orchestrator, not here.
             html_path = Path(os.environ.get("CIOS_DASHBOARD_OUT", "/tmp/argus-dashboard.html"))
             html_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1486,7 +1492,7 @@ async def main() -> int:
             cockpit_path.parent.mkdir(parents=True, exist_ok=True)
             cockpit_path.write_text(cockpit_out, encoding="utf-8")
 
-            brief_out = render_dashboard_html(delivered_result.dashboard_state)
+            brief_out = render_brief_page(delivered_result.reader_text or "", str(date.today()))
             brief_path = html_path.parent / "brief.html"
             brief_path.write_text(brief_out, encoding="utf-8")
 
