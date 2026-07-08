@@ -133,6 +133,7 @@ class BrainEventType(str, Enum):
     MATERIALITY_SUPPRESSED = "materiality_suppressed"
     MALFORMED_LLM_OUTPUT = "malformed_llm_output"
     CONTRADICTION_FLAGGED = "contradiction_flagged"
+    SIGNAL_DEDUPED = "signal_deduped"  # near-duplicate candidates merged into one
 
 
 class BrainEvent(BaseModel):

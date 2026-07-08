@@ -87,6 +87,14 @@ _STYLE = """
     .report-row time { color: var(--muted); font-size: 12px; font-weight: 850; }
     .report-row b { display: block; color: var(--ink); margin-bottom: 3px; }
     .report-row span { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .footer-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .history-line-list { display: grid; gap: 4px; }
+    .history-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; color: var(--muted); font-size: 12px; }
+    .history-line time { font-weight: 850; }
+    .history-line b { color: var(--ink); font-weight: 700; }
+    .trust-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); padding: 8px 10px; }
+    .trust-row strong { color: var(--ink); font-size: 13px; }
+    .trust-row .trust-value { color: var(--muted); font-size: 12px; text-align: right; }
     details { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
     summary { width: fit-content; color: var(--blue); cursor: pointer; font-weight: 850; }
     @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } .side { position: static; } }
@@ -175,8 +183,13 @@ def _signal_cards_section(state: DashboardState) -> str:
                 f'<div><a href="{_e(eid)}">Evidence</a></div>' for eid in card.evidence_ids
             )
             owner_action = _e(card.action_cue)
+            seen_badge = (
+                f' <span class="pill">seen in {_e(card.duplicate_count)} sources</span>'
+                if card.duplicate_count > 1
+                else ""
+            )
             cards.append(f"""<div class="mini-card">
-              <strong>{_e(card.competitor_name)} &middot; materiality {_e(round(card.materiality_score, 2)) if card.materiality_score is not None else _e(round(card.attention_score, 1))}</strong>
+              <strong>{_e(card.competitor_name)} &middot; materiality {_e(round(card.materiality_score, 2)) if card.materiality_score is not None else _e(round(card.attention_score, 1))}</strong>{seen_badge}
               <p>{_e(card.top_signal_headline) or _e(card.what_changed) or "No headline recorded."}</p>
               <div class="note">Action: {owner_action or "No action cue recorded."}</div>
               {evidence_links}
@@ -195,20 +208,24 @@ def _suppressed_signals_section(state: DashboardState) -> str:
     """Mirrors the reference page's "Suppressed Signals" trust-diagnostics
     panel (docs/workspace/dashboard-reference/index.html), rendered as a
     .quality-list so each suppression reason is individually inspectable
-    instead of collapsed into one sentence."""
+    instead of collapsed into one sentence.
+
+    Renders NOTHING when there is nothing suppressed -- an empty panel with
+    an "empty" placeholder is noise on a daily page, not a useful trust
+    signal (live-audit finding #4)."""
     if not state.suppressed_signals:
-        rows_html = '<div class="empty">No suppressed signals this cycle.</div>'
-    else:
-        rows = []
-        for s in state.suppressed_signals:
-            detail = f"{_e(s.finding_count)} finding(s) suppressed" + (
-                f" &middot; {_e(s.suppressed_at)}" if s.suppressed_at else ""
-            )
-            note = f' &middot; {_e(s.notes)}' if s.notes else ""
-            rows.append(
-                f"""<div class="quality-row"><div class="mark warn">!</div><div><strong>{_e(s.reason)}</strong><span>{detail}{note}</span></div></div>"""
-            )
-        rows_html = f'<div class="quality-list">{"".join(rows)}</div>'
+        return ""
+
+    rows = []
+    for s in state.suppressed_signals:
+        detail = f"{_e(s.finding_count)} finding(s) suppressed" + (
+            f" &middot; {_e(s.suppressed_at)}" if s.suppressed_at else ""
+        )
+        note = f' &middot; {_e(s.notes)}' if s.notes else ""
+        rows.append(
+            f"""<div class="quality-row"><div class="mark warn">!</div><div><strong>{_e(s.reason)}</strong><span>{detail}{note}</span></div></div>"""
+        )
+    rows_html = f'<div class="quality-list">{"".join(rows)}</div>'
 
     return f"""
         <section class="panel" aria-labelledby="suppressed-title">
@@ -217,29 +234,53 @@ def _suppressed_signals_section(state: DashboardState) -> str:
         </section>"""
 
 
+_HISTORY_DISPLAY_CAP = 7
+
+
+def _dedupe_report_history(entries: list) -> list:
+    """Root-cause fix for "report history is noise": collapse to the latest
+    entry per report_date (retries/re-renders on the same day produce
+    multiple rows for one date), then drop any later entry whose summary
+    opens with the same text as one already kept for that date, and cap the
+    remainder to the most recent _HISTORY_DISPLAY_CAP. Order is preserved
+    from the input (callers pass most-recent-first)."""
+    latest_per_date: dict = {}
+    for entry in entries:
+        latest_per_date.setdefault(entry.report_date, entry)
+
+    seen_summaries: dict = {}
+    deduped = []
+    for entry in latest_per_date.values():
+        prefix = (entry.summary or "")[:80]
+        prior = seen_summaries.get((entry.report_date, prefix))
+        if prior is not None:
+            continue
+        seen_summaries[(entry.report_date, prefix)] = entry
+        deduped.append(entry)
+
+    return deduped[:_HISTORY_DISPLAY_CAP]
+
+
 def _report_history_section(state: DashboardState) -> str:
-    """Mirrors the reference page's "Report history" archive panel
-    (docs/workspace/dashboard-reference/index.html), .report-list /
-    .report-row markup exactly."""
-    if not state.report_history:
+    """Compact, single-line archive footer -- a daily page's report history
+    is provenance, not primary content, so it renders small and last
+    (live-audit finding #3). Entries without a real html_path render as
+    plain text, never a dead "Open" link."""
+    entries = _dedupe_report_history(state.report_history)
+    if not entries:
         rows_html = '<div class="empty">No reports generated yet.</div>'
     else:
         rows = []
-        for r in state.report_history:
+        for r in entries:
             title = _e(r.title) or f"{_e(r.report_date)} {_e(r.cadence)}"
-            summary = _e(r.summary) or "No summary recorded."
-            link = f'<a href="{_e(r.html_path)}">Open</a>' if r.html_path else ""
-            status_pill = f'<span class="pill">{_e(r.status)}</span>' if r.status else ""
-            rows.append(f"""<div class="report-row">
-              <time>{_e(r.report_date)}</time>
-              <div><b>{title}</b><span>{summary}</span></div>
-              <div>{status_pill}{link}</div>
-            </div>""")
-        rows_html = f'<div class="report-list">{"".join(rows)}</div>'
+            status = f" &middot; {_e(r.status)}" if r.status else ""
+            label = f'<a href="{_e(r.html_path)}">{title}</a>' if r.html_path else f"<b>{title}</b>"
+            rows.append(f'<div class="history-line"><time>{_e(r.report_date)}</time>{label}<span>{status}</span></div>')
+        rows_html = f'<div class="history-line-list">{"".join(rows)}</div>'
 
     return f"""
-        <section class="panel" aria-labelledby="history-title">
-          <div class="section-head"><div><div class="eyebrow">Where this came from</div><h2 id="history-title">Report history</h2></div><span class="pill">Automated archive</span></div>
+        <section class="footer-history" aria-labelledby="history-title">
+          <div class="section-head"><div class="eyebrow" id="history-title">Report history &middot; automated archive</div></div>
           {rows_html}
         </section>"""
 
@@ -264,80 +305,61 @@ def _theses_section(state: DashboardState) -> str:
         </section>"""
 
 
-def _coverage_side_panel(state: DashboardState) -> str:
+def _trust_line_panel(state: DashboardState) -> str:
+    """Collapses the old "Data limits" + "Run health" side panels into one
+    compact trust line -- sources checked, coverage, false-negative audit,
+    quality review, and delivery, each as a single row (live-audit finding
+    #5: two boxes of sub-boxes read as noise, not a scannable trust check).
+    """
     coverage = state.coverage
-    rows = []
-    for lane in coverage.lanes:
-        mark_class = "mark" if lane.ran and lane.error is None else "mark warn"
-        symbol = "✓" if lane.ran and lane.error is None else "!"
-        detail = _e(lane.error) if lane.error else "ran cleanly"
-        rows.append(f"""<div class="quality-row"><div class="{mark_class}">{symbol}</div><div><strong>{_e(lane.lane)}</strong><span>{detail}</span></div></div>""")
+    rh = state.run_health
+
+    checked = len(coverage.lanes)
+    ran_ok = sum(1 for l in coverage.lanes if l.ran and l.error is None)
+    sources_ok = checked > 0 and ran_ok == checked
+    coverage_score = coverage.coverage_score
+    coverage_value = f"{ran_ok}/{checked} lanes" + (
+        f" &middot; score {_e(round(coverage_score, 2))}" if coverage_score is not None else ""
+    )
 
     audit_status = coverage.false_negative_audit_status
     audit_ok = audit_status == "clean"
-    audit_class = "mark" if audit_ok else "mark warn"
-    audit_symbol = "✓" if audit_ok else "!"
-    rows.append(f"""<div class="quality-row"><div class="{audit_class}">{audit_symbol}</div><div><strong>False-negative audit</strong><span>{_e(audit_status) or "unknown"}</span></div></div>""")
 
-    if coverage.missing_source_families:
-        rows.append(
-            f"""<div class="quality-row"><div class="mark warn">!</div><div><strong>Missing source families</strong><span>{_e(", ".join(coverage.missing_source_families))}</span></div></div>"""
-        )
+    quality_status = rh.quality_review_status
+    quality_ok = quality_status in ("pass", "clean", "approved")
 
-    score = coverage.coverage_score
-    score_note = f"Coverage score: {_e(round(score, 4))}" if score is not None else "Coverage score not computed."
+    delivery_status = rh.delivery_status
+    delivery_ok = delivery_status in ("delivered", "sent", "ok")
 
-    return f"""
-        <section class="side-panel">
-          <div class="eyebrow">Coverage-before-quiet</div>
-          <h2>Data limits</h2>
-          <div class="quality-list">
-            {"".join(rows)}
-          </div>
-          <p class="note">{score_note}</p>
-        </section>"""
+    def row(label: str, ok: bool, value: str) -> str:
+        mark_class = "mark" if ok else "mark warn"
+        symbol = "✓" if ok else "!"
+        return f"""<div class="trust-row"><div class="{mark_class}">{symbol}</div><strong>{_e(label)}</strong><span class="trust-value">{value}</span></div>"""
 
-
-def _run_health_side_panel(state: DashboardState) -> str:
-    rh = state.run_health
     rows = [
-        f"""<div class="quality-row"><div class="mark">&#9679;</div><div><strong>Run</strong><span>{_e(rh.run_id) or "unknown"} &middot; generated {_e(rh.generated_at) or "unknown"}</span></div></div>""",
-        f"""<div class="quality-row"><div class="mark">&#9679;</div><div><strong>Model tier</strong><span>{_e(rh.model_tier) or "unknown"}</span></div></div>""",
-        f"""<div class="quality-row"><div class="mark">&#9679;</div><div><strong>Delivery</strong><span>{_e(rh.delivery_status) or "unknown"}</span></div></div>""",
-        f"""<div class="quality-row"><div class="mark">&#9679;</div><div><strong>Quality review</strong><span>{_e(rh.quality_review_status) or "unknown"}</span></div></div>""",
+        row("Sources checked", sources_ok, _e(coverage_value)),
+        row("Coverage", sources_ok, f"{_e(ran_ok)}/{_e(checked)} clean"),
+        row("False-negative audit", audit_ok, _e(audit_status) or "unknown"),
+        row("Quality review", quality_ok, _e(quality_status) or "unknown"),
+        row("Delivery", delivery_ok, _e(delivery_status) or "unknown"),
     ]
+
     return f"""
         <section class="side-panel">
-          <div class="eyebrow">Trust bar</div>
-          <h2>Run health</h2>
+          <div class="eyebrow">Can I trust this?</div>
+          <h2>Trust line</h2>
           <div class="quality-list">
             {"".join(rows)}
           </div>
         </section>"""
 
 
-def _build_status_side_panel(state: DashboardState) -> str:
-    bs = state.build_status
-    if not bs.services:
-        services_html = '<div class="empty">No service health reported for this build.</div>'
-    else:
-        rows = []
-        for svc in bs.services:
-            ok = svc.status == "ok"
-            mark_class = "mark" if ok else "mark warn"
-            symbol = "✓" if ok else "!"
-            rows.append(f"""<div class="quality-row"><div class="{mark_class}">{symbol}</div><div><strong>{_e(svc.name)}</strong><span>{_e(svc.status)}{" · " + _e(svc.detail) if svc.detail else ""}</span></div></div>""")
-        services_html = f'<div class="quality-list">{"".join(rows)}</div>'
-
-    error_note = f'<p class="note">Last error: {_e(bs.last_error)}</p>' if bs.last_error else ""
-    return f"""
-        <section class="side-panel">
-          <div class="eyebrow">System status</div>
-          <h2>Build health</h2>
-          <p class="note">Build {_e(bs.build_id) or "unknown"} &middot; {_e(bs.environment) or "unknown"} &middot; sha {_e(bs.git_sha) or "unknown"}</p>
-          {services_html}
-          {error_note}
-        </section>"""
+# Build/system status panel was removed (live-audit finding #5): the prior
+# .side-panel here rendered `state.build_status`, which every real run
+# populates with the honest "no build-status provider injected" stub --
+# never a truthful source. Bring it back once a real BuildStatusProvider
+# (git sha, deploy time, per-service health) is actually wired in
+# state_builder.py; until then an always-stub panel is worse than no panel.
 
 
 def render_dashboard_html(state: DashboardState) -> str:
@@ -353,22 +375,18 @@ def render_dashboard_html(state: DashboardState) -> str:
     tenant_label = _e(state.tenant_id)
 
     body_sections = "\n".join(
-        [
+        s
+        for s in [
             _hero_section(state),
             _signal_cards_section(state),
             _theses_section(state),
-            _suppressed_signals_section(state),
-            _report_history_section(state),
+            _suppressed_signals_section(state),  # "" when nothing suppressed
         ]
+        if s
     )
 
-    side_sections = "\n".join(
-        [
-            _coverage_side_panel(state),
-            _run_health_side_panel(state),
-            _build_status_side_panel(state),
-        ]
-    )
+    side_sections = _trust_line_panel(state)
+    footer_history = _report_history_section(state)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -397,6 +415,7 @@ def render_dashboard_html(state: DashboardState) -> str:
         {side_sections}
       </aside>
     </div>
+    {footer_history}
   </main>
 </body>
 </html>

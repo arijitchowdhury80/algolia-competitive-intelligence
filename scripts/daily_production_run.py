@@ -74,7 +74,7 @@ from cios.brain.fn_auditor import (
 from cios.brain.brief import compose_daily_brief
 from cios.brain.quality import QualityReviewer, UnparseableVerdict, extract_json_object
 from cios.brain.synthesizer import Synthesizer
-from cios.brain.thesis import ThesisEngine
+from cios.brain.thesis import ThesisEngine, find_similar_active_thesis
 from cios.brain.types import (
     CadenceActionItem,
     CoverageReport,
@@ -119,8 +119,10 @@ from cios.delivery.action_router import ActionRouter
 from cios.delivery.gated_commander import GatedDeliveryCommander
 from cios.delivery.telegram_format import render_brief_html
 from cios.delivery.types import Cadence, DeliveryRequest, ReportReadyEvent
+from cios.execspeech.providers import SnapshotQuoteProvider
+from cios.execspeech.scanner import ExecSpeechScanner
 from cios.hunter.lifecycle import SourceLifecycle
-from cios.hunter.types import HealthEventType, SourceHealthEvent
+from cios.hunter.types import Competitor, HealthEventType, SourceHealthEvent
 from cios.hunter.validator import SourceValidator, normalize_url
 from cios.learn.recorder import LearningRecorder
 from cios.learn.types import FalseNegativeAuditStatus
@@ -369,6 +371,9 @@ class _ReviewInput:
         self.evidence_texts = evidence_texts or {}
 
 
+DASHBOARD_DELTA_WINDOW_DAYS = 14  # cards are a "what's live now" view, not a full archive
+
+
 class DbMaterialSignals:
     def __init__(self, conn) -> None:
         self._conn = conn
@@ -383,9 +388,10 @@ class DbMaterialSignals:
                            d.recommended_action, d.confidence, d.evidence_ids
                     FROM semantic_deltas d JOIN competitors c ON c.id = d.competitor_id
                     WHERE d.tenant_id = %s AND d.quality_status = 'published'
+                      AND d.created_at >= now() - (%s || ' days')::interval
                     ORDER BY d.materiality_score DESC
                     """,
-                    (tenant_id,),
+                    (tenant_id, DASHBOARD_DELTA_WINDOW_DAYS),
                 )
                 return [dict(r) for r in cur.fetchall()]
 
@@ -507,6 +513,56 @@ def insert_report(conn, tenant_id, cadence, title, summary, metadata: Optional[d
                 (tenant_id, cadence, date.today(), title, summary, Json(metadata or {})),
             )
             return cur.fetchone()["id"]
+
+
+def insert_exec_speech_signal(conn, signal) -> int:
+    """Persists one SpeechSignal (cios.execspeech.types) row to
+    executive_speech_signals. Evidence rule (verbatim quote + source_url) is
+    already enforced upstream by ExecSpeechScanner; this is a pure write."""
+    with tenant_context(conn, signal.tenant_id):
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO executive_speech_signals
+                    (tenant_id, competitor_id, executive_name, executive_role, source_url,
+                     published_at, quote, claim, market_signal, confidence, evidence_finding_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (signal.tenant_id, signal.competitor_id, signal.executive_name, signal.executive_role,
+                 signal.source_url, signal.published_at, signal.quote, signal.claim,
+                 signal.market_signal, signal.confidence, signal.evidence_finding_id),
+            )
+            return cur.fetchone()["id"]
+
+
+def attach_thesis_evidence(conn, tenant_id, thesis_id, thesis_text, confidence, evidence_ids) -> None:
+    """Root-cause fix (task #25): attach to an existing active thesis
+    instead of spawning a new competitor_theses row for the same
+    competitor's restated hypothesis. Merges evidence (union, no
+    duplicates) and refreshes the thesis text/confidence in place --
+    non-destructive because the row's own updated_at moves forward but no
+    prior row is deleted or overwritten by a sibling."""
+    with tenant_context(conn, tenant_id):
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT supporting_delta_ids FROM competitor_theses WHERE id = %s",
+                (thesis_id,),
+            )
+            row = cur.fetchone()
+            existing = list(row["supporting_delta_ids"] or []) if row else []
+            merged_evidence = list(existing)
+            for e in evidence_ids:
+                if e not in merged_evidence:
+                    merged_evidence.append(e)
+            cur.execute(
+                """
+                UPDATE competitor_theses
+                SET thesis = %s, confidence = %s, supporting_delta_ids = %s, updated_at = now()
+                WHERE id = %s
+                """,
+                (thesis_text, confidence, Json(merged_evidence), thesis_id),
+            )
 
 
 def insert_thesis(conn, tenant_id, competitor_id, thesis_text, confidence, evidence_ids) -> int:
@@ -901,6 +957,7 @@ async def run_tenant(
     all_deltas_by_comp: dict[int, list] = {}
     snapshot_count = 0
     evidence_texts: dict[str, str] = {}
+    pages_by_comp: dict[int, dict[str, str]] = {}
 
     for c in plan[:6]:
         competitor_id = comp_ids[c["name"]]
@@ -930,6 +987,7 @@ async def run_tenant(
                                 title=c["name"], text=fetched.text))
         snapshot_count += 1
         evidence_texts[canonical_url(c["url"])] = fetched.text
+        pages_by_comp.setdefault(competitor_id, {})[canonical_url(c["url"])] = fetched.text
         facts, deltas = [], []
         article_urls = resolve_article_links(fetched.raw_html or fetched.text, c["url"])[:4]
         if article_urls:
@@ -938,6 +996,7 @@ async def run_tenant(
                 if a_fetched.status != FetchStatus.OK or not a_fetched.text:
                     continue
                 evidence_texts[canonical_url(a_url)] = a_fetched.text
+                pages_by_comp.setdefault(competitor_id, {})[canonical_url(a_url)] = a_fetched.text
                 a_ctx = SourceContext(competitor_id=competitor_id, competitor_name=c["name"],
                                       url=a_url, source_type=c["family"], priority=2)
                 a_facts, a_deltas = semantic_diff(a_ctx, "", a_fetched.text, date.today().isoformat())
@@ -963,7 +1022,33 @@ async def run_tenant(
 
     res.facts_extracted = len(all_facts)
     res.deltas_extracted = sum(len(v) for v in all_deltas_by_comp.values())
-    exec_speech_ran = False  # exec_speech scanner is not wired into this pass; honestly marked not-run.
+
+    # Exec-speech lane (task #25 root-cause fix): SnapshotQuoteProvider
+    # extracts attributed quotes from the pages the collection loop already
+    # fetched above -- no new network call, no fabricated pass. The lane
+    # genuinely runs whenever at least one page was collected; whether it
+    # finds a quote is a separate, honest question from whether it ran.
+    exec_speech_ran = collection_ran
+    exec_signals_by_comp: dict[int, list[dict]] = {}
+    if collection_ran:
+        try:
+            for comp_id, pages in pages_by_comp.items():
+                comp_name = next((n for n, i in comp_ids.items() if i == comp_id), f"competitor {comp_id}")
+                scanner = ExecSpeechScanner(providers=[SnapshotQuoteProvider(pages)])
+                signals = scanner.scan(Competitor(id=comp_id, tenant_id=tenant_id, name=comp_name))
+                for sig in signals:
+                    insert_exec_speech_signal(app_conn, sig)
+                if signals:
+                    exec_signals_by_comp[comp_id] = [
+                        {"quote": sig.quote, "claim": sig.claim, "source_url": sig.source_url}
+                        for sig in signals
+                    ]
+        except Exception as exc:  # noqa: BLE001
+            # A scan failure must not silently claim the lane ran clean, but
+            # it also must not block the rest of the pipeline (same
+            # bounded-blast-radius pattern as the own-brand read above).
+            exec_speech_ran = False
+            res.errors.append(f"exec_speech scan error: {exc}")
 
     fetch_run.status = "completed"
     fetch_run.finished_at = datetime.now(timezone.utc)
@@ -1007,18 +1092,20 @@ async def run_tenant(
     except Exception as exc:  # noqa: BLE001
         res.errors.append(f"own-brand error: {exc}")
 
+    # LLM budget guard (task #25 root-cause fix): synthesizing was hardcoded
+    # to the single competitor with the most deltas (`best_comp`), silently
+    # dropping every other competitor's signals for the whole cycle. Loop
+    # every competitor that has deltas this run, ranked by delta volume,
+    # capped so a busy day can't blow the run's LLM budget.
+    MAX_COMPETITORS_SYNTHESIZED_PER_RUN = 5
+
     synthesizer = Synthesizer(model=model)
     promoted: list[dict] = []
     verdict = None
-    best_comp = None
-    comp_name = None
-    best_deltas: list = []
     cold_start = False
+    synth_targets: list[tuple[int, str, list, list]] = []
+
     if all_deltas_by_comp:
-        best_comp = max(all_deltas_by_comp.items(), key=lambda kv: len(kv[1]))[0]
-        comp_name = next(n for n, i in comp_ids.items() if i == best_comp)
-        best_deltas = all_deltas_by_comp[best_comp]
-        comp_facts = [f for f in all_facts if f.competitor_id == best_comp]
         # Cold start: on a tenant's FIRST collection cycle there is no prior
         # snapshot, so nothing can honestly be called a 24h change. The quality
         # reviewer correctly kills recency claims on day one (seen live,
@@ -1041,21 +1128,38 @@ async def run_tenant(
             "like 'now pivots', 'just launched', 'this week'. Tomorrow's run "
             "compares against today's baseline and reports true changes."
         ) if cold_start else ""
-        inp = SynthesisInput(tenant_id=tenant_id, competitor_id=best_comp, competitor_name=comp_name,
-                             deltas=best_deltas, facts=comp_facts, exec_signals=[],
-                             prior_theses=[], coverage=coverage,
-                             tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
-                             extra_instructions=baseline_note)
-        try:
-            sr = await synthesizer.synthesize(inp)
-            verdict = sr.verdict.value
-            allowed = inp.evidence_urls()
-            for s in sr.signals:
-                urls_ok = bool(s.evidence_urls) and all(u in allowed for u in s.evidence_urls)
-                promoted.append({**s.model_dump(), "competitor_name": comp_name, "competitor_id": best_comp, "urls_ok": urls_ok})
-        except Exception as exc:  # noqa: BLE001
-            res.errors.append(f"synthesis error: {exc}")
-            verdict = "error"
+
+        ranked = sorted(all_deltas_by_comp.items(), key=lambda kv: len(kv[1]), reverse=True)
+        for comp_id, comp_deltas in ranked[:MAX_COMPETITORS_SYNTHESIZED_PER_RUN]:
+            comp_name = next(n for n, i in comp_ids.items() if i == comp_id)
+            comp_facts = [f for f in all_facts if f.competitor_id == comp_id]
+            synth_targets.append((comp_id, comp_name, comp_deltas, comp_facts))
+
+        verdicts_seen: list[Verdict] = []
+        for comp_id, comp_name, comp_deltas, comp_facts in synth_targets:
+            inp = SynthesisInput(
+                tenant_id=tenant_id, competitor_id=comp_id, competitor_name=comp_name,
+                deltas=comp_deltas, facts=comp_facts, exec_signals=exec_signals_by_comp.get(comp_id, []),
+                prior_theses=[], coverage=coverage,
+                tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
+                extra_instructions=baseline_note,
+            )
+            try:
+                sr = await synthesizer.synthesize(inp)
+                verdicts_seen.append(sr.verdict)
+                allowed = inp.evidence_urls()
+                for s in sr.signals:
+                    urls_ok = bool(s.evidence_urls) and all(u in allowed for u in s.evidence_urls)
+                    promoted.append({**s.model_dump(), "competitor_name": comp_name, "competitor_id": comp_id, "urls_ok": urls_ok})
+            except Exception as exc:  # noqa: BLE001
+                res.errors.append(f"synthesis error ({comp_name}): {exc}")
+
+        if promoted:
+            verdict = Verdict.SIGNALS.value
+        elif verdicts_seen and all(v == Verdict.QUIET for v in verdicts_seen):
+            verdict = Verdict.QUIET.value
+        else:
+            verdict = Verdict.COVERAGE_FAILURE.value if not coverage.all_ran else Verdict.QUIET.value
     else:
         verdict = Verdict.COVERAGE_FAILURE.value if not coverage.all_ran else Verdict.QUIET.value
     res.synth_verdict = verdict
@@ -1099,28 +1203,30 @@ async def run_tenant(
     insert_quality_review(app_conn, tenant_id, run_id, qr.status.value, qr.findings, qr.required_fixes)
 
     # One-shot REVISE loop on a failed verdict: feed required_fixes back to
-    # the synthesizer, re-review once. Fail after that and the brief stays
+    # the synthesizer for every competitor synthesized this run (not just
+    # the busiest one), re-review once. Fail after that and the brief stays
     # blocked by the gated commander -- never loosened.
-    if qr.status.value == "failed" and promoted and best_comp is not None:
+    if qr.status.value == "failed" and promoted and synth_targets:
         fixes_text = "; ".join(str(f) for f in qr.required_fixes)
-        revise_inp = SynthesisInput(
-            tenant_id=tenant_id, competitor_id=best_comp, competitor_name=comp_name,
-            deltas=best_deltas, coverage=coverage,
-            tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
-            extra_instructions=(
-                "REVISION PASS. An editorial review rejected specific claims. "
-                f"Required fixes: {fixes_text}. Remove or hedge every flagged "
-                "specific; keep only what the evidence text itself supports. "
-                "Dropping a signal entirely is acceptable."),
-        )
         try:
-            sr2 = await synthesizer.synthesize(revise_inp)
             promoted2 = []
-            allowed = revise_inp.evidence_urls()
-            for s in sr2.signals:
-                urls_ok = bool(s.evidence_urls) and all(u in allowed for u in s.evidence_urls)
-                promoted2.append({**s.model_dump(), "competitor_name": comp_name,
-                                  "competitor_id": best_comp, "urls_ok": urls_ok})
+            for comp_id, comp_name, comp_deltas, _comp_facts in synth_targets:
+                revise_inp = SynthesisInput(
+                    tenant_id=tenant_id, competitor_id=comp_id, competitor_name=comp_name,
+                    deltas=comp_deltas, coverage=coverage,
+                    tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
+                    extra_instructions=(
+                        "REVISION PASS. An editorial review rejected specific claims. "
+                        f"Required fixes: {fixes_text}. Remove or hedge every flagged "
+                        "specific; keep only what the evidence text itself supports. "
+                        "Dropping a signal entirely is acceptable."),
+                )
+                sr2 = await synthesizer.synthesize(revise_inp)
+                allowed = revise_inp.evidence_urls()
+                for s in sr2.signals:
+                    urls_ok = bool(s.evidence_urls) and all(u in allowed for u in s.evidence_urls)
+                    promoted2.append({**s.model_dump(), "competitor_name": comp_name,
+                                      "competitor_id": comp_id, "urls_ok": urls_ok})
             if promoted2:
                 promoted = promoted2
                 res.promoted_signals = promoted
@@ -1210,19 +1316,36 @@ async def run_tenant(
 
     if promoted:
         s0 = promoted[0]
-        engine = ThesisEngine()
-        engine.open_thesis(tenant_id=tenant_id, competitor_id=s0["competitor_id"],
-                           thesis=f"{s0['competitor_name']} is investing in the space; initial monitoring thesis.",
-                           confidence=0.3, evidence_ids=[s0["evidence_urls"][0]])
         prompt = ("You are Argus. Given this competitor signal, write ONE sharp sentence (no em dashes) "
                   "updating the strategic thesis. Return ONLY the sentence.\n\n"
                   f"SIGNAL: {s0['headline']} - {s0['what_changed']}\n")
         req = ModelRequest(task_profile="brain.thesis_update", messages=[{"role": "user", "content": prompt}])
         resp = await model.generate(req)
         new_text = (resp.text or "").strip() or f"{s0['competitor_name']} continues to invest in its category."
-        updated = engine.update(competitor_id=s0["competitor_id"], thesis=new_text, confidence=0.55,
-                                new_evidence_ids=[s0["evidence_urls"][0]])
-        insert_thesis(app_conn, tenant_id, s0["competitor_id"], updated.thesis, updated.confidence, updated.evidence_ids)
+
+        # THESIS MERGE (task #25 root-cause fix): a fresh ThesisEngine() was
+        # instantiated every run, so open_thesis() always saw an empty
+        # registry and unconditionally spawned a new competitor_theses row
+        # -- the cause of N near-identical theses piling up per competitor.
+        # Check the tenant's actual active theses in the DB first; attach to
+        # a similar one instead of spawning a duplicate.
+        active_theses = DbTheses(app_conn).get_active_theses(tenant_id)
+        similar = find_similar_active_thesis(
+            active_theses, competitor_id=s0["competitor_id"], candidate_thesis=new_text,
+        )
+        if similar is not None:
+            attach_thesis_evidence(
+                app_conn, tenant_id, similar["id"], new_text,
+                0.55, [s0["evidence_urls"][0]],
+            )
+        else:
+            engine = ThesisEngine()
+            engine.open_thesis(tenant_id=tenant_id, competitor_id=s0["competitor_id"],
+                               thesis=f"{s0['competitor_name']} is investing in the space; initial monitoring thesis.",
+                               confidence=0.3, evidence_ids=[s0["evidence_urls"][0]])
+            updated = engine.update(competitor_id=s0["competitor_id"], thesis=new_text, confidence=0.55,
+                                    new_evidence_ids=[s0["evidence_urls"][0]])
+            insert_thesis(app_conn, tenant_id, s0["competitor_id"], updated.thesis, updated.confidence, updated.evidence_ids)
 
     report_id = insert_report(app_conn, tenant_id, "daily", f"Argus daily brief - {slug}", reader_text[:200])
 

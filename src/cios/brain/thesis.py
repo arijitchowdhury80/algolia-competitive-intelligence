@@ -17,11 +17,37 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from cios.common.dedup import DEFAULT_SIMILARITY_THRESHOLD, token_set_similarity
+
 from .types import Thesis, ThesisHistoryEntry
 
 
 class ThesisEvidenceError(ValueError):
     """Raised when a thesis update carries no supporting evidence."""
+
+
+def find_similar_active_thesis(
+    active_theses: list[dict],
+    *,
+    competitor_id: int,
+    candidate_thesis: str,
+    threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+) -> Optional[dict]:
+    """Root-cause fix for "N near-identical theses per competitor": a
+    competitor's living thesis should read as ONE evolving hypothesis, not a
+    new row every time a repeat signal restates it. Given the tenant's
+    currently active theses and a freshly drafted thesis sentence for
+    `competitor_id`, returns the existing row a caller should attach new
+    evidence to instead of spawning a duplicate -- or None if this is
+    genuinely a new hypothesis for that competitor. Conservative by design
+    (DEFAULT_SIMILARITY_THRESHOLD): only merges when the sentences are
+    clearly paraphrases of the same claim, never across competitors."""
+    for row in active_theses:
+        if row.get("competitor_id") != competitor_id:
+            continue
+        if token_set_similarity(row.get("thesis", ""), candidate_thesis) >= threshold:
+            return row
+    return None
 
 
 class ThesisEngine:

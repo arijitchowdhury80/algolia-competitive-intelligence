@@ -237,3 +237,69 @@ def test_suppressed_signals_populated_from_repo():
     assert len(state.suppressed_signals) == 1
     assert state.suppressed_signals[0].finding_count == 3
     assert state.suppressed_signals[0].reason == "Below materiality threshold"
+
+
+# -- cross-run signal dedup (task #25 root-cause fix) ------------------------
+
+
+def _dupe_delta(**overrides) -> dict:
+    base = delta(**{k: v for k, v in overrides.items() if k != "what_changed"})
+    if "what_changed" in overrides:
+        base["what_changed"] = overrides["what_changed"]
+    return base
+
+
+def test_same_story_same_competitor_merges_into_one_card_with_count_badge():
+    signals = {
+        1: [
+            _dupe_delta(id=1, competitor_id=1, materiality_score=0.6,
+                        what_changed="Heap rebrands as Contentsquare product", evidence_ids=["https://a.com"]),
+            _dupe_delta(id=2, competitor_id=1, materiality_score=0.8,
+                        what_changed="Heap now brands its product as Contentsquare", evidence_ids=["https://b.com"]),
+            _dupe_delta(id=3, competitor_id=1, materiality_score=0.7,
+                        what_changed="Heap has rebranded its product as Contentsquare", evidence_ids=["https://c.com"]),
+        ]
+    }
+    builder = make_builder(coverage={1: full_coverage()}, signals=signals)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert len(state.competitor_cards) == 1
+    card = state.competitor_cards[0]
+    assert card.duplicate_count == 3
+    # highest-materiality member's fields win.
+    assert card.materiality_score == 0.8
+    # evidence is unioned across all merged members, nothing dropped.
+    assert set(card.evidence_ids) == {"https://a.com", "https://b.com", "https://c.com"}
+
+
+def test_different_stories_same_competitor_stay_separate_cards():
+    signals = {
+        1: [
+            _dupe_delta(id=1, competitor_id=1, materiality_score=0.6,
+                        what_changed="Heap rebrands as Contentsquare product"),
+            _dupe_delta(id=2, competitor_id=1, materiality_score=0.5,
+                        what_changed="Heap lays off part of its engineering team"),
+        ]
+    }
+    builder = make_builder(coverage={1: full_coverage()}, signals=signals)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert len(state.competitor_cards) == 2
+    assert all(c.duplicate_count == 1 for c in state.competitor_cards)
+
+
+def test_same_story_different_competitors_never_merge():
+    signals = {
+        1: [
+            _dupe_delta(id=1, competitor_id=1, materiality_score=0.6,
+                        what_changed="Launches a new AI search feature"),
+            _dupe_delta(id=2, competitor_id=2, materiality_score=0.6,
+                        what_changed="Launches a new AI search feature"),
+        ]
+    }
+    builder = make_builder(coverage={1: full_coverage()}, signals=signals)
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert len(state.competitor_cards) == 2
+    assert {c.competitor_id for c in state.competitor_cards} == {1, 2}
+    assert all(c.duplicate_count == 1 for c in state.competitor_cards)

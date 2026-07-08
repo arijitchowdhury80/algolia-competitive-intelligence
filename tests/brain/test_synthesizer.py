@@ -151,3 +151,40 @@ async def test_tenant_id_flows_to_model_request() -> None:
     model = FakeModel([{"signals": []}])
     await Synthesizer(model).synthesize(_input(tenant_id=42))
     assert model.calls[0].tenant_id == "42"
+
+
+# -- within-run signal dedup (task #25 root-cause fix) -----------------------
+
+
+async def test_two_candidates_describing_same_story_merge_into_one_signal() -> None:
+    p1 = signal_payload(
+        headline="Rival cuts entry price 20 percent",
+        evidence_urls=["https://rival.com/pricing"],
+        materiality_score=0.6,
+    )
+    p2 = signal_payload(
+        headline="Rival cuts its entry tier price by 20 percent",
+        evidence_urls=["https://rival.com/announcement"],
+        materiality_score=0.8,
+    )
+    model = FakeModel([{"signals": [p1, p2]}])
+    result = await Synthesizer(model).synthesize(_input(deltas=[
+        _delta("https://rival.com/pricing"),
+        _delta("https://rival.com/announcement"),
+    ]))
+    assert result.verdict is Verdict.SIGNALS
+    assert len(result.signals) == 1
+    assert result.signals[0].materiality_score == 0.8  # higher-materiality wording wins
+    assert set(result.signals[0].evidence_urls) == {
+        "https://rival.com/pricing", "https://rival.com/announcement",
+    }  # evidence unioned, nothing dropped
+    assert any(e.event_type == BrainEventType.SIGNAL_DEDUPED for e in result.events)
+
+
+async def test_two_candidates_describing_different_stories_both_ship() -> None:
+    p1 = signal_payload(headline="Rival cuts entry price 20 percent")
+    p2 = signal_payload(headline="Rival lays off part of its sales team")
+    model = FakeModel([{"signals": [p1, p2]}])
+    result = await Synthesizer(model).synthesize(_input())
+    assert len(result.signals) == 2
+    assert not any(e.event_type == BrainEventType.SIGNAL_DEDUPED for e in result.events)

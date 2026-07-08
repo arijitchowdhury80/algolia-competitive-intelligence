@@ -106,12 +106,15 @@ def test_unescaped_injection_is_escaped() -> None:
     assert "<img src=x onerror=alert(2)>" not in html_out
 
 
-def test_suppressed_signals_empty_state_is_honest_not_a_stub() -> None:
+def test_suppressed_signals_empty_state_renders_no_panel() -> None:
+    # Live-audit finding #4: an empty Suppressed Signals box is noise, not a
+    # trust signal. When there is nothing suppressed, the whole panel (and
+    # its heading) must be absent, not an "empty" placeholder inside it.
     state = _load_state()
     assert state.suppressed_signals == []
     html_out = render_dashboard_html(state)
-    assert "No suppressed signals this cycle." in html_out
-    assert 'id="suppressed-title"' in html_out
+    assert "No suppressed signals this cycle." not in html_out
+    assert 'id="suppressed-title"' not in html_out
 
 
 def test_suppressed_signals_render_with_reason_and_count() -> None:
@@ -152,18 +155,82 @@ def test_report_history_renders_rows_with_link() -> None:
 
 
 def test_section_order_matches_reference_layout() -> None:
-    # Reference layout order (docs/workspace/dashboard-reference/index.html):
-    # hero -> [customer-proof/narrative, replaced by signal cards] -> ... ->
-    # suppressed signals -> report history. Living theses is a V2 addition
-    # placed after signal cards, before the two restored sections.
+    # hero -> signal cards -> living theses -> [suppressed, when present] in
+    # the main column; report history moved to a compact footer BELOW the
+    # two-column layout entirely (live-audit finding #3).
     state = _load_state()
     html_out = render_dashboard_html(state)
     hero_pos = html_out.index('id="daily-title"')
     signals_pos = html_out.index('id="signals-title"')
     theses_pos = html_out.index('id="theses-title"')
-    suppressed_pos = html_out.index('id="suppressed-title"')
     history_pos = html_out.index('id="history-title"')
-    assert hero_pos < signals_pos < theses_pos < suppressed_pos < history_pos
+    assert hero_pos < signals_pos < theses_pos < history_pos
+
+
+def test_build_health_panel_is_gone() -> None:
+    # Live-audit finding #5: Build health was a stub with no truthful
+    # source. It must not appear on the page at all.
+    state = _load_state()
+    html_out = render_dashboard_html(state)
+    assert "Build health" not in html_out
+    assert "Trust line" in html_out
+
+
+def test_trust_line_replaces_data_limits_and_run_health_boxes() -> None:
+    state = _load_state()
+    html_out = render_dashboard_html(state)
+    assert "Data limits" not in html_out
+    assert html_out.count('<h2>Run health</h2>') == 0
+    assert "Sources checked" in html_out
+    assert "False-negative audit" in html_out
+    assert "Quality review" in html_out
+    assert "Delivery" in html_out
+
+
+def test_report_history_dedupes_same_day_and_caps_at_seven() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    rows = []
+    for i in range(10):
+        rows.append({
+            "report_id": i, "report_date": "2026-07-01", "cadence": "daily",
+            "title": f"Argus daily brief - dup {i}", "summary": "No material signal.",
+            "status": "rendered", "html_path": None,
+        })
+    payload["report_history"] = rows
+    populated = DashboardState.model_validate(payload)
+    html_out = render_dashboard_html(populated)
+    # All ten rows share one report_date -> dedup collapses to one entry.
+    assert html_out.count("2026-07-01") == 1
+
+
+def test_report_history_entry_without_html_path_has_no_dead_link() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["report_history"] = [
+        {"report_id": 1, "report_date": "2026-07-08", "cadence": "daily",
+         "title": "Argus daily brief - algolia", "summary": "No material signal.",
+         "status": "rendered", "html_path": None},
+    ]
+    populated = DashboardState.model_validate(payload)
+    html_out = render_dashboard_html(populated)
+    assert "Argus daily brief - algolia" in html_out
+    assert "<a href=" not in html_out.split('id="history-title"')[1]
+
+
+def test_signal_card_shows_seen_in_n_sources_badge_when_duplicate() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["competitor_cards"][0]["duplicate_count"] = 3
+    populated = DashboardState.model_validate(payload)
+    html_out = render_dashboard_html(populated)
+    assert "seen in 3 sources" in html_out
+
+
+def test_signal_card_has_no_badge_when_not_duplicate() -> None:
+    state = _load_state()
+    html_out = render_dashboard_html(state)
+    assert "seen in" not in html_out
 
 
 def test_reuses_original_css_tokens() -> None:

@@ -123,6 +123,10 @@ class CompetitorSignalCard(BaseModel):
     evidence_ids: list[Any] = Field(default_factory=list)
     delta_id: Optional[int] = None
     thesis_id: Optional[int] = None
+    # How many near-duplicate deltas (same competitor, same underlying
+    # story) were merged into this one card -- see cios.common.dedup. 1
+    # means no merge happened. Rendered as a "seen in N sources" badge.
+    duplicate_count: int = 1
 
 
 class LivingThesis(BaseModel):

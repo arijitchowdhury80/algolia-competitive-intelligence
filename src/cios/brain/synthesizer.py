@@ -28,6 +28,7 @@ from typing import Any, Optional
 
 from pydantic import ValidationError
 
+from cios.common.dedup import cluster_by_similarity
 from cios.platform.models.types import ModelRequest
 
 from .prompts import SYNTHESIS_SYSTEM, build_synthesis_prompt
@@ -82,6 +83,8 @@ class Synthesizer:
             signal = self._vet_candidate(cand, inp, allowed_urls, events)
             if signal is not None:
                 promoted.append(signal)
+
+        promoted = self._dedupe_signals(promoted, events)
 
         verdict = self._decide_verdict(promoted, inp, events)
         return SynthesisResult(
@@ -256,6 +259,48 @@ class Synthesizer:
                 )
             )
             return None
+
+    @staticmethod
+    def _dedupe_signals(promoted: list[Signal], events: list[BrainEvent]) -> list[Signal]:
+        """Within-run dedup: the model can (and does) return two candidates
+        describing the same underlying event for the same competitor in
+        slightly different words. Merge those into one signal, keeping the
+        higher-materiality wording and the union of evidence, instead of
+        shipping the same story twice in one brief."""
+        if len(promoted) < 2:
+            return promoted
+
+        clusters = cluster_by_similarity(
+            promoted,
+            group_key=lambda s: s.competitor_id,
+            text=lambda s: f"{s.headline} {s.what_changed}",
+        )
+        if len(clusters) == len(promoted):
+            return promoted  # no duplicates found
+
+        merged: list[Signal] = []
+        for cluster in clusters:
+            if cluster.count == 1:
+                merged.append(cluster.representative)
+                continue
+            best = max(cluster.members, key=lambda s: s.materiality_score)
+            evidence: list[str] = []
+            seen: set[str] = set()
+            for s in cluster.members:
+                for u in s.evidence_urls:
+                    if u not in seen:
+                        seen.add(u)
+                        evidence.append(u)
+            merged_signal = best.model_copy(update={"evidence_urls": evidence})
+            merged.append(merged_signal)
+            events.append(
+                BrainEvent(
+                    event_type=BrainEventType.SIGNAL_DEDUPED,
+                    detail=f"merged {cluster.count} near-duplicate candidates into one signal",
+                    payload={"headline": best.headline[:200], "merged_count": cluster.count},
+                )
+            )
+        return merged
 
     def _decide_verdict(
         self, promoted: list[Signal], inp: SynthesisInput, events: list[BrainEvent]

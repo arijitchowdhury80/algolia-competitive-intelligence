@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cios.brain.thesis import ThesisEngine, ThesisEvidenceError
+from cios.brain.thesis import ThesisEngine, ThesisEvidenceError, find_similar_active_thesis
 
 
 def _open(engine: ThesisEngine):
@@ -67,3 +67,41 @@ def test_update_unknown_competitor_raises() -> None:
     engine = ThesisEngine()
     with pytest.raises(KeyError):
         engine.update(competitor_id=99, thesis="x", confidence=0.5, new_evidence_ids=["d1"])
+
+
+# -- thesis merge (task #25 root-cause fix) ----------------------------------
+# find_similar_active_thesis is what the daily production runner consults
+# before deciding whether to attach new evidence to an existing thesis or
+# spawn a brand-new competitor_theses row -- see scripts/daily_production_run.py.
+
+
+def test_similar_thesis_for_same_competitor_is_found_attach_branch() -> None:
+    active = [
+        {"id": 1, "competitor_id": 7, "thesis": "Rival is wedging into agentic shopping search."},
+        {"id": 2, "competitor_id": 3, "thesis": "Other Co is expanding into EMEA."},
+    ]
+    found = find_similar_active_thesis(
+        active, competitor_id=7, candidate_thesis="Rival is wedging agentic shopping into search."
+    )
+    assert found is not None
+    assert found["id"] == 1
+
+
+def test_dissimilar_thesis_for_same_competitor_is_not_found_spawn_branch() -> None:
+    active = [
+        {"id": 1, "competitor_id": 7, "thesis": "Rival is wedging into agentic shopping search."},
+    ]
+    found = find_similar_active_thesis(
+        active, competitor_id=7, candidate_thesis="Rival's CFO resigned amid a restructuring."
+    )
+    assert found is None
+
+
+def test_similar_thesis_for_a_different_competitor_never_matches() -> None:
+    active = [
+        {"id": 1, "competitor_id": 3, "thesis": "Rival is wedging into agentic shopping search."},
+    ]
+    found = find_similar_active_thesis(
+        active, competitor_id=7, candidate_thesis="Rival is wedging into agentic shopping search."
+    )
+    assert found is None

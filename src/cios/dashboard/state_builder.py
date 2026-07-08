@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Optional, Protocol
 
+from cios.common.dedup import cluster_by_similarity
+
 from .types import (
     ArgusRead,
     AttentionLevel,
@@ -181,8 +183,20 @@ class DashboardStateBuilder:
         )
 
     def _build_competitor_cards(self, deltas: list[dict]) -> list[CompetitorSignalCard]:
+        # Cross-run dedup: `deltas` spans however many days of published
+        # semantic_deltas the injected repo returns, so the same underlying
+        # story can legitimately show up more than once (re-detected day
+        # over day). Cluster same-competitor near-duplicates into one card
+        # before ranking, instead of shipping N cards for one event.
+        clusters = cluster_by_similarity(
+            deltas,
+            group_key=lambda d: d.get("competitor_id"),
+            text=lambda d: f"{d.get('what_changed') or ''} {d.get('why_it_matters') or ''}",
+        )
+        merged_deltas = [self._merge_delta_cluster(c.members) for c in clusters]
+
         cards: list[CompetitorSignalCard] = []
-        for d in deltas:
+        for d in merged_deltas:
             materiality = float(d.get("materiality_score") or 0.0)
             # attention_score is presented 0-100 (UX spec); materiality_score
             # is stored 0-1 (semantic_deltas.materiality_score numeric(5,4)).
@@ -204,12 +218,39 @@ class DashboardStateBuilder:
                     evidence_ids=list(d.get("evidence_ids") or []),
                     delta_id=d.get("id"),
                     thesis_id=d.get("thesis_id"),
+                    duplicate_count=d.get("_duplicate_count", 1),
                 )
             )
         # materiality-before-urgency: highest attention first, deterministic
         # tiebreak on competitor_id so repeated builds don't reorder ties.
         cards.sort(key=lambda c: (-c.attention_score, c.competitor_id))
         return cards
+
+    @staticmethod
+    def _merge_delta_cluster(members: list[dict]) -> dict:
+        """Merges a cluster of near-duplicate delta rows into one: keep the
+        highest-materiality member's fields (it is the most confidently
+        described version of the story), union the evidence ids across all
+        members (never drop evidence a duplicate carried), and record how
+        many sources/days it was seen in."""
+        if len(members) == 1:
+            best = dict(members[0])
+            best["_duplicate_count"] = 1
+            return best
+
+        best_member = max(members, key=lambda d: float(d.get("materiality_score") or 0.0))
+        evidence: list = []
+        seen: set = set()
+        for m in members:
+            for e in m.get("evidence_ids") or []:
+                if e not in seen:
+                    seen.add(e)
+                    evidence.append(e)
+
+        merged = dict(best_member)
+        merged["evidence_ids"] = evidence
+        merged["_duplicate_count"] = len(members)
+        return merged
 
     def _build_theses(self, tenant_id: int) -> list[LivingThesis]:
         rows = self._theses.get_active_theses(tenant_id)
