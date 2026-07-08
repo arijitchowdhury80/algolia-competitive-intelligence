@@ -57,17 +57,18 @@ Ground truth: I read `src/cios/platform/{channels,identity,models}/`,
 | Concern | Hermes provides | cios V2 built | Verdict |
 |---|---|---|---|
 | **Channels / Telegram** | `gateway/platforms/`: telegram, signal, `whatsapp_cloud.py` (official Business Cloud API), `bluebubbles.py` (iMessage), qqbot, weixin, plus a generic inbound gateway. `ADDING_A_PLATFORM.md` = documented extension path. | `src/cios/platform/channels/` — adapter interface + `adapters/telegram.py` and `adapters/email_smtp.py` only. | **DUPLICATE. Hermes stronger** on breadth and inbound routing. cios's only net-new is `email_smtp` (Hermes email delivery unconfirmed) and an envelope bound to its identity layer. |
-| **Scheduling / cron** | `cron/scheduler.py` (60s tick, file-locked), cron expressions + human intervals, pre-agent Python script injection, `[SILENT]` pattern, `blueprint_catalog.py`. | Own cron path (system cron / `scripts/daily_production_run.py`), the 09:15 UTC daily. | **DUPLICATE. Hermes stronger.** The goal spec (§7, line 147) *already says* keep "Hermes cron mechanics as the deterministic-job substrate." V2 drifted off it. |
+| **Scheduling / cron** | `cron/scheduler.py` (60s tick, file-locked), cron expressions + human intervals, pre-agent Python script injection, `[SILENT]` pattern, `blueprint_catalog.py`. Caveat: the built-in ticker runs only inside the gateway process — jobs do not fire if the gateway is down. | NOT reimplemented. Verified: no in-repo cron/timer for the pipeline (only the shim's systemd unit); `scripts/daily_production_run.py` is invoked by Hermes cron, and `channels/adapters/telegram.py:5-7` states "Hermes cron delivers via `deliver: telegram` today." | **ALREADY CORRECT — not a duplicate.** cios deferred scheduling to Hermes cron exactly as the goal spec (§7) intended. This is the one spine concern V2 did right. |
 | **Webhooks / near-real-time** | `gateway/platforms/webhook.py`: HMAC-validated inbound, per-route rate limit, idempotency cache, `deliver_only` sub-second zero-LLM push. `msgraph_webhook.py`. | None. cios has no inbound-signal webhook receiver. | **Hermes ONLY. This is the freshness enabler cios lacks.** |
 | **Agent loop / subagents** | `run_agent.py` core loop, tool invocation, isolated subagent spawning, RPC scripts-call-tools. | `brain/` is a deterministic pipeline that makes LLM calls via the shim; no persistent agentic loop or subagent spawning. | **Different shape.** Hermes is the agent runtime; cios brain is a pipeline. cios does not need to own an agent loop. |
 | **Model providers** | `providers/` model-agnostic abstraction, `hermes model` switch, per-automation model choice. | `platform/models/` router + `providers/claude_cli.py` → `deploy/claude-shim` (FastAPI wrapper around `claude -p`, 127.0.0.1:8663). | **PARTIAL DUPLICATE with a real root cause.** cios built the shim only because Hermes's OpenRouter/Nous keys were dead and Arijit chose the Claude Code Max subscription via CLI OAuth (goal spec §10). This is a *provider gap*, not an architectural need for a second router. |
-| **Identity / ACL / multi-tenant / SSO** | Single-user personal model (Honcho "who YOU are"). Profiles = filesystem isolation (`~/.hermes/profiles/<name>`), NOT RBAC/SSO/tenant. | `platform/identity/` (`acl.py`, `resolver.py`) + `db/schema.sql` `tenant_id`, roles, permissions, channel-identity resolution. | **cios ONLY. Genuine gap in Hermes.** This is the enterprise-product plane and the reason for not fully dissolving into Hermes. |
+| **Identity / ACL / multi-tenant / SSO** | Single-user personal model (Honcho "who YOU are"). Access control is a simple per-platform user allowlist (`gateway/authz_mixin.py` `allowed_users_env`) — no RBAC/SSO/tenant. Profiles = fully isolated `HERMES_HOME` dirs (own config, .env, memory, sessions, skills, cron); a heavyweight tenant-like isolation primitive, not a declarative bundle. | `platform/identity/` (`acl.py`, `resolver.py`) + `db/schema.sql` `tenant_id`, roles, permissions, groups, channel-identity resolution, Postgres RLS forced per tenant. | **cios ONLY. Genuine gap in Hermes.** This is the enterprise-product plane and the reason for not fully dissolving into Hermes. Hermes profiles are a viable *isolation* primitive for a handful of tenants but are not RBAC/SSO. |
 | **Persistence** | `hermes_state.py` (SQLite: sessions, memory, user model, history). | Own Postgres: domain schema (competitors, sources, evidence, claims, theses, deliveries), multi-tenant columns. | **Different purposes, not a duplicate.** cios Postgres is the product's system of record; Hermes SQLite is agent-runtime state. |
 | **Memory / learning loop** | Closed learning loop: skill self-creation/improvement, FTS session recall, memory nudges. | `learn/` — domain learning (source priority, retirement, candidate sources, improvement queue). | **Complementary, different domains.** Hermes learns how to operate; cios learns the CI domain. |
 
-Bottom line: of cios's `platform/` layer, **channels and cron are pure
-duplication, the model router is duplication forced by a provider gap, and only
-identity/ACL/multi-tenant is irreplaceable.** The domain modules
+Bottom line: of cios's `platform/` layer, **channels are pure duplication, the
+model router is duplication forced by a provider gap, and only
+identity/ACL/multi-tenant is irreplaceable. Scheduling was correctly deferred to
+Hermes cron already.** The domain modules
 (`hunter`, `collect`, `execspeech`, `brain`, `learn`, `delivery` action-routing,
 `dashboard`, `db`, `migration`) are the actual product value and have no Hermes
 equivalent.
@@ -157,8 +158,11 @@ What each architecture needs, and the honest constraint:
 
 Architecture A (and its C-flavored chat slice) reach this fastest, because the
 conversational gateway already exists in Hermes and **V0's `argus` profile is
-already running there** (profiles live at `~/.hermes/profiles/<name>`; the task
-brief confirms `argus` and `vulcan` profiles exist). The path: inbound Telegram
+already running there** (the task brief confirms `argus` and `vulcan` profiles
+exist on the VPS). Note: a grep of the Hermes source shows Hermes does NOT ship
+`argus`/`vulcan` — they are Arijit's own profiles created on Hermes's generic
+profile mechanism (isolated `~/.hermes/profiles/<name>` homes). That is fine; it
+just means the profiles are configuration, not upstream features. The path: inbound Telegram
 message → Hermes gateway resolves the session on the `argus` profile → the
 agent calls a cios skill/package → the skill queries the cios Postgres
 (evidence, theses, claims) → Argus answers in-voice with evidence links.
@@ -188,11 +192,13 @@ inside Architecture A.
 
 - **Phase 0 — today.** V0 (Hermes skill + argus/vulcan profiles) and V2 (beside
   it: own venv, Postgres, cron, shim) run in parallel. Duplication is live.
-- **Phase 1 — consolidate the spine (effort M).** Drive cios pipeline stages via
-  Hermes cron jobs (goal spec already intends this); route delivery through
-  Hermes delivery targets; retire cios's own cron and its telegram delivery
-  adapter. Make the Claude backend single: register Claude-CLI as a Hermes
-  provider if feasible, else keep the shim as the one shared Claude service both
+- **Phase 1 — consolidate the spine (effort M).** Scheduling is already on Hermes
+  cron, so the work here is: retire cios's own channel adapters and route
+  delivery through Hermes delivery targets; make the Claude backend single —
+  register Claude-CLI as a Hermes provider if feasible (Hermes ships an
+  `anthropic` API provider and a `custom` OpenAI-compatible slot, but the shim
+  wraps the Claude *CLI* under a Max OAuth token, which is a different auth path;
+  confirm feasibility), else keep the shim as the one shared Claude service both
   use. Keep cios's tier-routing *config* but back it by Hermes providers.
 - **Phase 2 — freshness (effort S per lane).** Add Hermes short-interval
   watch-loops with change-detection + `[SILENT]` for the highest-velocity lanes;
@@ -223,9 +229,19 @@ only what CI-OS uses.
   `cron/scheduler.py`, `gateway/platforms/webhook.py`, `hermes_constants.py`
   (profile homes), `providers/`; goal spec §7/§10; operating-model line 8;
   channels/identity spec line 121; `hermes-already-has-routines.md`.
-- **UNKNOWN (verify before building):** whether Hermes ships an email delivery
-  target (cios `email_smtp` may be net-new); whether the current V2 09:15 UTC
-  job runs under Hermes cron or a separate system cron on the VPS (goal spec
-  intends Hermes cron; SESSION.md does not state which is live) — confirm on the
-  VPS; whether Claude-CLI can be registered as a first-class Hermes provider vs
-  keeping the standalone shim.
+- Cross-checked against two independent code-mapping passes (Hermes runtime +
+  cios modules), incorporated here. Those passes additionally confirmed: Hermes
+  channels split across core adapters (`gateway/platforms/`) and a plugin/tool
+  path (Telegram/Discord/Slack); a broad provider set under
+  `plugins/model-providers/` (anthropic, openai, openrouter, nous, gemini,
+  bedrock, `custom`, and more); Honcho + pluggable memory providers
+  (`agent/memory_provider.py`); and a fourth extension layer (gateway hooks,
+  `HOOK.yaml`).
+- **RESOLVED:** the pipeline is scheduled by Hermes cron — no in-repo cron/timer
+  exists for it (only the shim's systemd unit), and `telegram.py:5-7` states
+  Hermes cron delivers today.
+- **STILL UNKNOWN (verify before building):** whether Hermes ships an email
+  delivery target (cios `email_smtp` may be net-new); whether the Claude *CLI*
+  (Max OAuth) can be registered as a first-class Hermes provider vs keeping the
+  standalone shim; the live `ci.chowmes.com` dashboard wire-format
+  (`dashboard/publisher.py` flags it unknown).

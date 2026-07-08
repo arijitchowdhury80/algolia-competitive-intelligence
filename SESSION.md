@@ -1,11 +1,12 @@
 # CI-OS — SESSION.md
 
-Updated: 2026-07-08 ~03:40 ET (Claude Fable 5, caveman mode, overnight multi-agent build)
+Updated: 2026-07-08 ~06:30 ET (session close persist) (Claude Fable 5, caveman mode, overnight multi-agent build)
 
 ## Status
-SYSTEM PROVEN END-TO-END. Brain live-certified (5/5 criteria) AND the 3-tenant Gate 7 rehearsal FULLY PASSED (~03:00 ET) after a 6-iteration fix loop. 18 commits, 259 offline + 16 integration tests. Delivery hard-gated on quality; evidence article-level; quotes verified verbatim; revise loop in. V0 untouched, cron intact.
+V2 DEPLOYED LIVE (parallel run) on the VPS: real Telegram baseline brief delivered to Arijit's chat (quality passed), cron 09:15 UTC daily, real V0 history migrated. Arijit's product doctrine recorded (docs/planning/CI-OS-product-doctrine-2026-07-08.md) and briefs rebuilt to it. Previously: Brain live-certified (5/5 criteria) AND the 3-tenant Gate 7 rehearsal FULLY PASSED (~03:00 ET) after a 6-iteration fix loop. 18 commits, 259 offline + 16 integration tests. Delivery hard-gated on quality; evidence article-level; quotes verified verbatim; revise loop in. V0 untouched, cron intact.
 
 ## Resume action (do first, in order)
+0. Phase 1 CORE DONE: Hermes cron job `cios-v2-daily` (09:15 ET, no-agent, script /root/.hermes/scripts/cios-daily.sh, container venv at /opt/data/apps/cios) drives the pipeline; duplicate system cron removed. TZ: VPS+container = ET (V0 09:00 ET, V2 09:15 ET). Verify tomorrow's Hermes-fired run. Phase 1b next: webhook deliver_only delivery route, shim-as-provider check, email target.
 1. Arijit eyeballs the 09:00 ET Telegram brief (chat 6789423537) — V0 hotfix live proof. Report quality.
 2. Show Arijit the dashboard preview: python3 scripts/render_dashboard_preview.py docs/planning/gate7-rehearsal-runs/dashboard-state.v2.1.daily.json (renderer DONE, 1037df6; history/suppressed panels = flagged data gaps).
 3. Run the V0 sqlite migration against the REAL ci.sqlite on the VPS (3 duplicate copies to reconcile).
