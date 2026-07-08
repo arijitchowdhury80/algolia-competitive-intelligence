@@ -1,0 +1,57 @@
+"""CI-OS dashboard data/state layer (Gate 5).
+
+Compiles DashboardState from injected, tenant-scoped repositories (pure
+function of DB state, no caching) and serializes it to a versioned JSON
+contract for the dashboard UI. Does not render UI -- Arijit's existing
+dashboard app (ci.chowmes.com) owns rendering; see publisher.py for the
+UI-contract adapter point this layer intentionally leaves for that app.
+"""
+
+from .publisher import default_filename, publish_to_file, to_json_dict, to_json_str
+from .state_builder import (
+    BuildStatusProvider,
+    CoverageRepository,
+    DashboardStateBuilder,
+    MaterialSignalsRepository,
+    RunRepository,
+    ThesesRepository,
+)
+from .types import (
+    ArgusRead,
+    AttentionLevel,
+    BuildStatus,
+    CompetitorSignalCard,
+    CoverageBarometer,
+    DASHBOARD_STATE_SCHEMA_VERSION,
+    DashboardState,
+    LaneStatus,
+    LivingThesis,
+    RunHealth,
+    ServiceHealth,
+    attention_level_for_score,
+)
+
+__all__ = [
+    "DashboardState",
+    "ArgusRead",
+    "AttentionLevel",
+    "BuildStatus",
+    "CompetitorSignalCard",
+    "CoverageBarometer",
+    "DASHBOARD_STATE_SCHEMA_VERSION",
+    "LaneStatus",
+    "LivingThesis",
+    "RunHealth",
+    "ServiceHealth",
+    "attention_level_for_score",
+    "DashboardStateBuilder",
+    "MaterialSignalsRepository",
+    "ThesesRepository",
+    "CoverageRepository",
+    "RunRepository",
+    "BuildStatusProvider",
+    "to_json_dict",
+    "to_json_str",
+    "publish_to_file",
+    "default_filename",
+]
