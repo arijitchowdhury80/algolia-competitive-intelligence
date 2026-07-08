@@ -1,0 +1,1934 @@
+"""Renders DashboardState into Arijit's hand-designed Argus cockpit (the
+Luxury Editorial mockup at docs/mockups/ci-os-dashboard-app-mockup.html).
+
+This module does NOT redesign anything. The CSS (_STYLE) and JS (_SCRIPT)
+below are copied verbatim from that mockup -- same selectors, same tokens,
+same role-rail / accordion / underline-tracking interactions. This file only
+replaces the mockup's hardcoded AWS/Elastic/Coveo/Bloomreach/Constructor/
+Klevu demo content with real DashboardState data, using the mockup's own
+markup structure and CSS classes.
+
+Doctrine this module is responsible for (Gate 5 acceptance, per
+CI-OS-Fable-build-goal-spec.md: "the cockpit dashboard rendering from
+semantic state (not scraped markdown), per the accepted Luxury Editorial
+direction + Barometer + eye behind the lenses"):
+  - Barometer rows are DashboardState.competitor_cards, already materiality-
+    ranked by the state builder -- this module does not re-rank them.
+  - Attention colors/labels map 1:1 onto AttentionLevel (act_now/watch/
+    monitor/normal -> red/amber/blue/green), the same vocabulary the rest of
+    the dashboard package uses.
+  - Marketing/Sales/Product lenses render DashboardState.prescriptions,
+    filtered by cios.prescribe.types.Team (Marketing+Content -> Marketing
+    lens, Sales Enablement -> Sales lens, Product -> Product lens). No
+    prescriptions repo is wired into production yet (tracked backlog item),
+    so an empty list renders an honest "no plays this cycle" line per lens,
+    never an invented one.
+  - "The eye behind the lenses" reads real coverage numbers (lane count,
+    coverage_score, failed lanes). Private connectors is hardcoded to 0 --
+    truthful, not a placeholder waiting to be filled in.
+  - Hero headline is a deterministic truncation of the top-ranked card's
+    what_changed text. No LLM call, no synthetic italic emphasis on
+    arbitrary words (the mockup's <em>verification</em> flourish is
+    style on hand-picked demo text; inventing which word to italicize on
+    real signal text would be decoration masquerading as content, so this
+    renderer omits it rather than fake it).
+
+All dynamic text is passed through html.escape() before being placed in
+markup. No external JS is loaded and no CSS is loaded from this repo or any
+other Python module -- the only external references are the same Google
+Fonts links the mockup itself uses (Playfair Display / Inter), preserved
+because dropping them would silently change the design's typography.
+"""
+
+from __future__ import annotations
+
+import html
+from typing import Optional
+
+from .types import AttentionLevel, CompetitorSignalCard, DashboardState, PrescriptionSummary
+
+_STYLE = """
+    :root {
+      --ink: #0b1020;
+      --ink-2: #182237;
+      --paper: #fbfaf7;
+      --panel: #ffffff;
+      --line: #d9dfeb;
+      --muted: #67738a;
+      --blue: #003dff;
+      --cyan: #00a3ff;
+      --green: #11835b;
+      --amber: #b36b00;
+      --red: #d13c2f;
+      --lilac: #7161ef;
+      --shadow: 0 24px 70px rgba(24, 34, 55, .12);
+      --soft: 0 10px 34px rgba(24, 34, 55, .08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(0,61,255,.08) 1px, transparent 1px) 0 0 / 72px 72px,
+        linear-gradient(180deg, rgba(11,16,32,.04) 1px, transparent 1px) 0 0 / 72px 72px,
+        var(--paper);
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    button,
+    .control {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    button.primary {
+      background: var(--ink);
+      color: #fff;
+      border-color: var(--ink);
+      font-weight: 720;
+    }
+
+    .app {
+      width: min(1480px, calc(100vw - 40px));
+      margin: 20px auto 38px;
+    }
+
+    .topbar {
+      height: 66px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border: 1px solid rgba(11,16,32,.12);
+      background: rgba(255,255,255,.82);
+      backdrop-filter: blur(16px);
+      border-radius: 14px;
+      padding: 0 16px;
+      box-shadow: var(--soft);
+      position: sticky;
+      top: 14px;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 260px;
+    }
+
+    .sigil {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background:
+        linear-gradient(90deg, transparent 46%, rgba(255,255,255,.55) 46% 54%, transparent 54%),
+        linear-gradient(180deg, transparent 46%, rgba(255,255,255,.55) 46% 54%, transparent 54%),
+        linear-gradient(135deg, var(--blue), var(--cyan));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.45), 0 10px 22px rgba(0,61,255,.22);
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 15px;
+      letter-spacing: .02em;
+    }
+
+    .brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .role-rail {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .role-rail a {
+      padding: 9px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #40506a;
+      font-weight: 650;
+    }
+
+    .role-rail a.active {
+      color: var(--ink);
+      background: #eef2ff;
+    }
+
+    .role-rail a::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #b7c2d4;
+      margin-right: 7px;
+      vertical-align: 1px;
+    }
+
+    .role-rail a.active::before { background: var(--blue); }
+
+    .hero {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(430px, .9fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .argus-read {
+      background: var(--ink);
+      color: #fff;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      display: grid;
+      align-content: start;
+      gap: 22px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .argus-read::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0 auto;
+      width: 44%;
+      height: 100%;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px) 0 0 / 24px 24px,
+        linear-gradient(180deg, rgba(255,255,255,.06) 1px, transparent 1px) 0 0 / 24px 24px;
+      opacity: .55;
+      mask-image: linear-gradient(90deg, transparent, #000);
+    }
+
+    .argus-read > * { position: relative; z-index: 1; }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #a8d9ff;
+      font-size: 12px;
+      font-weight: 760;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 0 5px rgba(0,163,255,.15);
+    }
+
+    .argus-read h1 {
+      width: min(760px, 100%);
+      margin: 14px 0 12px;
+      font-size: clamp(34px, 3.8vw, 52px);
+      line-height: 1;
+      letter-spacing: 0;
+      font-weight: 820;
+    }
+
+    .hero-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .hero-stat {
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .hero-stat strong {
+      display: block;
+      color: #fff;
+      font-size: 18px;
+      line-height: 1.1;
+    }
+
+    .hero-stat span {
+      display: block;
+      color: #92a6c5;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-top: 6px;
+    }
+
+    .brief-spine {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .spine-item {
+      border-top: 1px solid rgba(255,255,255,.22);
+      padding-top: 11px;
+    }
+
+    .spine-item span {
+      display: block;
+      color: #8ba2c3;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 7px;
+    }
+
+    .spine-item strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #fff;
+    }
+
+    .market-field {
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(11,16,32,.12);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      min-height: 435px;
+    }
+
+    .field-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .field-head h2,
+    .section h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .caption {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      margin-top: 5px;
+    }
+
+    .attention-board {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .attention-row {
+      display: grid;
+      grid-template-columns: 154px 1fr 42px;
+      gap: 12px;
+      align-items: center;
+      min-height: 58px;
+      padding: 6px 4px;
+      border-radius: 12px;
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .attention-row:hover {
+      background: #f8fbff;
+    }
+
+    .competitor-label {
+      display: grid;
+      gap: 4px;
+    }
+
+    .competitor-name {
+      font-weight: 780;
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .attention-cue {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .attention-track {
+      height: 28px;
+      border-radius: 999px;
+      background: #edf2f8;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(11,16,32,.08);
+    }
+
+    .attention-bar {
+      height: 100%;
+      min-width: 28px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding-right: 10px;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 820;
+    }
+
+    .attention-bar.red { background: var(--red); }
+    .attention-bar.amber { background: var(--amber); }
+    .attention-bar.blue { background: var(--blue); }
+    .attention-bar.green { background: var(--green); }
+
+    .attention-score {
+      font-size: 13px;
+      font-weight: 820;
+      color: var(--ink);
+      text-align: right;
+    }
+
+    .sections {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr) minmax(340px, .72fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .section {
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(11,16,32,.12);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: var(--soft);
+    }
+
+    .lane {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .intel {
+      display: grid;
+      grid-template-columns: 8px 1fr auto;
+      gap: 12px;
+      align-items: start;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .intel:last-child { border-bottom: 0; }
+
+    .bar {
+      width: 8px;
+      height: 44px;
+      border-radius: 999px;
+      background: var(--blue);
+    }
+
+    .bar.green { background: var(--green); }
+    .bar.amber { background: var(--amber); }
+    .bar.red { background: var(--red); }
+
+    .intel h3 {
+      margin: 0 0 5px;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .intel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .chip {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-size: 11px;
+      font-weight: 760;
+      white-space: nowrap;
+      background: #eef2ff;
+      color: var(--blue);
+    }
+
+    .chip.green { background: #e9f8f1; color: var(--green); }
+    .chip.amber { background: #fff5df; color: var(--amber); }
+    .chip.red { background: #fff0ee; color: var(--red); }
+
+    .content-plan {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .content-line {
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .content-line strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 7px;
+    }
+
+    .content-line span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .evidence-strip {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 18px;
+    }
+
+    .evidence-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .evidence {
+      min-height: 105px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      display: grid;
+      align-content: space-between;
+    }
+
+    .evidence:last-child { border-right: 0; }
+    .evidence strong { font-size: 24px; }
+    .evidence span { color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+    .channels {
+      margin-top: 16px;
+      display: grid;
+      gap: 9px;
+    }
+
+    .channel {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      gap: 10px;
+    }
+
+    .channel:last-child { border-bottom: 0; }
+    .channel strong { font-size: 13px; }
+    .channel span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+    /* Maison editorial direction: intelligence as a front page, not a telemetry board. */
+    :root {
+      --ink: #1a1a1a;
+      --ink-2: #2b2824;
+      --paper: #f9f8f6;
+      --panel: #f9f8f6;
+      --line: rgba(26, 26, 26, .18);
+      --muted: #6c6863;
+      --gold: #d4af37;
+      --red: #9f342c;
+      --amber: #9a6517;
+      --blue: #31436d;
+      --cyan: #d4af37;
+      --green: #3d6650;
+      --shadow: 0 12px 36px rgba(26, 26, 26, .08);
+      --soft: 0 4px 20px rgba(26, 26, 26, .05);
+      --font-display: "Playfair Display", Georgia, serif;
+      --font-body: "Inter", system-ui, sans-serif;
+    }
+
+    body {
+      background:
+        linear-gradient(90deg, rgba(26,26,26,.08) 1px, transparent 1px) 0 0 / 25% 100%,
+        var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .025;
+      z-index: 60;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    button,
+    .control,
+    .topbar,
+    .argus-read,
+    .market-field,
+    .section,
+    .attention-board,
+    .hero-stat {
+      border-radius: 0;
+    }
+
+    .app {
+      width: min(1600px, calc(100vw - 72px));
+      margin-top: 28px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+      align-items: center;
+      height: 64px;
+      border: 0;
+      border-bottom: 1px solid var(--ink);
+      background: rgba(249,248,246,.88);
+      box-shadow: none;
+      padding: 0;
+      top: 0;
+    }
+
+    .brand {
+      min-width: 240px;
+      gap: 12px;
+    }
+
+    .sigil {
+      width: 48px;
+      height: 48px;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      position: relative;
+      border: 0;
+      object-fit: contain;
+      display: block;
+    }
+
+    .sigil::before {
+      display: none;
+    }
+
+    .sigil::after {
+      display: none;
+    }
+
+    .brand strong {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 400;
+      letter-spacing: .18em;
+    }
+
+    .brand > span {
+      display: block;
+    }
+
+    .role-rail {
+      gap: 28px;
+      position: relative;
+      grid-column: 2;
+      justify-self: center;
+      --rail-x: 0px;
+      --rail-w: 0px;
+    }
+
+    .role-rail a {
+      border-radius: 0;
+      padding: 6px 2px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .2em;
+      color: var(--muted);
+      border-bottom: 1px solid transparent;
+      position: relative;
+      isolation: isolate;
+      transition: color 320ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .role-rail a[data-role="marketing"] {
+      --lens-wash: linear-gradient(120deg, rgba(212,175,55,.22), rgba(159,52,44,.05) 54%, rgba(249,248,246,0));
+    }
+
+    .role-rail a[data-role="sales"] {
+      --lens-wash: linear-gradient(120deg, rgba(159,52,44,.16), rgba(154,101,23,.08) 58%, rgba(249,248,246,0));
+    }
+
+    .role-rail a[data-role="product"] {
+      --lens-wash: linear-gradient(120deg, rgba(49,67,109,.15), rgba(61,102,80,.08) 58%, rgba(249,248,246,0));
+    }
+
+    .role-rail a.active {
+      background: transparent;
+      color: var(--ink);
+      border-bottom-color: transparent;
+    }
+
+    .role-rail a:hover,
+    .role-rail a:focus-visible {
+      color: var(--ink);
+      outline: 0;
+    }
+
+    .role-rail::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -1px;
+      width: var(--rail-w);
+      height: 1px;
+      background: var(--gold);
+      transform: translateX(var(--rail-x));
+      transition: transform 360ms cubic-bezier(.25,.46,.45,.94), width 360ms cubic-bezier(.25,.46,.45,.94), opacity 220ms ease;
+    }
+
+    .role-rail a::before {
+      content: "";
+      display: block;
+      position: absolute;
+      inset: -6px -12px 2px;
+      width: auto;
+      height: auto;
+      margin: 0;
+      border-radius: 0;
+      z-index: -1;
+      opacity: 0;
+      background: var(--lens-wash);
+      border-top: 1px solid rgba(26,26,26,.06);
+      transition: opacity 320ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .role-rail a.active::before {
+      background: var(--lens-wash);
+    }
+
+    .role-rail a:hover::before,
+    .role-rail a:focus-visible::before,
+    .role-rail a.active::before {
+      opacity: 1;
+    }
+
+    .hero {
+      margin-top: 24px;
+      grid-template-columns: minmax(260px, 3.2fr) minmax(330px, 4fr) minmax(430px, 4.8fr);
+      gap: 34px;
+      align-items: start;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 24px;
+    }
+
+    .argus-read {
+      background: transparent;
+      color: var(--ink);
+      padding: 0;
+      box-shadow: none;
+      gap: 0;
+      overflow: visible;
+    }
+
+    .argus-read::after {
+      display: none;
+    }
+
+    .kicker {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: .24em;
+      gap: 14px;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 48px;
+      height: 1px;
+      background: var(--ink);
+      display: inline-block;
+    }
+
+    .dot {
+      display: none;
+    }
+
+    .argus-read h1 {
+      font-family: var(--font-display);
+      font-size: clamp(44px, 4.5vw, 74px);
+      line-height: .93;
+      letter-spacing: -.035em;
+      font-weight: 400;
+      margin: 24px 0 0;
+    }
+
+    .argus-read h1 em {
+      color: var(--gold);
+      font-style: italic;
+    }
+
+    .hero-strip {
+      grid-template-columns: 1fr;
+      gap: 0;
+      margin-top: 32px;
+      border-top: 1px solid var(--ink);
+    }
+
+    .hero-stat {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 18px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 0;
+    }
+
+    .hero-stat strong {
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 21px;
+      font-weight: 400;
+    }
+
+    .hero-stat span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .2em;
+    }
+
+    .brief-spine {
+      gap: 0;
+      border-top: 1px solid var(--ink);
+    }
+
+    .spine-item {
+      border-top: 0;
+      border-right: 1px solid var(--line);
+      padding: 18px 18px 0 0;
+    }
+
+    .spine-item:last-child {
+      border-right: 0;
+      padding-left: 18px;
+    }
+
+    .spine-item span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .22em;
+    }
+
+    .spine-item strong {
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 19px;
+      line-height: 1.22;
+      font-weight: 400;
+    }
+
+    .visual-story {
+      margin: 0;
+      position: relative;
+      align-self: start;
+      height: clamp(360px, 44vh, 430px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .visual-story img {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      object-fit: cover;
+      display: block;
+      filter: grayscale(.9);
+      box-shadow: var(--shadow), inset 0 0 0 1px rgba(26,26,26,.08);
+      transition: filter 1500ms cubic-bezier(.25,.46,.45,.94), transform 1500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .visual-story:hover img {
+      filter: grayscale(.15);
+      transform: scale(1.015);
+    }
+
+    .vertical-note {
+      position: absolute;
+      top: 24px;
+      left: -32px;
+      writing-mode: vertical-rl;
+      text-transform: uppercase;
+      letter-spacing: .24em;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .market-field {
+      background: transparent;
+      border: 0;
+      border-top: 1px solid var(--ink);
+      padding: 28px 0 0;
+      box-shadow: none;
+      min-height: auto;
+      align-self: start;
+    }
+
+    .field-head {
+      display: block;
+      margin-bottom: 30px;
+    }
+
+    .field-head h2,
+    .section h2 {
+      font-family: var(--font-display);
+      font-size: 30px;
+      line-height: 1.05;
+      font-weight: 400;
+      letter-spacing: -.02em;
+    }
+
+    .caption {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+      max-width: 36rem;
+      margin-top: 10px;
+    }
+
+    .attention-board {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      gap: 0;
+    }
+
+    .attention-row {
+      display: block;
+      grid-template-columns: none;
+      gap: 0;
+      align-items: stretch;
+      min-height: 0;
+      padding: 0;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+      color: inherit;
+      cursor: default;
+      scroll-margin-top: 92px;
+      position: relative;
+      isolation: isolate;
+      transform: translateZ(0);
+      transition: color 500ms cubic-bezier(.25,.46,.45,.94), background 700ms cubic-bezier(.25,.46,.45,.94), outline-color 500ms cubic-bezier(.25,.46,.45,.94), box-shadow 650ms cubic-bezier(.25,.46,.45,.94), transform 650ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-row::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      opacity: 0;
+      background:
+        linear-gradient(120deg, rgba(255,255,255,.72), rgba(249,248,246,.22) 48%, var(--action-wash, rgba(212,175,55,.08))),
+        rgba(255,255,255,.1);
+      backdrop-filter: blur(10px);
+      transition: opacity 520ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-row.action-act {
+      --action-wash: rgba(159,52,44,.12);
+      --action-shadow: 0 18px 42px rgba(159,52,44,.16), 0 2px 0 rgba(255,255,255,.55) inset;
+      --bar-depth: 0 9px 18px rgba(159,52,44,.18), inset 0 1px rgba(255,255,255,.32);
+    }
+
+    .attention-row.action-watch {
+      --action-wash: rgba(154,101,23,.11);
+      --action-shadow: 0 14px 32px rgba(154,101,23,.12), 0 2px 0 rgba(255,255,255,.45) inset;
+      --bar-depth: 0 7px 14px rgba(154,101,23,.15), inset 0 1px rgba(255,255,255,.3);
+    }
+
+    .attention-row.action-monitor {
+      --action-wash: rgba(49,67,109,.1);
+      --action-shadow: 0 12px 28px rgba(49,67,109,.12), 0 2px 0 rgba(255,255,255,.42) inset;
+      --bar-depth: 0 7px 14px rgba(49,67,109,.14), inset 0 1px rgba(255,255,255,.3);
+    }
+
+    .attention-row.action-normal {
+      --action-wash: rgba(61,102,80,.06);
+      --action-shadow: 0 8px 18px rgba(61,102,80,.07), 0 1px 0 rgba(255,255,255,.38) inset;
+      --bar-depth: inset 0 1px rgba(255,255,255,.25);
+    }
+
+    .attention-row[open],
+    .attention-row:hover,
+    .attention-row:focus-within {
+      background: rgba(235,229,222,.45);
+      outline: 1px solid rgba(184,142,34,.42);
+      outline-offset: -1px;
+      color: var(--gold);
+    }
+
+    .attention-row[open] {
+      box-shadow: var(--action-shadow);
+      transform: translateY(-1px);
+    }
+
+    .attention-row[open]::before,
+    .attention-row:hover::before,
+    .attention-row:focus-within::before {
+      opacity: 1;
+    }
+
+    .attention-summary {
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(180px, 1fr) 46px;
+      gap: 12px;
+      align-items: center;
+      min-height: 54px;
+      padding: 7px 0;
+      cursor: pointer;
+      list-style: none;
+      transition: padding 500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .attention-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .attention-row:hover .attention-summary,
+    .attention-row:focus-within .attention-summary {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    .competitor-label {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .competitor-name {
+      font-family: var(--font-display);
+      color: var(--ink);
+      font-size: 21px;
+      font-weight: 400;
+    }
+
+    .attention-cue {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1;
+      max-width: 145px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .attention-track {
+      height: 24px;
+      border-radius: 0;
+      background: linear-gradient(90deg, rgba(26,26,26,.045), rgba(26,26,26,.085));
+      box-shadow: inset 0 1px 2px rgba(26,26,26,.08), inset 0 -1px rgba(255,255,255,.55);
+      transform: translateZ(0);
+    }
+
+    .attention-bar {
+      border-radius: 0;
+      justify-content: flex-start;
+      padding-left: 12px;
+      padding-right: 0;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font-size: 9px;
+      font-weight: 500;
+      box-shadow: var(--bar-depth);
+    }
+
+    .attention-score {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    .attention-proof {
+      scroll-margin-top: 92px;
+      display: grid;
+      grid-template-columns: minmax(220px, .9fr) minmax(180px, 1fr) 46px;
+      gap: 12px;
+      padding: 0 0 16px;
+    }
+
+    .attention-proof-inner {
+      grid-column: 1 / 3;
+      border: 1px solid rgba(26,26,26,.12);
+      border-top-color: rgba(255,255,255,.56);
+      background: linear-gradient(135deg, rgba(255,255,255,.64), rgba(249,248,246,.36));
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 32px rgba(26,26,26,.08), inset 0 1px rgba(255,255,255,.62);
+      padding: 12px 14px;
+    }
+
+    .proof-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 13px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(26,26,26,.1);
+    }
+
+    .deep-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid rgba(26,26,26,.22);
+      background: rgba(255,255,255,.58);
+      color: var(--ink);
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      text-decoration: none;
+      box-shadow: 0 8px 20px rgba(26,26,26,.06), inset 0 1px rgba(255,255,255,.65);
+      transition: transform 280ms cubic-bezier(.25,.46,.45,.94), background 280ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .deep-link:hover,
+    .deep-link:focus-visible {
+      background: rgba(255,255,255,.82);
+      transform: translateY(-1px);
+      outline: 1px solid rgba(184,142,34,.42);
+      outline-offset: 2px;
+    }
+
+    .proof-meta {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .inline-brief {
+      margin-top: 12px;
+      border-top: 1px solid rgba(26,26,26,.1);
+      padding-top: 10px;
+    }
+
+    .inline-brief > summary {
+      width: fit-content;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .inline-brief > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .inline-brief[open] > summary {
+      background: rgba(255,255,255,.86);
+    }
+
+    .brief-article {
+      margin-top: 14px;
+      border: 1px solid rgba(26,26,26,.14);
+      background:
+        linear-gradient(135deg, rgba(159,52,44,.06), rgba(212,175,55,.06) 42%, rgba(255,255,255,.42)),
+        rgba(249,248,246,.68);
+      box-shadow: 0 14px 32px rgba(26,26,26,.07), inset 0 1px rgba(255,255,255,.62);
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .brief-article h4 {
+      margin: 9px 0 12px;
+      font-family: var(--font-display);
+      font-size: clamp(25px, 2.4vw, 38px);
+      line-height: 1;
+      font-weight: 400;
+      letter-spacing: -.025em;
+      color: var(--ink);
+    }
+
+    .brief-article p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .brief-kicker {
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    .attention-proof h3 {
+      margin: 0 0 7px;
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 400;
+      line-height: 1.1;
+    }
+
+    .attention-proof p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .attention-proof span {
+      display: inline-block;
+      margin-bottom: 9px;
+      color: var(--muted);
+      font-size: 9px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .section {
+      background: transparent;
+      box-shadow: none;
+      border: 0;
+      border-top: 1px solid var(--ink);
+      padding: 28px 0 0;
+    }
+
+    .role-section {
+      scroll-margin-top: 92px;
+      transition: background 500ms cubic-bezier(.25,.46,.45,.94), outline-color 500ms cubic-bezier(.25,.46,.45,.94);
+    }
+
+    .sections .role-section {
+      --lens-panel: linear-gradient(135deg, rgba(255,255,255,.64), rgba(249,248,246,.18));
+      background: var(--lens-panel);
+      border-top-color: rgba(26,26,26,.78);
+      box-shadow: inset 0 1px rgba(255,255,255,.55);
+      padding-inline: 14px;
+      padding-bottom: 14px;
+    }
+
+    .sections [data-role-section="marketing"] {
+      --lens-panel: linear-gradient(135deg, rgba(212,175,55,.14), rgba(255,255,255,.56) 40%, rgba(249,248,246,.12));
+    }
+
+    .sections [data-role-section="sales"] {
+      --lens-panel: linear-gradient(135deg, rgba(159,52,44,.1), rgba(154,101,23,.07) 42%, rgba(255,255,255,.5));
+    }
+
+    .sections [data-role-section="product"] {
+      --lens-panel: linear-gradient(135deg, rgba(49,67,109,.1), rgba(61,102,80,.07) 42%, rgba(255,255,255,.5));
+    }
+
+    .lens-proofline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(26,26,26,.12);
+    }
+
+    .lens-proofline span {
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border: 1px solid rgba(26,26,26,.12);
+      background: rgba(255,255,255,.46);
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .role-section.is-role-active {
+      background: rgba(235,229,222,.28);
+      outline: 1px solid rgba(184,142,34,.32);
+      outline-offset: 8px;
+    }
+
+    .sections .role-section.is-role-active {
+      background: var(--lens-panel);
+    }
+
+    .evidence-strip {
+      grid-template-columns: 1fr;
+      margin-top: 18px;
+    }
+
+    #trust-state {
+      background:
+        linear-gradient(135deg, rgba(212,175,55,.11), rgba(49,67,109,.06) 46%, rgba(61,102,80,.055)),
+        rgba(255,255,255,.34);
+      border-top-color: var(--ink);
+      padding-inline: 14px;
+      padding-bottom: 14px;
+    }
+
+    #trust-state .caption {
+      max-width: 48rem;
+    }
+
+    .evidence-grid {
+      background: rgba(255,255,255,.52);
+      backdrop-filter: blur(8px);
+      border-radius: 0;
+    }
+
+    .report-card {
+      border: 1px solid rgba(26,26,26,.15);
+      background: rgba(255,255,255,.5);
+      backdrop-filter: blur(10px);
+      padding: 16px;
+      box-shadow: 0 16px 34px rgba(26,26,26,.07), inset 0 1px rgba(255,255,255,.64);
+    }
+
+    .report-card h3 {
+      margin: 0 0 10px;
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+    }
+
+    .report-card p,
+    .report-card li {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .bibliography {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .bibliography li {
+      display: grid;
+      grid-template-columns: 72px 1fr auto;
+      gap: 10px;
+      align-items: baseline;
+      border-top: 1px solid rgba(26,26,26,.1);
+      padding-top: 9px;
+    }
+
+    .bibliography strong,
+    .bibliography em {
+      color: var(--ink);
+      font-style: normal;
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .bibliography a {
+      color: var(--ink);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    @media (max-width: 1180px) {
+      .hero,
+      .sections,
+      .evidence-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .market-field,
+      .argus-read {
+        min-height: auto;
+      }
+
+      .visual-story,
+      .visual-story img {
+        min-height: 0;
+        height: clamp(340px, 48vh, 430px);
+      }
+
+      .visual-story {
+        max-width: 720px;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .app { width: min(100vw - 24px, 1480px); margin-top: 12px; }
+      .topbar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        height: auto;
+        align-items: flex-start;
+        padding: 14px;
+        position: static;
+      }
+
+      .brand {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .role-rail { grid-column: 1; justify-self: start; justify-content: flex-start; }
+      .brief-spine,
+      .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero { gap: 32px; margin-top: 36px; }
+      .brief-article { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .argus-read,
+      .market-field,
+      .section {
+        padding: 18px 0;
+        border-radius: 0;
+      }
+
+      .argus-read h1 { font-size: 34px; }
+      .brief-spine,
+      .evidence-grid { grid-template-columns: 1fr; }
+      .evidence { border-right: 0; border-bottom: 1px solid var(--line); }
+      .evidence:last-child { border-bottom: 0; }
+      .intel { grid-template-columns: 6px 1fr; }
+      .intel .chip { grid-column: 2; justify-self: start; }
+      .attention-summary { grid-template-columns: minmax(0, 1fr) 34px; gap: 8px; min-height: 58px; }
+      .attention-track { grid-column: 1 / -1; }
+      .attention-proof { grid-template-columns: 1fr; }
+      .attention-proof-inner { grid-column: 1; }
+      .competitor-label { gap: 8px; }
+      .attention-cue { max-width: min(42vw, 160px); }
+      .app { width: min(100vw - 28px, 1480px); }
+      .hero { padding-bottom: 36px; }
+      .visual-story,
+      .visual-story img { min-height: 320px; height: 320px; }
+      .vertical-note { display: none; }
+      .hero-stat { grid-template-columns: 1fr; gap: 4px; }
+      .spine-item { border-right: 0; padding-right: 0; }
+      .spine-item:last-child { padding-left: 0; }
+      .brand strong { font-size: 25px; }
+      .role-rail { gap: 22px; }
+      .proof-actions,
+      .brief-article {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+      .bibliography li {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .attention-row,
+      .attention-row::before,
+      .attention-summary,
+      .attention-bar,
+      .visual-story img,
+      .role-rail::after {
+        transition: none;
+      }
+
+      .attention-row[open] {
+        transform: none;
+      }
+    }
+"""
+
+_SCRIPT = """
+    (() => {
+      const rail = document.querySelector('.role-rail');
+      if (!rail) return;
+
+      const links = [...rail.querySelectorAll('a[data-role]')];
+      const sections = [...document.querySelectorAll('[data-role-section]')];
+      const attentionRows = [...document.querySelectorAll('details.attention-row')];
+      const inlineBriefs = [...document.querySelectorAll('details.inline-brief')];
+      let activeRole = links.find((link) => link.classList.contains('active'))?.dataset.role || 'marketing';
+      let clickLockUntil = 0;
+
+      const linkFor = (role) => links.find((link) => link.dataset.role === role);
+
+      const moveUnderline = (link) => {
+        if (!link) return;
+        const railRect = rail.getBoundingClientRect();
+        const linkRect = link.getBoundingClientRect();
+        rail.style.setProperty('--rail-x', `${linkRect.left - railRect.left}px`);
+        rail.style.setProperty('--rail-w', `${linkRect.width}px`);
+      };
+
+      const setActiveRole = (role) => {
+        const activeLink = linkFor(role);
+        if (!activeLink) return;
+        activeRole = role;
+        links.forEach((link) => {
+          const isActive = link === activeLink;
+          link.classList.toggle('active', isActive);
+          if (isActive) link.setAttribute('aria-current', 'true');
+          else link.removeAttribute('aria-current');
+        });
+        sections.forEach((section) => {
+          section.classList.toggle('is-role-active', section.dataset.roleSection === role);
+        });
+        moveUnderline(activeLink);
+      };
+
+      const openAttentionRow = (row, updateHash = false) => {
+        if (!row) return;
+        attentionRows.forEach((other) => {
+          if (other !== row) other.open = false;
+        });
+        row.open = true;
+        if (updateHash && row.id) history.replaceState(null, '', `#${row.id}`);
+      };
+
+      const openInlineBrief = (brief, updateHash = false) => {
+        if (!brief) return;
+        const parentRow = brief.closest('details.attention-row');
+        if (parentRow) openAttentionRow(parentRow);
+        inlineBriefs.forEach((other) => {
+          if (other !== brief) other.open = false;
+        });
+        brief.open = true;
+        if (updateHash && brief.id) history.replaceState(null, '', `#${brief.id}`);
+      };
+
+      links.forEach((link) => {
+        link.addEventListener('mouseenter', () => moveUnderline(link));
+        link.addEventListener('focus', () => moveUnderline(link));
+        link.addEventListener('mouseleave', () => moveUnderline(linkFor(activeRole)));
+        link.addEventListener('blur', () => moveUnderline(linkFor(activeRole)));
+        link.addEventListener('click', () => {
+          clickLockUntil = Date.now() + 1200;
+          setActiveRole(link.dataset.role);
+        });
+      });
+
+      attentionRows.forEach((row) => {
+        row.addEventListener('toggle', () => {
+          if (row.open) openAttentionRow(row, true);
+        });
+      });
+
+      inlineBriefs.forEach((brief) => {
+        brief.addEventListener('toggle', () => {
+          if (brief.open) openInlineBrief(brief, true);
+        });
+      });
+
+      const observer = new IntersectionObserver((entries) => {
+        if (Date.now() < clickLockUntil) return;
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => Math.abs(a.boundingClientRect.top - 96) - Math.abs(b.boundingClientRect.top - 96));
+        if (visible[0]) setActiveRole(visible[0].target.dataset.roleSection);
+      }, { rootMargin: '-12% 0px -70% 0px', threshold: [0, .1, .25, .5] });
+
+      sections.forEach((section) => observer.observe(section));
+      window.addEventListener('hashchange', () => {
+        const target = document.querySelector(location.hash);
+        if (target?.matches('details.inline-brief')) {
+          openInlineBrief(target);
+          target.scrollIntoView({ block: 'nearest' });
+          return;
+        }
+        if (target?.matches('details.attention-row')) {
+          openAttentionRow(target);
+          return;
+        }
+        const role = target?.dataset.roleSection || linkFor(location.hash.replace('#role-', ''))?.dataset.role;
+        if (role) setActiveRole(role);
+      });
+      window.addEventListener('resize', () => moveUnderline(linkFor(activeRole)));
+      setActiveRole(activeRole);
+      const initialTarget = document.querySelector(location.hash);
+      if (initialTarget?.matches('details.inline-brief')) openInlineBrief(initialTarget);
+      if (initialTarget?.matches('details.attention-row')) openAttentionRow(initialTarget);
+    })();
+
+"""
+
+HERO_TRUNCATE_LEN = 120
+CUE_TRUNCATE_LEN = 42
+PROOF_HEADING_TRUNCATE_LEN = 80
+
+# AttentionLevel -> (row modifier class, bar color class, bar label). Same
+# four discrete states as the rest of the dashboard package (types.py
+# AttentionLevel) -- this is a rendering lookup, not a new taxonomy.
+_ATTENTION_ROW: dict[AttentionLevel, tuple[str, str, str]] = {
+    AttentionLevel.ACT_NOW: ("action-act", "red", "Act now"),
+    AttentionLevel.WATCH: ("action-watch", "amber", "Watch"),
+    AttentionLevel.MONITOR: ("action-monitor", "blue", "Monitor"),
+    AttentionLevel.NORMAL: ("action-normal", "green", "Normal"),
+}
+
+# cios.prescribe.types.Team values routed onto the three cockpit lenses.
+# Executive-team prescriptions have no lens in this design and are not
+# shown here (the mockup only has Marketing/Sales/Product sections).
+_MARKETING_TEAMS = {"Marketing", "Content"}
+_SALES_TEAMS = {"Sales Enablement"}
+_PRODUCT_TEAMS = {"Product"}
+
+# UrgencyWindow.value -> (chip/bar color class, chip label).
+_URGENCY_CHIP: dict[str, tuple[str, str]] = {
+    "act_now": ("red", "act now"),
+    "this_week": ("amber", "this week"),
+    "this_month": ("green", "this month"),
+}
+
+
+def _esc(value: object) -> str:
+    if value is None:
+        return ""
+    return html.escape(str(value))
+
+
+def _truncate(text: str, limit: int) -> str:
+    """Deterministic word-boundary truncation. No LLM, no randomness -- the
+    same input always produces the same output."""
+    text = " ".join(text.split())  # collapse whitespace/newlines
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(",.;:- ")
+    return f"{cut}…" if cut else f"{text[:limit].rstrip()}…"
+
+
+def _hero_headline(state: DashboardState) -> str:
+    if not state.competitor_cards:
+        return "No material competitive signal this cycle."
+    top = state.competitor_cards[0]
+    source = top.what_changed or top.top_signal_headline or top.action_cue
+    if not source:
+        source = f"{top.competitor_name} attention has changed; no summary text on file."
+    return _truncate(source, HERO_TRUNCATE_LEN)
+
+
+def _latest_report_link(state: DashboardState) -> tuple[str, Optional[str]]:
+    """(meta text, href-or-None) for the "Open full brief" deep link. There
+    is no per-competitor report row in the schema (report_history is one
+    archive of full-cycle briefs, not one row per barometer signal), so
+    every row's "Open full brief" honestly points at the same latest report
+    rather than fabricating a per-signal report id."""
+    if not state.report_history:
+        return ("No brief on file yet for this cycle.", None)
+    latest = state.report_history[0]
+    meta = f"{latest.cadence.capitalize()} brief · {latest.report_date.isoformat()}"
+    return (meta, latest.html_path)
+
+
+def _render_hero(state: DashboardState) -> str:
+    headline = _esc(_hero_headline(state))
+    kicker = _esc(f"{state.cadence.capitalize()} read")
+    return (
+        '<article class="argus-read">\n'
+        "  <div>\n"
+        f'    <div class="kicker"><span class="dot"></span>{kicker}</div>\n'
+        f"    <h1>{headline}</h1>\n"
+        "  </div>\n"
+        "</article>"
+    )
+
+
+def _render_visual_story(state: DashboardState) -> str:
+    # No image-generation pipeline is wired to real per-cycle content yet
+    # (the collateral generator produces landing pages/dashboards, not this
+    # editorial image) -- caption is real, the image asset is the mockup's
+    # own static placeholder. Flagged in the build report, not silently
+    # passed off as generated-from-data.
+    caption = _esc(f"Argus intelligence · {state.cadence} read")
+    return (
+        '<figure class="visual-story" aria-label="Argus editorial market brief">\n'
+        '  <img src="assets/argus-search-intelligence-weekly.png" alt="Editorial intelligence desk." />\n'
+        f'  <span class="vertical-note">{caption}</span>\n'
+        "</figure>"
+    )
+
+
+def _render_barometer_row(
+    state: DashboardState, card: CompetitorSignalCard, *, index: int, is_first: bool
+) -> str:
+    row_class, bar_color, bar_label = _ATTENTION_ROW[card.attention_level]
+    # Multiple cards can share one competitor_id (one competitor, several
+    # material deltas this cycle) -- delta_id (falling back to the row's
+    # position) keeps DOM ids unique so the accordion/hash-linking JS
+    # (verbatim from the mockup) never targets two rows at once.
+    row_id = f"competitor-{card.competitor_id}-{card.delta_id if card.delta_id is not None else index}"
+    cue_full = card.action_cue or "No action cue on file."
+    cue_short = _esc(_truncate(cue_full, CUE_TRUNCATE_LEN))
+    score = max(0.0, min(100.0, card.attention_score))
+    proof_body = card.why_it_matters or card.what_changed or cue_full
+    proof_heading = _esc(_truncate(cue_full, PROOF_HEADING_TRUNCATE_LEN))
+    meta, href = _latest_report_link(state)
+    if href:
+        deep_link = f'<a class="deep-link" href="{_esc(href)}">Open full brief</a>'
+    else:
+        deep_link = '<span class="deep-link" aria-disabled="true">No brief on file</span>'
+    if card.evidence_ids:
+        bib_items = "".join(
+            f"<li><strong>evidence</strong><a href=\"{_esc(eid)}\">{_esc(eid)}</a><em>cited</em></li>"
+            for eid in card.evidence_ids
+        )
+    else:
+        bib_items = "<li><strong>evidence</strong><span>No evidence link on file for this signal.</span></li>"
+    open_attr = " open" if is_first else ""
+    aria_label = _esc(
+        f"{card.competitor_name}, {bar_label.lower()}, score {score:g}. {cue_full}."
+    )
+    return f"""<details class="attention-row {row_class}" id="{row_id}"{open_attr}>
+  <summary class="attention-summary" aria-label="{aria_label}">
+    <div class="competitor-label">
+      <span class="competitor-name">{_esc(card.competitor_name)}</span>
+      <span class="attention-cue">{cue_short}</span>
+    </div>
+    <div class="attention-track"><div class="attention-bar {bar_color}" style="width:{score:g}%">{bar_label}</div></div>
+    <div class="attention-score">{score:g}</div>
+  </summary>
+  <div class="attention-proof">
+    <div class="attention-proof-inner">
+      <span>{_esc(card.competitor_name)} / {bar_label.lower()}</span>
+      <h3>{proof_heading}</h3>
+      <p>{_esc(proof_body)}</p>
+      <div class="proof-actions">
+        <div class="proof-meta">{_esc(meta)}</div>
+        {deep_link}
+      </div>
+      <details class="inline-brief" id="report-{row_id}">
+        <summary class="deep-link">Sources</summary>
+        <div class="brief-article">
+          <div class="report-card">
+            <h3>Sources and bibliography</h3>
+            <ul class="bibliography" aria-label="Evidence trail for {_esc(card.competitor_name)}">
+              {bib_items}
+            </ul>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</details>"""
+
+
+def _render_barometer(state: DashboardState) -> str:
+    if not state.competitor_cards:
+        return '<p class="caption">No competitor attention signals this cycle -- nothing rose above the reporting threshold.</p>'
+    rows = [
+        _render_barometer_row(state, card, index=i, is_first=(i == 0))
+        for i, card in enumerate(state.competitor_cards)
+    ]
+    return f'<div class="attention-board" aria-label="Competitor Attention Barometer ranking competitors by attention needed this week">\n{"".join(rows)}\n</div>'
+
+
+def _lens_prescriptions(state: DashboardState, teams: set[str]) -> list[PrescriptionSummary]:
+    return [p for p in state.prescriptions if p.team in teams]
+
+
+def _render_lens_proofline(items: list[PrescriptionSummary]) -> str:
+    play_count = len(items)
+    evidence_count = sum(len(p.evidence_urls) for p in items)
+    urgencies = {p.urgency_window for p in items}
+    if not items:
+        stats = ["no active plays this cycle"]
+    else:
+        stats = [
+            f"{play_count} play{'s' if play_count != 1 else ''} this cycle",
+            f"{evidence_count} evidence link{'s' if evidence_count != 1 else ''}",
+        ]
+        if "act_now" in urgencies:
+            stats.append("act-now urgency")
+        elif "this_week" in urgencies:
+            stats.append("this-week urgency")
+    return "".join(f"<span>{_esc(s)}</span>" for s in stats)
+
+
+def _render_lens_body(items: list[PrescriptionSummary]) -> str:
+    if not items:
+        return '<div class="lane"><p class="caption">No prescribed plays for this lens this cycle.</p></div>'
+    lines = []
+    for p in items:
+        color, label = _URGENCY_CHIP.get(p.urgency_window, ("", p.urgency_window))
+        bar_class = f" {color}" if color else ""
+        chip_class = f" {color}" if color else ""
+        steps = _esc(" ".join(step.strip() for step in p.play if step and step.strip()))
+        effect = f" {_esc(p.expected_effect)}" if p.expected_effect else ""
+        lines.append(
+            '<div class="intel">\n'
+            f'  <span class="bar{bar_class}"></span>\n'
+            "  <div>\n"
+            f"    <h3>{_esc(p.title)}</h3>\n"
+            f"    <p>{steps}{effect}</p>\n"
+            "  </div>\n"
+            f'  <span class="chip{chip_class}">{_esc(label)}</span>\n'
+            "</div>"
+        )
+    return f'<div class="lane">{"".join(lines)}</div>'
+
+
+def _render_lens(
+    *, section_tag: str, role: str, extra_classes: str, heading: str, caption: str, items: list[PrescriptionSummary]
+) -> str:
+    proofline = _render_lens_proofline(items)
+    body = _render_lens_body(items)
+    return (
+        f'<{section_tag} class="section role-section{extra_classes}" id="role-{role}" data-role-section="{role}">\n'
+        f"  <h2>{_esc(heading)}</h2>\n"
+        f'  <div class="caption">{_esc(caption)}</div>\n'
+        f'  <div class="lens-proofline" aria-label="{_esc(heading)} evidence summary">{proofline}</div>\n'
+        f"  {body}\n"
+        f"</{section_tag}>"
+    )
+
+
+def _render_sections(state: DashboardState) -> str:
+    marketing = _render_lens(
+        section_tag="article",
+        role="marketing",
+        extra_classes="",
+        heading="Marketing lens",
+        caption="Messaging, narrative, momentum shifts, and next-week content direction.",
+        items=_lens_prescriptions(state, _MARKETING_TEAMS),
+    )
+    sales = _render_lens(
+        section_tag="article",
+        role="sales",
+        extra_classes="",
+        heading="Sales lens",
+        caption="Competitive moves sales should know before the next deal cycle.",
+        items=_lens_prescriptions(state, _SALES_TEAMS),
+    )
+    product = _render_lens(
+        section_tag="aside",
+        role="product",
+        extra_classes="",
+        heading="Product lens",
+        caption="Product, technical, integration, and partner movement that may affect roadmap or positioning.",
+        items=_lens_prescriptions(state, _PRODUCT_TEAMS),
+    )
+    return f'<section class="sections" id="signals">\n{marketing}\n{sales}\n{product}\n</section>'
+
+
+def _render_eye_behind_the_lenses(state: DashboardState) -> str:
+    coverage = state.coverage
+    active_lanes = len(coverage.lanes)
+    health_pct = f"{coverage.coverage_score * 100:.0f}%" if coverage.coverage_score is not None else "unknown"
+    degraded = coverage.failed_lanes
+    degraded_label = f"degraded sightlines: {_esc(', '.join(degraded))}" if degraded else "no degraded sightlines"
+    return f"""<section class="evidence-strip" id="sources">
+  <article class="section" id="trust-state">
+    <h2>The eye behind the lenses</h2>
+    <div class="caption">This is the quantified sightline behind Marketing, Sales, and Product: how much Argus saw, how healthy the source base is, and where confidence is constrained.</div>
+    <div class="evidence-grid">
+      <div class="evidence"><strong>{active_lanes}</strong><span>active source lanes feeding the lenses</span></div>
+      <div class="evidence"><strong>{_esc(health_pct)}</strong><span>source health behind the read</span></div>
+      <div class="evidence"><strong>{len(degraded)}</strong><span>{degraded_label}</span></div>
+      <div class="evidence"><strong>0</strong><span>private connectors claimed or implied</span></div>
+    </div>
+  </article>
+</section>"""
+
+
+def render_cockpit_html(state: DashboardState) -> str:
+    """Renders one DashboardState into the full Argus cockpit page. Returns
+    a complete, self-contained HTML document (inline CSS/JS, no build step,
+    no server dependency beyond the same Google Fonts CDN links the mockup
+    itself uses)."""
+    hero = _render_hero(state)
+    visual = _render_visual_story(state)
+    barometer = _render_barometer(state)
+    sections = _render_sections(state)
+    eye = _render_eye_behind_the_lenses(state)
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Argus Competitive Intelligence Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;650;780&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+  <style>{_STYLE}</style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="#command" aria-label="Argus Command Center">
+        <img class="sigil" src="assets/argus-logo-mark.png" alt="" aria-hidden="true" />
+        <span>
+          <strong>Argus</strong>
+        </span>
+      </a>
+      <nav class="role-rail" aria-label="Role-aware command rail">
+        <a class="active" href="#role-marketing" data-role="marketing" aria-current="true">Marketing</a>
+        <a href="#role-sales" data-role="sales">Sales</a>
+        <a href="#role-product" data-role="product">Product</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" id="command">
+        {hero}
+        {visual}
+        <section class="market-field role-section" id="role-marketing-command" data-role-section="marketing" aria-labelledby="field-title">
+          <div class="field-head">
+            <div>
+              <h2 id="field-title">Competitor Attention Barometer</h2>
+            </div>
+          </div>
+          {barometer}
+        </section>
+      </section>
+
+      {sections}
+
+      {eye}
+    </main>
+  </div>
+  <script>{_SCRIPT}</script>
+</body>
+</html>
+"""

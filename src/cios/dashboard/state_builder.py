@@ -27,6 +27,7 @@ from .types import (
     DashboardState,
     LaneStatus,
     LivingThesis,
+    PrescriptionSummary,
     ReportHistoryEntry,
     RunHealth,
     SuppressedSignalEntry,
@@ -98,6 +99,18 @@ class SuppressedSignalsRepository(Protocol):
         ...  # pragma: no cover - protocol
 
 
+class PrescriptionsRepository(Protocol):
+    def get_current_prescriptions(self, tenant_id: int) -> list[dict]:
+        """Rows shaped like cios.prescribe.types.Prescription, at minimum:
+        title, team (Team.value), play (list[str]), urgency_window
+        (UrgencyWindow.value), expected_effect, grounding (dict with
+        evidence_urls). No table exists for this yet (Prescription engine
+        wiring is a tracked backlog item) -- callers with nothing real to
+        inject should pass None, not a fake repo. The builder renders that
+        as an honest empty list, never invented plays."""
+        ...  # pragma: no cover - protocol
+
+
 class DashboardStateBuilder:
     def __init__(
         self,
@@ -109,6 +122,7 @@ class DashboardStateBuilder:
         build_status: Optional[BuildStatusProvider] = None,
         report_history: Optional[ReportHistoryRepository] = None,
         suppressed_signals: Optional[SuppressedSignalsRepository] = None,
+        prescriptions: Optional[PrescriptionsRepository] = None,
     ) -> None:
         self._signals = signals
         self._theses = theses
@@ -117,6 +131,7 @@ class DashboardStateBuilder:
         self._build_status = build_status
         self._report_history = report_history
         self._suppressed_signals = suppressed_signals
+        self._prescriptions = prescriptions
 
     def build(self, *, tenant_id: int, cadence: str) -> DashboardState:
         coverage = self._build_coverage(tenant_id)
@@ -129,6 +144,7 @@ class DashboardStateBuilder:
         build_status = self._build_build_status()
         report_history = self._build_report_history(tenant_id)
         suppressed_signals = self._build_suppressed_signals(tenant_id)
+        prescriptions = self._build_prescriptions(tenant_id)
 
         return DashboardState(
             tenant_id=tenant_id,
@@ -141,6 +157,7 @@ class DashboardStateBuilder:
             build_status=build_status,
             report_history=report_history,
             suppressed_signals=suppressed_signals,
+            prescriptions=prescriptions,
             material_delta_ids=[d["id"] for d in deltas if d.get("id") is not None],
             action_item_ids=list(run.get("action_item_ids") or []),
             delivery_ids=list(run.get("delivery_ids") or []),
@@ -256,6 +273,26 @@ class DashboardStateBuilder:
                 finding_count=len(r.get("finding_ids") or []),
                 suppressed_at=r.get("suppressed_at"),
                 notes=r.get("notes"),
+            )
+            for r in rows
+        ]
+
+    def _build_prescriptions(self, tenant_id: int) -> list[PrescriptionSummary]:
+        # No provider injected is not an error -- the prescription engine's
+        # DB wiring is a tracked backlog item, not a schema table yet. The
+        # cockpit renders the honest "no plays yet" empty state per lens
+        # rather than inventing one.
+        if self._prescriptions is None:
+            return []
+        rows = self._prescriptions.get_current_prescriptions(tenant_id)
+        return [
+            PrescriptionSummary(
+                title=r["title"],
+                team=r["team"],
+                play=list(r.get("play") or []),
+                urgency_window=r["urgency_window"],
+                expected_effect=r.get("expected_effect"),
+                evidence_urls=list((r.get("grounding") or {}).get("evidence_urls") or r.get("evidence_urls") or []),
             )
             for r in rows
         ]

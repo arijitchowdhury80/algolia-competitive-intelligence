@@ -1341,15 +1341,31 @@ async def main() -> int:
 
         delivered_result = next((r for r in results if r.slug == deliver_tenant), None)
         if delivered_result is not None and delivered_result.dashboard_state is not None:
+            from cios.dashboard.cockpit_renderer import render_cockpit_html
             from cios.dashboard.html_renderer import render_dashboard_html
 
-            html_out = render_dashboard_html(delivered_result.dashboard_state)
+            # Two artifacts, same DashboardState: the cockpit (Arijit's
+            # designed Luxury Editorial surface) is the primary index page;
+            # the existing brief renderer is what the cockpit's "Open full
+            # brief" links point at. Neither replaces the other -- the
+            # publish-to-web-root cp lines that decide which file serves at
+            # the public URL live in the VPS shell orchestrator, not here.
             html_path = Path(os.environ.get("CIOS_DASHBOARD_OUT", "/tmp/argus-dashboard.html"))
             html_path.parent.mkdir(parents=True, exist_ok=True)
-            html_path.write_text(html_out, encoding="utf-8")
+
+            cockpit_out = render_cockpit_html(delivered_result.dashboard_state)
+            cockpit_path = Path(os.environ.get("CIOS_COCKPIT_OUT", str(html_path)))
+            cockpit_path.parent.mkdir(parents=True, exist_ok=True)
+            cockpit_path.write_text(cockpit_out, encoding="utf-8")
+
+            brief_out = render_dashboard_html(delivered_result.dashboard_state)
+            brief_path = html_path.parent / "brief.html"
+            brief_path.write_text(brief_out, encoding="utf-8")
+
             json_path = html_path.with_suffix(".json")
             publish_to_file(delivered_result.dashboard_state, json_path)
-            print(f"Dashboard written: {html_path} (+ {json_path})")
+            print(f"Cockpit written: {cockpit_path}")
+            print(f"Brief written: {brief_path} (+ {json_path})")
 
     wall = time.time() - started
     print(f"\nRun complete in {wall:.1f}s. LLM calls used: {LLM_CALLS['count']} / {LLM_BUDGET}")

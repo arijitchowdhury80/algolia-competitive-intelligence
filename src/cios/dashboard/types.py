@@ -226,6 +226,22 @@ class BuildStatus(BaseModel):
         return bool(self.services) and all(s.status == "ok" for s in self.services)
 
 
+class PrescriptionSummary(BaseModel):
+    """One prescribed play, as the cockpit's role lenses need it. Mirrors
+    cios.prescribe.types.Prescription (title, team, play, urgency_window,
+    expected_effect, grounding.evidence_urls) -- redeclared here (same
+    convention as LaneStatus mirroring cios.brain.types.LaneStatus) so
+    dashboard stays a pure read/render layer with no import dependency on
+    the prescribe package."""
+
+    title: str
+    team: str  # cios.prescribe.types.Team value, e.g. "Marketing", "Sales Enablement"
+    play: list[str] = Field(default_factory=list)
+    urgency_window: str  # act_now | this_week | this_month
+    expected_effect: Optional[str] = None
+    evidence_urls: list[str] = Field(default_factory=list)
+
+
 class DashboardState(BaseModel):
     """The full semantic snapshot dashboard_state.{daily_state,weekly_state}
     hold, reconstructed as typed data. One instance = one cadence's cockpit
@@ -243,6 +259,7 @@ class DashboardState(BaseModel):
     build_status: BuildStatus = Field(default_factory=BuildStatus)
     report_history: list[ReportHistoryEntry] = Field(default_factory=list)
     suppressed_signals: list[SuppressedSignalEntry] = Field(default_factory=list)
+    prescriptions: list[PrescriptionSummary] = Field(default_factory=list)
 
     material_delta_ids: list[Any] = Field(default_factory=list)
     action_item_ids: list[Any] = Field(default_factory=list)
