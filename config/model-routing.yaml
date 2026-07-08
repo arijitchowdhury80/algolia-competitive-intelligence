@@ -1,0 +1,41 @@
+# CI-OS model routing config — the ONE file that governs model routing.
+# Skills declare capability needs (needs_json_mode, needs_vision,
+# needs_long_context, needs_tool_use); they never reference a concrete
+# provider or model id. This file maps tier -> provider/model, and
+# capability need -> minimum tier via escalation_rules.
+#
+# See docs/planning/CI-OS-env-and-secrets-spec.md and
+# docs/planning/CI-OS-Fable-build-goal-spec.md section 6.
+
+tiers:
+  default:
+    provider: google
+    model_id: gemini-flash-lite
+  standard:
+    provider: google
+    model_id: gemini-flash
+  high:
+    provider: anthropic-cli
+    model_id: sonnet
+  judgment:
+    provider: anthropic-cli
+    model_id: opus
+
+# Per-tenant overrides layered on top of the base tier config above.
+# Only the keys present are overridden; everything else falls back to
+# the base tier entry.
+tenant_overrides:
+  algolia-internal:
+    high:
+      provider: google
+      model_id: gemini-pro-high
+
+# Capability need -> minimum tier required to satisfy it. select_model()
+# picks the lowest tier that satisfies every capability need on the
+# request; escalation_reason is only set when this pushes the tier above
+# "default".
+escalation_rules:
+  needs_long_context: standard
+  needs_json_mode: standard
+  needs_vision: high
+  needs_tool_use: high

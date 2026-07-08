@@ -1,0 +1,19 @@
+[Unit]
+Description=CI-OS Claude CLI shim (localhost-only)
+After=network.target
+
+[Service]
+Type=simple
+User=cios-shim
+Group=cios-shim
+WorkingDirectory=/opt/cios/claude-shim
+EnvironmentFile=/etc/cios-claude-shim.env
+# Bind 127.0.0.1 ONLY. Never 0.0.0.0 / public.
+ExecStart=/opt/cios/claude-shim/.venv/bin/uvicorn shim:app --host 127.0.0.1 --port 8663
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

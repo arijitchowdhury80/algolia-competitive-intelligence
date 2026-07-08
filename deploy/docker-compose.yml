@@ -1,0 +1,29 @@
+# CI-OS local/VPS Postgres. Independent lifecycle from PRISM's container (Gate 0 D1).
+# Secrets come from deploy/.env (never committed). Only POSTGRES_DB is hardcoded.
+#
+#   cp deploy/.env.example deploy/.env   # then fill POSTGRES_USER / POSTGRES_PASSWORD
+#   docker compose -f deploy/docker-compose.yml up -d
+services:
+  cios-postgres:
+    image: postgres:16-alpine
+    container_name: cios-postgres
+    restart: unless-stopped
+    # Localhost-only bind. Host 5433 avoids clashing with any 5432 already in use.
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      POSTGRES_DB: cios
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - cios_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d cios"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  cios_pgdata:
+    name: cios_pgdata
