@@ -183,7 +183,10 @@ async def test_two_candidates_describing_same_story_merge_into_one_signal() -> N
 
 async def test_two_candidates_describing_different_stories_both_ship() -> None:
     p1 = signal_payload(headline="Rival cuts entry price 20 percent")
-    p2 = signal_payload(headline="Rival lays off part of its sales team")
+    # A genuinely different story carries different body text too -- two
+    # distinct events never share an identical what_changed sentence.
+    p2 = signal_payload(headline="Rival lays off part of its sales team",
+                        what_changed="About 15 percent of the sales org was let go this week.")
     model = FakeModel([{"signals": [p1, p2]}])
     result = await Synthesizer(model).synthesize(_input())
     assert len(result.signals) == 2

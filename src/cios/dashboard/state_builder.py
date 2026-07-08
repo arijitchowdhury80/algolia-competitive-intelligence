@@ -222,7 +222,13 @@ class DashboardStateBuilder:
         clusters = cluster_by_similarity(
             deltas,
             group_key=lambda d: d.get("competitor_id"),
-            text=lambda d: f"{d.get('what_changed') or ''} {d.get('why_it_matters') or ''}",
+            # Compare what_changed against what_changed ONLY (fallback to
+            # why_it_matters when a row lacks it). Mixing in why_it_matters
+            # diluted Jaccard on LLM paraphrases of the same story to ~0.3
+            # (below threshold) and shipped duplicate cards on 2026-07-08 --
+            # the why text varies far more between paraphrases than the
+            # what text does.
+            text=lambda d: d.get('what_changed') or d.get('why_it_matters') or '',
         )
         merged_deltas = [self._merge_delta_cluster(c.members) for c in clusters]
 

@@ -49,3 +49,4 @@ def test_cluster_never_merges_across_group_key_even_if_text_identical():
         items, group_key=lambda d: d["competitor_id"], text=lambda d: d["headline"]
     )
     assert len(clusters) == 2
+

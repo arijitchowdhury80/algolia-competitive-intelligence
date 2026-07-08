@@ -421,3 +421,54 @@ def test_different_stories_same_competitor_never_merge():
     assert len(state.competitor_cards) == 2
     assert {c.competitor_id for c in state.competitor_cards} == {1, 2}
     assert all(c.duplicate_count == 1 for c in state.competitor_cards)
+
+
+def test_cards_merge_llm_paraphrases_of_same_story():
+    """Regression for the 2026-07-08 live brief page: three LLM paraphrases
+    of the same Elastic 'context engineering' story (and two of the same
+    Gartner MQ story) shipped as five separate cards. The cluster text mixed
+    what_changed with the highly variable why_it_matters, diluting Jaccard
+    similarity to ~0.3 and defeating dedup. Same-story paraphrases must
+    merge into one card, distinct stories must stay separate."""
+    paraphrase = (
+        "Elastic currently promotes 'context engineering for AI agents' as a "
+        "primary Elasticsearch use case, framing the product as infrastructure "
+        "that delivers 'the most relevant context to agents so that they "
+        "deliver accurate and trusted outcomes.'"
+    )
+    paraphrase2 = (
+        "Elastic currently promotes a dedicated 'context engineering' "
+        "capability across its Elasticsearch product pages, framing the "
+        "platform as infrastructure that delivers 'the most relevant context "
+        "to agents so that they deliver accurate and trusted outcomes.'"
+    )
+    paraphrase3 = (
+        "Elastic currently positions a dedicated 'context engineering' "
+        "capability, framing Elasticsearch as infrastructure that delivers "
+        "'the most relevant context to agents so that they deliver accurate "
+        "and trusted outcomes.' This is surfaced prominently across their "
+        "product pages."
+    )
+    gartner = (
+        "Elastic is currently positioned as a Leader in the 2025 Gartner "
+        "Magic Quadrant for Observability Platforms for the second "
+        "consecutive year, and separately claims Forrester Wave Leader "
+        "status for Q2 2025."
+    )
+    whys = [
+        "Positions Elastic against retrieval rivals in the agent stack conversation.",
+        "A category framing shift that could reset evaluation criteria for buyers comparing search vendors.",
+        "Signals sustained marketing investment behind the agent-infrastructure narrative.",
+        "Analyst placement strengthens their enterprise credibility with observability buyers.",
+    ]
+    deltas = [
+        {"id": i, "competitor_id": 5, "competitor_name": "Elastic",
+         "what_changed": wc, "why_it_matters": why,
+         "materiality_score": 0.8 - i * 0.01, "evidence_ids": [i]}
+        for i, (wc, why) in enumerate(zip([paraphrase, paraphrase2, paraphrase3, gartner], whys))
+    ]
+    builder = make_builder(signals={1: deltas}, coverage={})
+    state = builder.build(tenant_id=1, cadence="daily")
+    assert len(state.competitor_cards) == 2
+    counts = sorted(c.duplicate_count for c in state.competitor_cards)
+    assert counts == [1, 3]

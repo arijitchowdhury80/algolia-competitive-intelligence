@@ -49,11 +49,12 @@ def signal_payload(
     recommended_action: str = "Brief the field on the pricing shift.",
     signal_type: str = "pricing change",
     headline: str = "Competitor cuts entry price 20%",
+    what_changed: str = "Entry tier dropped from 500 to 400.",
 ) -> dict[str, Any]:
     return {
         "signal_type": signal_type,
         "headline": headline,
-        "what_changed": "Entry tier dropped from 500 to 400.",
+        "what_changed": what_changed,
         "why_it_matters": "Undercuts our mid-market motion.",
         "implication": "Expect price objections in Q3 deals.",
         "recommended_action": recommended_action,

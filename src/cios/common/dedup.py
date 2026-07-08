@@ -32,13 +32,25 @@ def normalized_tokens(text: str) -> set[str]:
 
 
 def token_set_similarity(a: str, b: str) -> float:
-    """Jaccard similarity over normalized token sets. 0.0 if either side has
-    no tokens (never treat two empty/unknown strings as duplicates of each
-    other)."""
+    """Same-story similarity over normalized token sets: the max of Jaccard
+    and containment (overlap / smaller set). 0.0 if either side has no
+    tokens (never treat two empty/unknown strings as duplicates of each
+    other).
+
+    Why containment too (2026-07-08 live-page regression): LLM paraphrases
+    of one story often share a long verbatim core but one version adds a
+    trailing sentence or swaps a word form ("rebrands" vs "brands"). Pure
+    Jaccard punishes the length difference and scores such pairs ~0.5,
+    below the same-story threshold; containment scores the shared core
+    directly. Genuinely distinct stories about the same competitor measured
+    <= 0.35 on both metrics against real production deltas."""
     ta, tb = normalized_tokens(a), normalized_tokens(b)
     if not ta or not tb:
         return 0.0
-    return len(ta & tb) / len(ta | tb)
+    inter = len(ta & tb)
+    jaccard = inter / len(ta | tb)
+    containment = inter / min(len(ta), len(tb))
+    return max(jaccard, containment)
 
 
 T = TypeVar("T")
