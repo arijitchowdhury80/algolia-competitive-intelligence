@@ -106,6 +106,66 @@ def test_unescaped_injection_is_escaped() -> None:
     assert "<img src=x onerror=alert(2)>" not in html_out
 
 
+def test_suppressed_signals_empty_state_is_honest_not_a_stub() -> None:
+    state = _load_state()
+    assert state.suppressed_signals == []
+    html_out = render_dashboard_html(state)
+    assert "No suppressed signals this cycle." in html_out
+    assert 'id="suppressed-title"' in html_out
+
+
+def test_suppressed_signals_render_with_reason_and_count() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["suppressed_signals"] = [
+        {"suppressed_id": 1, "reason": "Below materiality threshold", "finding_count": 4,
+         "suppressed_at": None, "notes": "batch review"},
+    ]
+    populated = DashboardState.model_validate(payload)
+    html_out = render_dashboard_html(populated)
+    assert "Below materiality threshold" in html_out
+    assert "4 finding(s) suppressed" in html_out
+    assert "batch review" in html_out
+
+
+def test_report_history_empty_state_is_honest_not_a_stub() -> None:
+    state = _load_state()
+    assert state.report_history == []
+    html_out = render_dashboard_html(state)
+    assert "No reports generated yet." in html_out
+    assert 'id="history-title"' in html_out
+
+
+def test_report_history_renders_rows_with_link() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["report_history"] = [
+        {"report_id": 1, "report_date": "2026-07-08", "cadence": "daily",
+         "title": "Argus daily brief - algolia", "summary": "No material signal.",
+         "status": "rendered", "html_path": "archive/2026-07-08.html"},
+    ]
+    populated = DashboardState.model_validate(payload)
+    html_out = render_dashboard_html(populated)
+    assert "Argus daily brief - algolia" in html_out
+    assert 'href="archive/2026-07-08.html"' in html_out
+    assert "rendered" in html_out
+
+
+def test_section_order_matches_reference_layout() -> None:
+    # Reference layout order (docs/workspace/dashboard-reference/index.html):
+    # hero -> [customer-proof/narrative, replaced by signal cards] -> ... ->
+    # suppressed signals -> report history. Living theses is a V2 addition
+    # placed after signal cards, before the two restored sections.
+    state = _load_state()
+    html_out = render_dashboard_html(state)
+    hero_pos = html_out.index('id="daily-title"')
+    signals_pos = html_out.index('id="signals-title"')
+    theses_pos = html_out.index('id="theses-title"')
+    suppressed_pos = html_out.index('id="suppressed-title"')
+    history_pos = html_out.index('id="history-title"')
+    assert hero_pos < signals_pos < theses_pos < suppressed_pos < history_pos
+
+
 def test_reuses_original_css_tokens() -> None:
     # Confirms the renderer copies Arijit's design tokens verbatim rather than
     # inventing new ones.

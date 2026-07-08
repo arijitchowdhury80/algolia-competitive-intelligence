@@ -27,7 +27,7 @@ This module has no DB or network access. The caller's injected repositories
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -174,6 +174,40 @@ class ServiceHealth(BaseModel):
     checked_at: Optional[datetime] = None
 
 
+class ReportHistoryEntry(BaseModel):
+    """One row of the "Report history" archive panel (Arijit's original
+    layout). Sourced from the `reports` table (migrated V0 history + new V2
+    runs) -- see PgReportHistoryRepository in cios/db/repos/dashboard.py.
+
+    `status` is `reports.status` (draft | rendered | delivered) verbatim.
+    There is no FK from quality_reviews to reports in schema.sql (
+    quality_reviews is keyed by a free-text run_id, not report_id), so this
+    is deliberately the report's own lifecycle status, not a fabricated
+    "quality status" join -- truthful source over an invented-looking metric.
+    """
+
+    report_id: int
+    report_date: date
+    cadence: str
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    status: Optional[str] = None
+    html_path: Optional[str] = None
+
+
+class SuppressedSignalEntry(BaseModel):
+    """One row of the "Suppressed Signals" trust-diagnostics panel (Arijit's
+    original layout). Sourced from `suppressed_diagnostics` -- the dedicated
+    audit-trail table for findings intentionally kept out of the executive
+    view because they did not pass semantic materiality gates."""
+
+    suppressed_id: int
+    reason: str
+    finding_count: int
+    suppressed_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
 class BuildStatus(BaseModel):
     """System/build status section (Arijit's explicit requirement: system
     status must be visible ON the dashboard, not only in chat). Not tenant
@@ -207,6 +241,8 @@ class DashboardState(BaseModel):
     theses: list[LivingThesis] = Field(default_factory=list)
     run_health: RunHealth = Field(default_factory=RunHealth)
     build_status: BuildStatus = Field(default_factory=BuildStatus)
+    report_history: list[ReportHistoryEntry] = Field(default_factory=list)
+    suppressed_signals: list[SuppressedSignalEntry] = Field(default_factory=list)
 
     material_delta_ids: list[Any] = Field(default_factory=list)
     action_item_ids: list[Any] = Field(default_factory=list)

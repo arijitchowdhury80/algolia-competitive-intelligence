@@ -22,6 +22,10 @@ Sections carried over unchanged in structure:
 Sections added, in the same visual language:
   - living theses (.panel / .mini-grid / .mini-card)
   - build/system status (.side-panel / .quality-list / .quality-row)
+  - suppressed signals (.panel / .quality-list / .quality-row) -- restored
+    from the reference page, now itemized per suppression reason
+  - report history (.panel / .report-list / .report-row) -- restored from
+    the reference page verbatim
 
 All dynamic text is passed through html.escape() before being placed in
 markup. No external JS or CSS is loaded; the page is self-contained.
@@ -187,6 +191,59 @@ def _signal_cards_section(state: DashboardState) -> str:
         </section>"""
 
 
+def _suppressed_signals_section(state: DashboardState) -> str:
+    """Mirrors the reference page's "Suppressed Signals" trust-diagnostics
+    panel (docs/workspace/dashboard-reference/index.html), rendered as a
+    .quality-list so each suppression reason is individually inspectable
+    instead of collapsed into one sentence."""
+    if not state.suppressed_signals:
+        rows_html = '<div class="empty">No suppressed signals this cycle.</div>'
+    else:
+        rows = []
+        for s in state.suppressed_signals:
+            detail = f"{_e(s.finding_count)} finding(s) suppressed" + (
+                f" &middot; {_e(s.suppressed_at)}" if s.suppressed_at else ""
+            )
+            note = f' &middot; {_e(s.notes)}' if s.notes else ""
+            rows.append(
+                f"""<div class="quality-row"><div class="mark warn">!</div><div><strong>{_e(s.reason)}</strong><span>{detail}{note}</span></div></div>"""
+            )
+        rows_html = f'<div class="quality-list">{"".join(rows)}</div>'
+
+    return f"""
+        <section class="panel" aria-labelledby="suppressed-title">
+          <div class="section-head"><div><div class="eyebrow">Trust diagnostics</div><h2 id="suppressed-title">Suppressed Signals</h2></div><span class="pill amber">Not findings</span></div>
+          {rows_html}
+        </section>"""
+
+
+def _report_history_section(state: DashboardState) -> str:
+    """Mirrors the reference page's "Report history" archive panel
+    (docs/workspace/dashboard-reference/index.html), .report-list /
+    .report-row markup exactly."""
+    if not state.report_history:
+        rows_html = '<div class="empty">No reports generated yet.</div>'
+    else:
+        rows = []
+        for r in state.report_history:
+            title = _e(r.title) or f"{_e(r.report_date)} {_e(r.cadence)}"
+            summary = _e(r.summary) or "No summary recorded."
+            link = f'<a href="{_e(r.html_path)}">Open</a>' if r.html_path else ""
+            status_pill = f'<span class="pill">{_e(r.status)}</span>' if r.status else ""
+            rows.append(f"""<div class="report-row">
+              <time>{_e(r.report_date)}</time>
+              <div><b>{title}</b><span>{summary}</span></div>
+              <div>{status_pill}{link}</div>
+            </div>""")
+        rows_html = f'<div class="report-list">{"".join(rows)}</div>'
+
+    return f"""
+        <section class="panel" aria-labelledby="history-title">
+          <div class="section-head"><div><div class="eyebrow">Where this came from</div><h2 id="history-title">Report history</h2></div><span class="pill">Automated archive</span></div>
+          {rows_html}
+        </section>"""
+
+
 def _theses_section(state: DashboardState) -> str:
     if not state.theses:
         theses_html = '<div class="empty">No living thesis is currently tracked.</div>'
@@ -300,6 +357,8 @@ def render_dashboard_html(state: DashboardState) -> str:
             _hero_section(state),
             _signal_cards_section(state),
             _theses_section(state),
+            _suppressed_signals_section(state),
+            _report_history_section(state),
         ]
     )
 

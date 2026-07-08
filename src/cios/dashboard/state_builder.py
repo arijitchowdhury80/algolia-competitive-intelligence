@@ -27,7 +27,9 @@ from .types import (
     DashboardState,
     LaneStatus,
     LivingThesis,
+    ReportHistoryEntry,
     RunHealth,
+    SuppressedSignalEntry,
     attention_level_for_score,
 )
 
@@ -82,6 +84,20 @@ class BuildStatusProvider(Protocol):
         ...  # pragma: no cover - protocol
 
 
+class ReportHistoryRepository(Protocol):
+    def get_recent_reports(self, tenant_id: int, limit: int = 10) -> list[dict]:
+        """Rows shaped like `reports`, at minimum: id, report_date, cadence,
+        title, summary, status, html_path. Most-recent-first."""
+        ...  # pragma: no cover - protocol
+
+
+class SuppressedSignalsRepository(Protocol):
+    def get_recent_suppressed(self, tenant_id: int, limit: int = 10) -> list[dict]:
+        """Rows shaped like `suppressed_diagnostics`, at minimum: id, reason,
+        finding_ids, suppressed_at, notes. Most-recent-first."""
+        ...  # pragma: no cover - protocol
+
+
 class DashboardStateBuilder:
     def __init__(
         self,
@@ -91,12 +107,16 @@ class DashboardStateBuilder:
         coverage: CoverageRepository,
         runs: RunRepository,
         build_status: Optional[BuildStatusProvider] = None,
+        report_history: Optional[ReportHistoryRepository] = None,
+        suppressed_signals: Optional[SuppressedSignalsRepository] = None,
     ) -> None:
         self._signals = signals
         self._theses = theses
         self._coverage = coverage
         self._runs = runs
         self._build_status = build_status
+        self._report_history = report_history
+        self._suppressed_signals = suppressed_signals
 
     def build(self, *, tenant_id: int, cadence: str) -> DashboardState:
         coverage = self._build_coverage(tenant_id)
@@ -107,6 +127,8 @@ class DashboardStateBuilder:
         run_health = self._build_run_health(run, source_count=len(deltas))
         argus_read = ArgusRead(**(run.get("argus_read") or {}))
         build_status = self._build_build_status()
+        report_history = self._build_report_history(tenant_id)
+        suppressed_signals = self._build_suppressed_signals(tenant_id)
 
         return DashboardState(
             tenant_id=tenant_id,
@@ -117,6 +139,8 @@ class DashboardStateBuilder:
             theses=theses,
             run_health=run_health,
             build_status=build_status,
+            report_history=report_history,
+            suppressed_signals=suppressed_signals,
             material_delta_ids=[d["id"] for d in deltas if d.get("id") is not None],
             action_item_ids=list(run.get("action_item_ids") or []),
             delivery_ids=list(run.get("delivery_ids") or []),
@@ -200,6 +224,41 @@ class DashboardStateBuilder:
             delivery_status=run.get("delivery_status"),
             quality_review_status=run.get("quality_review_status"),
         )
+
+    def _build_report_history(self, tenant_id: int) -> list[ReportHistoryEntry]:
+        # No provider injected is not an error -- some callers (tests,
+        # early cadences before the reports table has rows) legitimately
+        # have nothing to show. Renderer shows the honest empty-state line.
+        if self._report_history is None:
+            return []
+        rows = self._report_history.get_recent_reports(tenant_id)
+        return [
+            ReportHistoryEntry(
+                report_id=r["id"],
+                report_date=r["report_date"],
+                cadence=r["cadence"],
+                title=r.get("title"),
+                summary=r.get("summary"),
+                status=r.get("status"),
+                html_path=r.get("html_path"),
+            )
+            for r in rows
+        ]
+
+    def _build_suppressed_signals(self, tenant_id: int) -> list[SuppressedSignalEntry]:
+        if self._suppressed_signals is None:
+            return []
+        rows = self._suppressed_signals.get_recent_suppressed(tenant_id)
+        return [
+            SuppressedSignalEntry(
+                suppressed_id=r["id"],
+                reason=r["reason"],
+                finding_count=len(r.get("finding_ids") or []),
+                suppressed_at=r.get("suppressed_at"),
+                notes=r.get("notes"),
+            )
+            for r in rows
+        ]
 
     def _build_build_status(self) -> BuildStatus:
         if self._build_status is None:

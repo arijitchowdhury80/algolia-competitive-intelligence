@@ -6,13 +6,17 @@ from cios.dashboard.types import AttentionLevel
 from .conftest import (
     FakeBuildStatusProvider,
     FakeCoverageRepository,
+    FakeReportHistoryRepository,
     FakeRunRepository,
     FakeSignalsRepository,
+    FakeSuppressedSignalsRepository,
     FakeThesesRepository,
     broken_coverage,
     build_status_ok,
     delta,
     full_coverage,
+    report_row,
+    suppressed_row,
     thesis,
 )
 
@@ -24,6 +28,8 @@ def make_builder(
     coverage=None,
     runs=None,
     build_status=None,
+    report_history=None,
+    suppressed_signals=None,
 ) -> DashboardStateBuilder:
     return DashboardStateBuilder(
         signals=FakeSignalsRepository(signals or {}),
@@ -31,6 +37,8 @@ def make_builder(
         coverage=FakeCoverageRepository(coverage or {}),
         runs=FakeRunRepository(runs or {}),
         build_status=FakeBuildStatusProvider(build_status) if build_status is not None else None,
+        report_history=FakeReportHistoryRepository(report_history) if report_history is not None else None,
+        suppressed_signals=FakeSuppressedSignalsRepository(suppressed_signals) if suppressed_signals is not None else None,
     )
 
 
@@ -181,3 +189,51 @@ def test_build_status_flags_provider_returning_nothing():
     )
     state = builder.build(tenant_id=1, cadence="daily")
     assert state.build_status.last_error is not None
+
+
+# -- report history + suppressed signals -------------------------------------
+
+
+def test_report_history_empty_when_no_provider_injected():
+    builder = make_builder(coverage={1: full_coverage()})
+    state = builder.build(tenant_id=1, cadence="daily")
+    assert state.report_history == []
+
+
+def test_report_history_populated_from_repo():
+    builder = make_builder(
+        coverage={1: full_coverage()},
+        report_history={1: [report_row(id=1), report_row(id=2, cadence="weekly")]},
+    )
+    state = builder.build(tenant_id=1, cadence="daily")
+    assert [r.report_id for r in state.report_history] == [1, 2]
+    assert state.report_history[0].status == "rendered"
+    assert state.report_history[1].cadence == "weekly"
+
+
+def test_report_history_is_tenant_scoped():
+    builder = make_builder(
+        coverage={1: full_coverage(), 2: full_coverage()},
+        report_history={1: [report_row(id=1)], 2: [report_row(id=2)]},
+    )
+    state1 = builder.build(tenant_id=1, cadence="daily")
+    state2 = builder.build(tenant_id=2, cadence="daily")
+    assert [r.report_id for r in state1.report_history] == [1]
+    assert [r.report_id for r in state2.report_history] == [2]
+
+
+def test_suppressed_signals_empty_when_no_provider_injected():
+    builder = make_builder(coverage={1: full_coverage()})
+    state = builder.build(tenant_id=1, cadence="daily")
+    assert state.suppressed_signals == []
+
+
+def test_suppressed_signals_populated_from_repo():
+    builder = make_builder(
+        coverage={1: full_coverage()},
+        suppressed_signals={1: [suppressed_row(id=1, finding_ids=[1, 2, 3])]},
+    )
+    state = builder.build(tenant_id=1, cadence="daily")
+    assert len(state.suppressed_signals) == 1
+    assert state.suppressed_signals[0].finding_count == 3
+    assert state.suppressed_signals[0].reason == "Below materiality threshold"

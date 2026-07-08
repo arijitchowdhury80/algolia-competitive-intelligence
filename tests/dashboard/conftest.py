@@ -45,6 +45,62 @@ class FakeBuildStatusProvider:
         return self._status
 
 
+class FakeReportHistoryRepository:
+    def __init__(self, by_tenant: dict[int, list[dict]]) -> None:
+        self._by_tenant = by_tenant
+
+    def get_recent_reports(self, tenant_id: int, limit: int = 10) -> list[dict]:
+        return list(self._by_tenant.get(tenant_id, []))[:limit]
+
+
+class FakeSuppressedSignalsRepository:
+    def __init__(self, by_tenant: dict[int, list[dict]]) -> None:
+        self._by_tenant = by_tenant
+
+    def get_recent_suppressed(self, tenant_id: int, limit: int = 10) -> list[dict]:
+        return list(self._by_tenant.get(tenant_id, []))[:limit]
+
+
+def report_row(
+    *,
+    id: int = 1,
+    report_date=None,
+    cadence: str = "daily",
+    title: str = "Argus daily brief",
+    summary: str = "No material signal recorded.",
+    status: str = "rendered",
+    html_path: Optional[str] = "archive/2026-07-08.html",
+) -> dict:
+    from datetime import date
+
+    return {
+        "id": id,
+        "report_date": report_date or date(2026, 7, 8),
+        "cadence": cadence,
+        "title": title,
+        "summary": summary,
+        "status": status,
+        "html_path": html_path,
+    }
+
+
+def suppressed_row(
+    *,
+    id: int = 1,
+    reason: str = "Below materiality threshold",
+    finding_ids: Optional[list[Any]] = None,
+    suppressed_at=None,
+    notes: Optional[str] = None,
+) -> dict:
+    return {
+        "id": id,
+        "reason": reason,
+        "finding_ids": finding_ids if finding_ids is not None else [101, 102],
+        "suppressed_at": suppressed_at,
+        "notes": notes,
+    }
+
+
 def full_coverage(*, lanes: Optional[list[str]] = None) -> dict:
     lanes = lanes or ["news", "social", "pricing", "product", "exec_speech"]
     return {
