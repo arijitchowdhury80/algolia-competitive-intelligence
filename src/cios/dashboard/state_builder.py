@@ -16,7 +16,7 @@ Gate 5 acceptance criteria this module is responsible for:
 
 from __future__ import annotations
 
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from cios.common.dedup import cluster_by_similarity
 
@@ -113,6 +113,37 @@ class PrescriptionsRepository(Protocol):
         ...  # pragma: no cover - protocol
 
 
+# Composite attention-score weights (Bug 4 fix). The old formula was
+# `materiality * 100`, which meant two competitors sharing the same
+# top-materiality finding always scored identically regardless of anything
+# else -- degenerate, no differentiation. The composite below blends:
+#   - materiality (50%): the existing top-signal materiality signal.
+#   - signal volume for the competitor (30%, capped): more corroborating
+#     signals earns more attention, but capped so one competitor spamming
+#     signals cannot dominate the score by volume alone.
+#   - evidence breadth (20%, capped): more DISTINCT sources cited for the
+#     competitor is stronger corroboration than one source repeated.
+# Thresholds (ATTENTION_THRESHOLD_* in .types) are applied against this same
+# 0-100 composite score (via score/100), not against raw materiality alone.
+ATTENTION_SCORE_MATERIALITY_WEIGHT = 50.0
+ATTENTION_SCORE_VOLUME_WEIGHT = 30.0
+ATTENTION_SCORE_EVIDENCE_WEIGHT = 20.0
+ATTENTION_SCORE_VOLUME_CAP = 10
+ATTENTION_SCORE_EVIDENCE_CAP = 10
+
+
+def _composite_attention_score(materiality: float, signal_count: int, evidence_count: int) -> float:
+    materiality_component = max(0.0, min(1.0, materiality)) * ATTENTION_SCORE_MATERIALITY_WEIGHT
+    volume_component = (
+        min(signal_count, ATTENTION_SCORE_VOLUME_CAP) / ATTENTION_SCORE_VOLUME_CAP
+    ) * ATTENTION_SCORE_VOLUME_WEIGHT
+    evidence_component = (
+        min(evidence_count, ATTENTION_SCORE_EVIDENCE_CAP) / ATTENTION_SCORE_EVIDENCE_CAP
+    ) * ATTENTION_SCORE_EVIDENCE_WEIGHT
+    total = materiality_component + volume_component + evidence_component
+    return round(max(0.0, min(100.0, total)), 1)
+
+
 class DashboardStateBuilder:
     def __init__(
         self,
@@ -195,13 +226,33 @@ class DashboardStateBuilder:
         )
         merged_deltas = [self._merge_delta_cluster(c.members) for c in clusters]
 
+        # Per-competitor signal volume + evidence breadth, computed across
+        # ALL of this competitor's deltas (not just the current cluster) --
+        # "signal volume" and "evidence breadth" are competitor-level
+        # attributes, not per-story ones.
+        signal_counts: dict[Any, int] = {}
+        evidence_by_competitor: dict[Any, set] = {}
+        for d in deltas:
+            cid = d.get("competitor_id")
+            signal_counts[cid] = signal_counts.get(cid, 0) + 1
+            urls = evidence_by_competitor.setdefault(cid, set())
+            for e in d.get("evidence_ids") or []:
+                urls.add(e)
+
         cards: list[CompetitorSignalCard] = []
         for d in merged_deltas:
             materiality = float(d.get("materiality_score") or 0.0)
+            competitor_id = d["competitor_id"]
+            signal_count = signal_counts.get(competitor_id, 0)
+            evidence_count = len(evidence_by_competitor.get(competitor_id, ()))
             # attention_score is presented 0-100 (UX spec); materiality_score
             # is stored 0-1 (semantic_deltas.materiality_score numeric(5,4)).
-            attention_score = round(materiality * 100, 1)
-            level = attention_level_for_score(materiality)
+            # Composite score (Bug 4 fix): materiality alone was degenerate
+            # (two competitors sharing a top materiality scored identically);
+            # blend in signal volume and evidence breadth. See
+            # _composite_attention_score above.
+            attention_score = _composite_attention_score(materiality, signal_count, evidence_count)
+            level = attention_level_for_score(attention_score / 100.0)
             cards.append(
                 CompetitorSignalCard(
                     competitor_id=d["competitor_id"],

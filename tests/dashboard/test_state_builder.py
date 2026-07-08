@@ -107,7 +107,12 @@ def test_competitor_cards_are_materiality_ranked_descending():
     scores = [c.attention_score for c in state.competitor_cards]
     assert scores == sorted(scores, reverse=True)
     assert state.competitor_cards[0].competitor_id == 2
-    assert state.top_attention_level == AttentionLevel.ACT_NOW
+    # Bug-4 fix: level now derives from the composite score (materiality +
+    # capped volume + capped evidence breadth), not raw materiality alone.
+    # A single delta/single evidence url at materiality 0.9 composites to
+    # 50/100 -> "watch", not "act_now" (which now requires more
+    # corroboration than one lone signal).
+    assert state.top_attention_level == AttentionLevel.WATCH
 
 
 def test_materiality_ties_break_deterministically_by_competitor_id():
@@ -130,7 +135,8 @@ def test_every_card_has_a_non_empty_action_cue():
     builder = make_builder(coverage={1: full_coverage()}, signals=signals)
     state = builder.build(tenant_id=1, cadence="daily")
     assert state.competitor_cards[0].action_cue
-    assert state.competitor_cards[0].attention_level == AttentionLevel.ACT_NOW
+    # Bug-4 fix: see comment in test_competitor_cards_are_materiality_ranked_descending.
+    assert state.competitor_cards[0].attention_level == AttentionLevel.WATCH
 
 
 # -- tenant scoping ----------------------------------------------------------
@@ -291,7 +297,74 @@ def test_different_stories_same_competitor_stay_separate_cards():
     assert all(c.duplicate_count == 1 for c in state.competitor_cards)
 
 
-def test_same_story_different_competitors_never_merge():
+# -- Bug 4: composite attention score (materiality alone was degenerate) ----
+
+
+def test_same_top_materiality_but_more_signals_and_evidence_scores_higher():
+    # Competitor 1: one signal, one evidence url, materiality 0.8.
+    # Competitor 2: same top materiality (0.8), but three signals (two of
+    # them distinct stories, so they don't cluster-merge with the top one)
+    # and more distinct evidence urls. Under the old formula
+    # (materiality * 100) both would score identically (80/80) -- the
+    # composite score must differentiate them.
+    signals = {
+        1: [
+            delta(id=1, competitor_id=1, materiality_score=0.8,
+                  evidence_ids=["https://rival-a.com/pricing"]),
+        ],
+        2: [
+            delta(id=2, competitor_id=2, materiality_score=0.8,
+                  evidence_ids=["https://rival-b.com/pricing"]),
+            delta(id=3, competitor_id=2, materiality_score=0.4,
+                  recommended_action="Track the new hire.",
+                  evidence_ids=["https://rival-b.com/careers"]),
+            delta(id=4, competitor_id=2, materiality_score=0.3,
+                  recommended_action="Track the feature launch.",
+                  evidence_ids=["https://rival-b.com/blog"]),
+        ],
+    }
+    signals[2][1]["what_changed"] = "Rival B hires a new VP of Product."
+    signals[2][1]["why_it_matters"] = "Signals a product-org shakeup."
+    signals[2][2]["what_changed"] = "Rival B ships a new search feature."
+    signals[2][2]["why_it_matters"] = "Directly overlaps our roadmap."
+
+    builder = make_builder(coverage={1: full_coverage(), 2: full_coverage()}, signals=signals)
+    state1 = builder.build(tenant_id=1, cadence="daily")
+    state2 = builder.build(tenant_id=2, cadence="daily")
+
+    card1 = state1.competitor_cards[0]
+    # Competitor 2's top-materiality card (the 0.8 one).
+    card2 = next(c for c in state2.competitor_cards if c.materiality_score == 0.8)
+
+    assert card1.materiality_score == card2.materiality_score == 0.8
+    assert card1.attention_score != card2.attention_score
+    assert card2.attention_score > card1.attention_score
+    assert 0 <= card1.attention_score <= 100
+    assert 0 <= card2.attention_score <= 100
+
+
+def test_signal_volume_contribution_is_capped():
+    # A competitor spamming signals must not blow past the 30%-weight,
+    # 10-signal cap on the volume component.
+    def _distinct_delta(i: int) -> dict:
+        row = delta(id=i, competitor_id=1, materiality_score=0.8,
+                     evidence_ids=[f"https://rival.com/{i}"])
+        row["what_changed"] = f"Distinct story number {i} happens."
+        return row
+
+    many_signals = {1: [_distinct_delta(i) for i in range(1, 21)]}
+    fewer_signals = {1: [_distinct_delta(i) for i in range(1, 11)]}
+    builder_many = make_builder(coverage={1: full_coverage()}, signals=many_signals)
+    builder_fewer = make_builder(coverage={1: full_coverage()}, signals=fewer_signals)
+    state_many = builder_many.build(tenant_id=1, cadence="daily")
+    state_fewer = builder_fewer.build(tenant_id=1, cadence="daily")
+    top_many = max(c.attention_score for c in state_many.competitor_cards)
+    top_fewer = max(c.attention_score for c in state_fewer.competitor_cards)
+    # 20 signals must not outscore 10 signals -- the cap makes them equal.
+    assert top_many == top_fewer
+
+
+def test_different_stories_same_competitor_never_merge():
     signals = {
         1: [
             _dupe_delta(id=1, competitor_id=1, materiality_score=0.6,

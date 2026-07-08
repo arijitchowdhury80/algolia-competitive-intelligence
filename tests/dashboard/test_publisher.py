@@ -36,7 +36,11 @@ def test_to_json_dict_includes_schema_version_and_quiet_flag():
     assert payload["schema_version"] == 2
     assert payload["is_quiet"] is False
     assert payload["tenant_id"] == 7
-    assert payload["top_attention_level"] == "watch"
+    # Bug-4 fix: attention level now derives from the composite attention
+    # score (materiality + capped signal volume + capped evidence breadth),
+    # not raw materiality alone. A single delta/single evidence url at
+    # materiality 0.6 composites to 33/100 -> "monitor", not "watch".
+    assert payload["top_attention_level"] == "monitor"
 
 
 def test_serialization_is_stable_across_calls():

@@ -372,3 +372,45 @@ def test_brief_link_stays_no_brief_when_latest_report_is_not_today() -> None:
     html_out = render_cockpit_html(stale_state)
     assert 'aria-disabled="true"' in html_out
     assert 'href="./brief.html"' not in html_out
+
+
+# -- Bug 3: sources/bibliography accordion dedup -----------------------------
+
+
+def test_bibliography_dedupes_duplicate_urls_preserving_first_occurrence() -> None:
+    # Two signals for the SAME competitor group, one URL cited by both (e.g.
+    # a competitor's page cited both as this cycle's top signal's evidence
+    # and again as the second-ranked signal's evidence). The accordion must
+    # cite it once, not once per signal that references it.
+    dupe_url = "https://constructor.com/solutions/ai-shopping-agent"
+    other_url = "https://constructor.com/blog/launch"
+    cards = [
+        _make_card(
+            competitor_id=5, competitor_name="Constructor", attention_score=80.0,
+            attention_level=AttentionLevel.ACT_NOW, delta_id=1,
+            what_changed="Constructor launches an AI shopping agent.",
+            why_it_matters="Direct overlap with our roadmap.",
+            evidence_ids=[dupe_url, other_url],
+        ),
+        _make_card(
+            competitor_id=5, competitor_name="Constructor", attention_score=60.0,
+            attention_level=AttentionLevel.WATCH, delta_id=2,
+            what_changed="Constructor reiterates the AI shopping agent in a case study.",
+            why_it_matters="Same story resurfacing.",
+            evidence_ids=[dupe_url],
+        ),
+    ]
+    state = DashboardState(tenant_id=1, cadence="daily", competitor_cards=cards)
+    html_out = render_cockpit_html(state)
+
+    top = state.competitor_cards[0]
+    row_start = html_out.index(f'id="{_row_id(top, 0)}"')
+    row_end = html_out.index("</details>", row_start)
+    row_html = html_out[row_start:row_end]
+
+    # Each <li> cites the URL twice (href + anchor text), so one bibliography
+    # entry means the URL string appears exactly twice in the row, not four
+    # times (which would mean two separate <li> entries for it).
+    assert row_html.count(dupe_url) == 2
+    assert row_html.count(other_url) == 2
+    assert row_html.count("<li>") == 2  # one entry per distinct URL, not per citing signal

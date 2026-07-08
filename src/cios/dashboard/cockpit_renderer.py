@@ -1824,15 +1824,23 @@ def _render_barometer_row(state: DashboardState, group: _CompetitorGroup, *, is_
 
     proof_blocks = []
     bib_items: list[str] = []
+    seen_evidence_urls: set = set()
     for signal in group.top_signals:
         signal_cue = signal.action_cue or cue_full
         proof_body = signal.why_it_matters or signal.what_changed or signal_cue
         proof_heading = _esc(_truncate(signal_cue, PROOF_HEADING_TRUNCATE_LEN))
         proof_blocks.append(f"<h3>{proof_heading}</h3>\n      <p>{_esc(proof_body)}</p>")
-        if signal.evidence_ids:
-            bib_items.extend(
+        for eid in signal.evidence_ids or []:
+            # Dedupe per accordion, first occurrence wins: the same URL can
+            # legitimately be cited by more than one signal in this
+            # competitor's group (BAROMETER_PROOF_SIGNAL_LIMIT signals share
+            # the same bibliography), and must appear once, not once per
+            # citing signal.
+            if eid in seen_evidence_urls:
+                continue
+            seen_evidence_urls.add(eid)
+            bib_items.append(
                 f"<li><strong>evidence</strong><a href=\"{_esc(eid)}\">{_esc(eid)}</a><em>cited</em></li>"
-                for eid in signal.evidence_ids
             )
     proof_html = "\n      ".join(proof_blocks)
     bib_html = (
