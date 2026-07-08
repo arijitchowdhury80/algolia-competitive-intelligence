@@ -1,11 +1,12 @@
 # CI-OS — SESSION.md
 
-Updated: 2026-07-08 ~07:50 ET (CUTOVER complete) (Claude Fable 5, caveman mode, overnight multi-agent build)
+Updated: 2026-07-08 ~12:35 ET (first official brief delivered) (Claude Fable 5, caveman mode, overnight multi-agent build)
 
 ## Status
 V2 DEPLOYED LIVE (parallel run) on the VPS: real Telegram baseline brief delivered to Arijit's chat (quality passed), cron 09:15 UTC daily, real V0 history migrated. Arijit's product doctrine recorded (docs/planning/CI-OS-product-doctrine-2026-07-08.md) and briefs rebuilt to it. Previously: Brain live-certified (5/5 criteria) AND the 3-tenant Gate 7 rehearsal FULLY PASSED (~03:00 ET) after a 6-iteration fix loop. 18 commits, 259 offline + 16 integration tests. Delivery hard-gated on quality; evidence article-level; quotes verified verbatim; revise loop in. V0 untouched, cron intact.
 
 ## Resume action (do first, in order)
+-2. FIRST BRIEF DELIVERED 12:07 ET (3 signals + YOUR PLAYS; spryker correctly blocked). Defects fixed live: Argus_CI_bot is THE bot (argus profile env — never the default token); Hermes gateway loads cron at startup ONLY (restart after CLI job create; `cron status` reads the file = false green). Next auto-run 07-09 09:00 ET.
 -1. CUTOVER IS DONE (Arijit's order): V0 paused (resume ids 19930dfa21e5/03671620cd60 for rollback), V2 owns 09:00 ET via Hermes cron, ci.chowmes.com root = V2 render (backup .v0-backup-20260708), auto-publish wired. Verify the 09:00 ET run: Telegram brief + dashboard refresh + hermes cron output log. Then: wire ownbrand/horizon/prescribe/collateral modules into daily_production_run + cadence flow.
 0. Phase 1 CORE DONE: Hermes cron job `cios-v2-daily` (09:15 ET, no-agent, script /root/.hermes/scripts/cios-daily.sh, container venv at /opt/data/apps/cios) drives the pipeline; duplicate system cron removed. TZ: VPS+container = ET (V0 09:00 ET, V2 09:15 ET). Verify tomorrow's Hermes-fired run. Phase 1b next: webhook deliver_only delivery route, shim-as-provider check, email target.
 1. Arijit eyeballs the 09:00 ET Telegram brief (chat 6789423537) — V0 hotfix live proof. Report quality.
