@@ -69,3 +69,20 @@ Where your competitor is. Where you are. Where you think they could go.
   seeded before the customer ever logs in), not a customer-side wizard.
 - Modularity: intelligence layer must be domain-agnostic; Algolia's competitor
   set is seed data, never logic.
+
+## Addendum (same day, later): freshness USP + Hermes packaging intent
+
+**The USP is FRESHNESS.** Intelligence must be actionable AT THAT INSTANT —
+"even 30 minutes after it may not be applicable... half a day after it will
+not be applicable." The system monitors every channel and source, online and
+offline, gets it inside, analyzes, and hands over critical actionable
+instructions while they are still actionable. Daily cadence is the floor,
+not the ceiling; the architecture must support near-real-time signal-to-action.
+
+**Packaging intent: CI-OS ships WITH Hermes.** Arijit wants Hermes and the
+custom Claude-built code (the V2 `cios` codebase) to become ONE product —
+"one common code base and one common spine of execution" — with CI-OS as
+Hermes's first flagship use case. Open architecture question, explicitly
+assigned as a goal/loop to figure out: can Hermes be the center (gateway,
+channels, scheduling, agent runtime) with cios as the domain brain, or do
+they merge differently? Study assigned 2026-07-08.
