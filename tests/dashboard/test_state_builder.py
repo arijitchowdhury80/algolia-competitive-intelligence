@@ -6,6 +6,7 @@ from cios.dashboard.types import AttentionLevel
 from .conftest import (
     FakeBuildStatusProvider,
     FakeCoverageRepository,
+    FakePrescriptionsRepository,
     FakeReportHistoryRepository,
     FakeRunRepository,
     FakeSignalsRepository,
@@ -30,6 +31,7 @@ def make_builder(
     build_status=None,
     report_history=None,
     suppressed_signals=None,
+    prescriptions=None,
 ) -> DashboardStateBuilder:
     return DashboardStateBuilder(
         signals=FakeSignalsRepository(signals or {}),
@@ -39,6 +41,7 @@ def make_builder(
         build_status=FakeBuildStatusProvider(build_status) if build_status is not None else None,
         report_history=FakeReportHistoryRepository(report_history) if report_history is not None else None,
         suppressed_signals=FakeSuppressedSignalsRepository(suppressed_signals) if suppressed_signals is not None else None,
+        prescriptions=FakePrescriptionsRepository(prescriptions) if prescriptions is not None else None,
     )
 
 

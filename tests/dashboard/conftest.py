@@ -61,6 +61,14 @@ class FakeSuppressedSignalsRepository:
         return list(self._by_tenant.get(tenant_id, []))[:limit]
 
 
+class FakePrescriptionsRepository:
+    def __init__(self, by_tenant: dict[int, list[dict]]) -> None:
+        self._by_tenant = by_tenant
+
+    def get_current_prescriptions(self, tenant_id: int) -> list[dict]:
+        return list(self._by_tenant.get(tenant_id, []))
+
+
 def report_row(
     *,
     id: int = 1,

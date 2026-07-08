@@ -110,7 +110,11 @@ from cios.db.repos.collect import (
     PgFetchRunRepository,
     PgSnapshotRepository,
 )
-from cios.db.repos.dashboard import PgReportHistoryRepository, PgSuppressedSignalsRepository
+from cios.db.repos.dashboard import (
+    PgPrescriptionsRepository,
+    PgReportHistoryRepository,
+    PgSuppressedSignalsRepository,
+)
 from cios.db.repos.delivery import PgBotDeliveryRepository, PgDeliveryAttemptRepository
 from cios.db.repos.learn import PgImprovementQueueRepository, PgLearningEventRepository
 from cios.db.repos.sources import PgSourceRepository
@@ -1398,7 +1402,8 @@ async def run_tenant(
     builder = DashboardStateBuilder(signals=DbMaterialSignals(app_conn), theses=DbTheses(app_conn),
                                     coverage=DbCoverage(cov_dict), runs=DbRuns(run_dict),
                                     report_history=PgReportHistoryRepository(app_conn),
-                                    suppressed_signals=PgSuppressedSignalsRepository(app_conn))
+                                    suppressed_signals=PgSuppressedSignalsRepository(app_conn),
+                                    prescriptions=PgPrescriptionsRepository(app_conn))
     state = builder.build(tenant_id=tenant_id, cadence="daily")
     res.dashboard_state = state
     dash_json_path = Path(os.environ.get("CIOS_DASHBOARD_OUT", "/tmp/argus-dashboard.html")).with_suffix("")

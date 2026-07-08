@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import html
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from cios.dashboard.cockpit_renderer import render_cockpit_html
+from cios.dashboard.cockpit_renderer import _truncate, render_cockpit_html
 from cios.dashboard.types import AttentionLevel, DashboardState
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -101,32 +102,98 @@ def test_self_contained_css_and_js_inline(state: DashboardState) -> None:
     assert "script src" not in html_out
 
 
-def _row_id(card, index: int) -> str:
-    return f"competitor-{card.competitor_id}-{card.delta_id if card.delta_id is not None else index}"
+def _row_id(card, fallback_index: int) -> str:
+    """Row id for the competitor GROUP a card's own delta belongs to (the
+    barometer is one row per competitor since the grouping fix -- the row id
+    is keyed off the group's top-scoring signal's delta_id)."""
+    return f"competitor-{card.competitor_id}-{card.delta_id if card.delta_id is not None else fallback_index}"
 
 
-def test_barometer_preserves_materiality_ranking(state: DashboardState) -> None:
+def _make_card(**overrides):
+    from cios.dashboard.types import CompetitorSignalCard
+
+    base = dict(
+        competitor_id=1,
+        competitor_name="AWS",
+        attention_score=50.0,
+        attention_level=AttentionLevel.MONITOR,
+        action_cue="Monitor: no action yet, keep this on the radar.",
+        top_signal_headline="AWS shipped a minor update.",
+        what_changed="AWS shipped a minor update.",
+        why_it_matters="Low materiality.",
+        evidence_ids=["https://example.com/aws"],
+        delta_id=1,
+    )
+    base.update(overrides)
+    return CompetitorSignalCard(**base)
+
+
+def test_barometer_is_one_row_per_competitor_fixture(state: DashboardState) -> None:
+    # Fixture ships 3 distinct Coveo signals (competitor_id=3, delta_id
+    # 230/231/232) that never merged in the builder's near-duplicate
+    # dedup because the underlying text differs -- the barometer must still
+    # collapse them into a single Coveo row, not render 3 rows for Coveo.
+    assert len({c.competitor_id for c in state.competitor_cards}) == 1
+    assert len(state.competitor_cards) == 3
     html_out = render_cockpit_html(state)
-    order = [
-        html_out.index(f'id="{_row_id(card, i)}"')
-        for i, card in enumerate(state.competitor_cards)
+    assert html_out.count('class="competitor-name">Coveo<') == 1
+    assert html_out.count('id="competitor-3-') == 1
+
+
+def test_barometer_row_uses_max_score_and_top_cue(state: DashboardState) -> None:
+    html_out = render_cockpit_html(state)
+    top = state.competitor_cards[0]  # highest attention_score (75.0, act_now)
+    row_start = html_out.index(f'id="{_row_id(top, 0)}"')
+    row_end = html_out.index("</details>", row_start)
+    row_html = html_out[row_start:row_end]
+    assert f'style="width:{top.attention_score:g}%"' in row_html
+    assert "action-act" in html_out[max(0, row_start - 80) : row_start]
+    # Subtitle is the top (highest-scoring) signal's action cue, not a
+    # concatenation or the lowest-scoring signal's.
+    assert _truncate(top.action_cue, 42) in row_html or top.action_cue[:20] in row_html
+
+
+def test_barometer_proof_shows_top_two_signals_not_all_three(state: DashboardState) -> None:
+    html_out = render_cockpit_html(state)
+    top, second, third = state.competitor_cards
+    row_start = html_out.index(f'id="{_row_id(top, 0)}"')
+    row_end = html_out.index("</details>", row_start)
+    row_html = html_out[row_start:row_end]
+    assert html.escape(top.why_it_matters or "") in row_html
+    assert html.escape(second.why_it_matters or "") in row_html
+    assert html.escape(third.why_it_matters or "") not in row_html
+
+
+def test_barometer_ranks_multiple_competitors_by_max_score() -> None:
+    # Cards arrive already materiality-ranked (the state builder's job, not
+    # the renderer's -- see module docstring), so this fixture is supplied
+    # in the same globally-sorted-desc order build() would produce.
+    cards = [
+        _make_card(competitor_id=2, competitor_name="Elastic", attention_score=90.0,
+                   attention_level=AttentionLevel.ACT_NOW, delta_id=20),
+        _make_card(competitor_id=1, competitor_name="AWS", attention_score=40.0,
+                   attention_level=AttentionLevel.MONITOR, delta_id=10),
+        _make_card(competitor_id=2, competitor_name="Elastic", attention_score=20.0,
+                   attention_level=AttentionLevel.NORMAL, delta_id=21),
     ]
-    assert order == sorted(order), "barometer rows must render in the builder's ranked order"
+    state = DashboardState(tenant_id=1, cadence="daily", competitor_cards=cards)
+    html_out = render_cockpit_html(state)
+    elastic_pos = html_out.index('class="competitor-name">Elastic<')
+    aws_pos = html_out.index('class="competitor-name">AWS<')
+    assert elastic_pos < aws_pos, "Elastic (max score 90) must rank above AWS (score 40)"
+    # Only one Elastic row, even though it has two signals.
+    assert html_out.count('class="competitor-name">Elastic<') == 1
 
 
 def test_attention_level_maps_to_design_color_classes(state: DashboardState) -> None:
     html_out = render_cockpit_html(state)
-    level_to_class = {
-        AttentionLevel.ACT_NOW: "action-act",
-        AttentionLevel.WATCH: "action-watch",
-        AttentionLevel.MONITOR: "action-monitor",
-        AttentionLevel.NORMAL: "action-normal",
-    }
-    for i, card in enumerate(state.competitor_cards):
-        row_marker = f'id="{_row_id(card, i)}"'
-        row_start = html_out.index(row_marker)
-        row_html = html_out[max(0, row_start - 80) : row_start]
-        assert level_to_class[card.attention_level] in row_html
+    # Fixture's single Coveo row must carry its top (highest-scoring)
+    # signal's attention level -- act_now, not the lowest-scoring signal's.
+    top = state.competitor_cards[0]
+    row_marker = f'id="{_row_id(top, 0)}"'
+    row_start = html_out.index(row_marker)
+    row_html = html_out[max(0, row_start - 80) : row_start]
+    assert "action-act" in row_html
 
 
 def test_role_lens_team_filtering(state: DashboardState) -> None:
@@ -173,7 +240,12 @@ def test_eye_behind_the_lenses_uses_real_coverage_numbers(state: DashboardState)
 def test_no_evidence_is_honest_not_fabricated() -> None:
     state = _load_state()
     payload = state.model_dump(mode="json")
-    payload["competitor_cards"][0]["evidence_ids"] = []
+    # All 3 fixture cards are one Coveo group (barometer grouping fix) --
+    # clear evidence on every member the row's proof actually shows (top 2)
+    # so the fallback line is genuinely exercised, not masked by a sibling
+    # signal's real evidence.
+    for card in payload["competitor_cards"]:
+        card["evidence_ids"] = []
     empty_evidence_state = DashboardState.model_validate(payload)
     html_out = render_cockpit_html(empty_evidence_state)
     assert "No evidence link on file for this signal." in html_out
@@ -210,8 +282,93 @@ def test_hero_headline_is_deterministic_truncation_no_llm(state: DashboardState)
     assert html_out_1 == html_out_2
 
     top = state.competitor_cards[0]
-    source_text = " ".join((top.what_changed or "").split())
+    source_text = " ".join((top.top_signal_headline or top.what_changed or "").split())
     h1_start = html_out_1.index("<h1>")
     h1_end = html_out_1.index("</h1>")
     h1_text = html.unescape(html_out_1[h1_start + len("<h1>") : h1_end])
-    assert source_text.startswith(h1_text.rstrip("…"))
+    # No mid-word ellipsis: the headline is a real prefix (or leading
+    # clause) of the source text, never truncated with a trailing "…".
+    assert "…" not in h1_text
+    assert source_text.startswith(h1_text) or h1_text == source_text.split(".", 1)[0].strip()
+    assert len(h1_text.split()) <= 9
+
+
+def test_hero_headline_uses_top_signal_headline_not_what_changed() -> None:
+    from cios.dashboard.types import CompetitorSignalCard
+
+    card = _make_card(
+        top_signal_headline="Elastic ships a nine word headline for the hero exactly.",
+        what_changed="A completely different, much longer what_changed narrative that should not appear in the hero.",
+    )
+    state = DashboardState(tenant_id=1, cadence="daily", competitor_cards=[card])
+    html_out = render_cockpit_html(state)
+    h1_start = html_out.index("<h1>")
+    h1_end = html_out.index("</h1>")
+    h1_text = html.unescape(html_out[h1_start + len("<h1>") : h1_end])
+    assert "what_changed narrative" not in h1_text
+    assert h1_text.startswith("Elastic ships a nine word headline")
+
+
+def test_hero_headline_caps_at_nine_words_no_mid_word_cut() -> None:
+    card = _make_card(
+        top_signal_headline=(
+            "This headline definitely has way more than nine words in it "
+            "and should be cut cleanly at a word boundary without any ellipsis"
+        ),
+        what_changed=None,
+    )
+    state = DashboardState(tenant_id=1, cadence="daily", competitor_cards=[card])
+    html_out = render_cockpit_html(state)
+    h1_start = html_out.index("<h1>")
+    h1_end = html_out.index("</h1>")
+    h1_text = html.unescape(html_out[h1_start + len("<h1>") : h1_end])
+    assert len(h1_text.split()) == 9
+    assert h1_text == "This headline definitely has way more than nine words"
+    assert "…" not in h1_text
+
+
+def test_brand_and_hero_images_are_inlined_not_broken(state: DashboardState) -> None:
+    html_out = render_cockpit_html(state)
+    # No reference to the mockup's own asset directory -- the rendered HTML
+    # must be self-contained and not depend on docs/mockups/assets/ existing
+    # alongside wherever it gets published.
+    assert "assets/argus-logo-mark.png" not in html_out
+    assert "assets/argus-search-intelligence-weekly.png" not in html_out
+    assert 'class="sigil" src="data:image/png;base64,' in html_out
+    assert 'src="data:image/jpeg;base64,' in html_out
+
+
+def test_brief_link_falls_back_to_sibling_brief_html_when_published_today() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["report_history"] = [{
+        "report_id": 999,
+        "report_date": date.today().isoformat(),
+        "cadence": "daily",
+        "title": "Argus daily brief",
+        "summary": "summary",
+        "status": "rendered",
+        "html_path": None,  # runner does not populate reports.html_path today
+    }]
+    today_state = DashboardState.model_validate(payload)
+    html_out = render_cockpit_html(today_state)
+    assert '<a class="deep-link" href="./brief.html">Open full brief</a>' in html_out
+    assert 'aria-disabled="true"' not in html_out
+
+
+def test_brief_link_stays_no_brief_when_latest_report_is_not_today() -> None:
+    state = _load_state()
+    payload = state.model_dump(mode="json")
+    payload["report_history"] = [{
+        "report_id": 998,
+        "report_date": "2020-01-01",
+        "cadence": "daily",
+        "title": "Argus daily brief",
+        "summary": "summary",
+        "status": "rendered",
+        "html_path": None,
+    }]
+    stale_state = DashboardState.model_validate(payload)
+    html_out = render_cockpit_html(stale_state)
+    assert 'aria-disabled="true"' in html_out
+    assert 'href="./brief.html"' not in html_out
