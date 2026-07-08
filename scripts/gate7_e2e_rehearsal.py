@@ -64,7 +64,7 @@ from cios.brain.fn_auditor import (
     RawObservationsProvider,
     SemanticFNAuditor,
 )
-from cios.brain.quality import QualityReviewer
+from cios.brain.quality import QualityReviewer, UnparseableVerdict, extract_json_object
 from cios.brain.synthesizer import Synthesizer
 from cios.brain.thesis import ThesisEngine
 from cios.brain.types import CoverageReport, LaneStatus, SynthesisInput, Verdict
@@ -209,20 +209,28 @@ class ClaudeQualityReviewer:
         self._url = shim_url
         self._alias = model_alias
 
-    def review(self, tenant_id, run_id, reader_text, claims) -> dict:
+    def review(self, tenant_id, run_id, reader_text, claims, evidence_texts, attempt: int = 1) -> dict:
         import httpx
 
         LLM_CALLS["count"] += 1
         if LLM_CALLS["count"] > LLM_BUDGET:
             raise RuntimeError(f"LLM call budget ({LLM_BUDGET}) exceeded — aborting run")
         claim_lines = "\n".join(f"- {getattr(c, 'text', '')} (src: {getattr(c, 'source_url', '')})" for c in claims)
+        evidence_block = self._build_evidence_block(evidence_texts)
         prompt = (
             "You are Argus, a skeptical competitive-intelligence editor. Review this "
             "brief for: (1) any claim not backed by a source URL, (2) generic AI slop, "
-            "(3) hallucinated specifics. Return ONLY JSON: "
-            '{"pass": bool, "required_fixes": [str], "notes": str}.\n\n'
-            f"BRIEF:\n{reader_text}\n\nCLAIMS:\n{claim_lines or '(none)'}\n"
+            "(3) hallucinated specifics, (4) any quoted string or specific figure in a "
+            "claim that does NOT appear verbatim in the source excerpt below it. Return "
+            'ONLY JSON: {"pass": bool, "required_fixes": [str], "notes": str}.\n\n'
+            f"BRIEF:\n{reader_text}\n\nCLAIMS:\n{claim_lines or '(none)'}\n\n"
+            f"SOURCE EXCERPTS (evidence to check quotes/figures against):\n{evidence_block or '(none)'}\n"
         )
+        if attempt > 1:
+            prompt = (
+                "Your previous reply was not valid JSON. Return ONLY the JSON object "
+                "described, nothing else.\n\n" + prompt
+            )
         try:
             resp = httpx.post(f"{self._url}/generate",
                               json={"prompt": prompt, "model_alias": self._alias, "json_mode": True, "timeout_s": 90},
@@ -230,22 +238,32 @@ class ClaudeQualityReviewer:
             resp.raise_for_status()
             text = (resp.json().get("text") or "").strip()
         except Exception as exc:  # noqa: BLE001
-            return {"pass": False, "required_fixes": [f"quality reviewer LLM call failed: {exc}"], "notes": ""}
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:]
-            text = text.strip()
-        try:
-            obj = json.loads(text)
-            if isinstance(obj, dict) and "pass" in obj:
-                return {"pass": bool(obj.get("pass")),
-                        "required_fixes": list(obj.get("required_fixes") or []),
-                        "notes": obj.get("notes", "")}
-        except (ValueError, json.JSONDecodeError):
-            pass
-        # fail closed: a reviewer that cannot render a verdict must not green-light.
-        return {"pass": False, "required_fixes": ["quality reviewer returned unparseable verdict"], "notes": text[:300]}
+            raise UnparseableVerdict(f"quality reviewer LLM call failed: {exc}") from exc
+        obj = extract_json_object(text)
+        if isinstance(obj, dict) and "pass" in obj:
+            return {"pass": bool(obj.get("pass")),
+                    "required_fixes": list(obj.get("required_fixes") or []),
+                    "notes": obj.get("notes", "")}
+        # unparseable: QualityReviewer retries once with a corrective re-prompt
+        # (attempt=2 above); if it's still unparseable it fails closed itself.
+        raise UnparseableVerdict(f"quality reviewer returned unparseable verdict: {text[:300]}")
+
+    @staticmethod
+    def _build_evidence_block(evidence_texts: dict[str, str], cap: int = 8000) -> str:
+        if not evidence_texts:
+            return ""
+        per_source = max(500, cap // max(1, len(evidence_texts)))
+        parts = []
+        total = 0
+        for url, text in evidence_texts.items():
+            if total >= cap:
+                break
+            excerpt = (text or "")[:per_source]
+            budget_left = cap - total
+            excerpt = excerpt[:budget_left]
+            parts.append(f"- {url}:\n  {excerpt}")
+            total += len(excerpt)
+        return "\n".join(parts)
 
 
 class _ReviewClaim:
@@ -255,13 +273,15 @@ class _ReviewClaim:
 
 
 class _ReviewInput:
-    def __init__(self, tenant_id, run_id, claims, reader_text, quiet_verdict, coverage_ran_clean) -> None:
+    def __init__(self, tenant_id, run_id, claims, reader_text, quiet_verdict, coverage_ran_clean,
+                 evidence_texts: Optional[dict[str, str]] = None) -> None:
         self.tenant_id = tenant_id
         self.run_id = run_id
         self.claims = claims
         self.reader_text = reader_text
         self.quiet_verdict = quiet_verdict
         self.coverage_ran_clean = coverage_ran_clean
+        self.evidence_texts = evidence_texts or {}
 
 
 class DbMaterialSignals:
@@ -500,6 +520,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
     all_deltas_by_comp: dict[int, list] = {}
     example_fact_for_plant = None
     snapshot_count = 0
+    evidence_texts: dict[str, str] = {}  # canonical URL -> fetched source text, for quote verification
 
     for c in plan[:6]:
         competitor_id = comp_ids[c["name"]]
@@ -523,6 +544,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
         snap_repo.save(Snapshot(tenant_id=tenant_id, source_id=source.id, fetch_run_id=fetch_run.id,
                                 title=c["name"], text=fetched.text))
         snapshot_count += 1
+        evidence_texts[canonical_url(c["url"])] = fetched.text
         # Article-level evidence (Gate 7 finding #2): resolve article links
         # from the index page's raw HTML and extract per-article so facts and
         # deltas cite the specific article URL, never the index page.
@@ -533,6 +555,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
                 a_fetched = content_fetcher.fetch_content(a_url)
                 if a_fetched.status != FetchStatus.OK or not a_fetched.text:
                     continue
+                evidence_texts[canonical_url(a_url)] = a_fetched.text
                 a_ctx = SourceContext(competitor_id=competitor_id, competitor_name=c["name"],
                                       url=a_url, source_type=c["family"], priority=2)
                 a_facts, a_deltas = semantic_diff(a_ctx, "", a_fetched.text, date.today().isoformat())
@@ -633,7 +656,8 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
         os.environ.get("CIOS_CLAUDE_SHIM_URL", "http://127.0.0.1:8663"), model_alias="opus"))
     qr = quality_reviewer.review(_ReviewInput(tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
                                               reader_text=reader_text, quiet_verdict=(verdict == "quiet"),
-                                              coverage_ran_clean=coverage.all_ran))
+                                              coverage_ran_clean=coverage.all_ran,
+                                              evidence_texts=evidence_texts))
     res.quality_status = qr.status.value
     res.quality_fixes = qr.required_fixes
     insert_quality_review(app_conn, tenant_id, run_id, qr.status.value, qr.findings, qr.required_fixes)

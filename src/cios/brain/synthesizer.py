@@ -23,7 +23,6 @@ No DB, no network. The BrainModel and the materiality floor are injected.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Optional
 
@@ -32,6 +31,7 @@ from pydantic import ValidationError
 from cios.platform.models.types import ModelRequest
 
 from .prompts import SYNTHESIS_SYSTEM, build_synthesis_prompt
+from .quality import extract_json_object
 from .types import (
     BrainEvent,
     BrainEventType,
@@ -137,17 +137,9 @@ class Synthesizer:
         text = (getattr(response, "text", "") or "").strip()
         if not text:
             return None
-        # Tolerate a fenced ```json block but nothing more creative.
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:]
-            text = text.strip()
-        try:
-            obj = json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            return None
-        return obj if isinstance(obj, dict) else None
+        # Shared with quality.py's QualityLLMReviewer parsing so both places
+        # tolerate the same "almost JSON" shapes (fenced block, leading prose).
+        return extract_json_object(text)
 
     def _vet_candidate(
         self,
