@@ -1,6 +1,13 @@
 # CI-OS — SESSION.md
 
-Updated: 2026-07-08 ~16:25 ET (P0 PUNCH LIST DONE + LIVE-VERIFIED) (Claude Fable 5, caveman mode)
+Updated: 2026-07-08 ~17:00 ET (BRIEF PAGE EDITORIAL REDESIGN — Arijit rejected v1 as data dump; v2 SHIPPED + screenshot-verified live) (Claude Fable 5, caveman mode)
+
+## Brief page v2 (after Arijit's rejection of the first pass)
+First pass passed structural checks (curl greps) but read as a wall: paragraph-length headlines, 18-play dump, 6 duplicate theses, no design. LESSON: visible-surface verification = SCREENSHOT the rendered page, curl greps are not looking. v2 shipped + screenshot-verified on live ci.chowmes.com/brief.html:
+- Dark editorial masthead; distilled headlines (word-cap + dangling-stopword trim); body never repeats headline.
+- Your Plays: top 5 by urgency, steps behind disclosure, "+N more on cockpit".
+- Living Theses: 7 → 3 on live page — transitive paraphrase clustering (threshold 0.4, match="any") in _build_theses; measured on real production texts (same-hypothesis 0.35–0.53, distinct ≤0.35).
+- OPEN root cause (task #28): thesis writer mints paraphrase rows daily instead of updating the standing thesis; render dedup = labeled stopgap.
 
 ## P0 punch list (Arijit 15:50 ET) — CLOSED, live-verified
 All 4 items shipped and verified by curling the live page (not code-level claims):
