@@ -790,14 +790,36 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
     best_comp = None
     comp_name = None
     best_deltas: list = []
+    cold_start = False
     if all_deltas_by_comp:
         best_comp = max(all_deltas_by_comp.items(), key=lambda kv: len(kv[1]))[0]
         comp_name = next(n for n, i in comp_ids.items() if i == best_comp)
         best_deltas = all_deltas_by_comp[best_comp]
         comp_facts = [f for f in all_facts if f.competitor_id == best_comp]
+        # Cold start: on a tenant's FIRST collection cycle there is no prior
+        # snapshot, so nothing can honestly be called a 24h change. The quality
+        # reviewer correctly kills recency claims on day one (seen live,
+        # 2026-07-08 first prod run). Frame run #1 as a BASELINE brief:
+        # current competitive position, zero recency claims. Real deltas
+        # begin on run #2.
+        prior_runs = app_conn.execute(
+            "SELECT count(*) FROM intel_fetch_runs WHERE tenant_id = %s AND status = 'completed'",
+            (tenant_id,),
+        ).fetchone()
+        cold_start = (prior_runs or {"count": 0})["count"] <= 1  # this run included
+        baseline_note = (
+            "BASELINE MODE: this is the FIRST collection cycle for this reader. "
+            "There is no prior snapshot, so you cannot claim anything changed in "
+            "the last 24 hours. Frame every signal as the competitor's CURRENT "
+            "position ('X is positioned as...', 'X currently offers...'), never "
+            "as a recent change or launch, and never use time-relative words "
+            "like 'now pivots', 'just launched', 'this week'. Tomorrow's run "
+            "compares against today's baseline and reports true changes."
+        ) if cold_start else ""
         inp = SynthesisInput(tenant_id=tenant_id, competitor_id=best_comp, competitor_name=comp_name,
                              deltas=best_deltas, facts=comp_facts, exec_signals=[],
-                             prior_theses=[], coverage=coverage)
+                             prior_theses=[], coverage=coverage,
+                             extra_instructions=baseline_note)
         try:
             sr = await synthesizer.synthesize(inp)
             verdict = sr.verdict.value
@@ -841,6 +863,10 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         tenant_name=slug,
         brief_date=date.today(),
     )
+    if cold_start:
+        reader_text = reader_text.replace(
+            "## Your competitive picture", "## Your competitive BASELINE (first cycle)", 1
+        ).replace("## WHAT HAPPENED (24h)", "## WHERE YOUR COMPETITORS STAND TODAY", 1)
     quality_reviewer = QualityReviewer(llm_reviewer=ClaudeQualityReviewer(
         os.environ.get("CIOS_CLAUDE_SHIM_URL", "http://127.0.0.1:8663"), model_alias="opus"))
     qr = quality_reviewer.review(_ReviewInput(tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
