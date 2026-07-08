@@ -68,6 +68,7 @@ from cios.brain.quality import QualityReviewer
 from cios.brain.synthesizer import Synthesizer
 from cios.brain.thesis import ThesisEngine
 from cios.brain.types import CoverageReport, LaneStatus, SynthesisInput, Verdict
+from cios.collect.article_resolver import resolve_article_links
 from cios.collect.extract import canonical_url, semantic_diff
 from cios.collect.fetcher import HttpContentFetcher, ProbeFetcherAdapter
 from cios.collect.types import Delta as CDelta
@@ -522,9 +523,25 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
         snap_repo.save(Snapshot(tenant_id=tenant_id, source_id=source.id, fetch_run_id=fetch_run.id,
                                 title=c["name"], text=fetched.text))
         snapshot_count += 1
-        ctx = SourceContext(competitor_id=competitor_id, competitor_name=c["name"], url=c["url"],
-                            source_type=c["family"], priority=2)
-        facts, deltas = semantic_diff(ctx, "", fetched.text, date.today().isoformat())
+        # Article-level evidence (Gate 7 finding #2): resolve article links
+        # from the index page's raw HTML and extract per-article so facts and
+        # deltas cite the specific article URL, never the index page.
+        facts, deltas = [], []
+        article_urls = resolve_article_links(fetched.raw_html or fetched.text, c["url"])[:4]
+        if article_urls:
+            for a_url in article_urls:
+                a_fetched = content_fetcher.fetch_content(a_url)
+                if a_fetched.status != FetchStatus.OK or not a_fetched.text:
+                    continue
+                a_ctx = SourceContext(competitor_id=competitor_id, competitor_name=c["name"],
+                                      url=a_url, source_type=c["family"], priority=2)
+                a_facts, a_deltas = semantic_diff(a_ctx, "", a_fetched.text, date.today().isoformat())
+                facts.extend(a_facts)
+                deltas.extend(a_deltas)
+        else:
+            ctx = SourceContext(competitor_id=competitor_id, competitor_name=c["name"], url=c["url"],
+                                source_type=c["family"], priority=2)
+            facts, deltas = semantic_diff(ctx, "", fetched.text, date.today().isoformat())
         if facts or deltas:
             extraction_ran = True
         fact_repo = PgFactRepository(app_conn, tenant_id)

@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "is_quiet": false,
-  "top_attention_level": "normal",
+  "top_attention_level": "watch",
   "tenant_id": 3,
   "cadence": "daily",
-  "generated_at": "2026-07-08T05:32:45.005266Z",
+  "generated_at": "2026-07-08T05:59:24.519566Z",
   "argus_read": {
     "useful_truth": "Argus daily brief for amplitude.",
     "what_changed": null,
@@ -37,17 +37,67 @@
       "exec_speech"
     ]
   },
-  "competitor_cards": [],
-  "theses": [],
+  "competitor_cards": [
+    {
+      "competitor_id": 9,
+      "competitor_name": "Heap",
+      "attention_score": 60.0,
+      "attention_level": "watch",
+      "action_cue": "Update competitive battlecards to position against 'Heap + Contentsquare bundle' rather than standalone Heap. Prepare rebuttals for the 1.3M sites claim.",
+      "top_signal_headline": "Heap product pages now explicitly reference Contentsquare parent brand and cite '1.3 million websites using Contentsquare' as social proof. Product is branded 'Heap by Contentsquare'.",
+      "what_changed": "Heap product pages now explicitly reference Contentsquare parent brand and cite '1.3 million websites using Contentsquare' as social proof. Product is branded 'Heap by Contentsquare'.",
+      "why_it_matters": "Signals the M&A integration is moving from back-office to front-of-house. Heap is borrowing Contentsquare's install-base credibility to punch above its weight in enterprise deals.",
+      "recommended_action": "Update competitive battlecards to position against 'Heap + Contentsquare bundle' rather than standalone Heap. Prepare rebuttals for the 1.3M sites claim.",
+      "materiality_score": 0.6,
+      "confidence": 0.85,
+      "evidence_ids": [
+        "https://www.heap.io/why-heap/why-product-analytics",
+        "https://www.heap.io/why-heap/how-heap-works"
+      ],
+      "delta_id": 369,
+      "thesis_id": null
+    },
+    {
+      "competitor_id": 9,
+      "competitor_name": "Heap",
+      "attention_score": 55.0,
+      "attention_level": "watch",
+      "action_cue": "Audit own AI/NL query capabilities for competitive parity. If gap exists, flag to Product. If parity or better, arm PMM with comparison assets.",
+      "top_signal_headline": "Heap is prominently marketing 'Sense Chat' as conversational AI for analytics: 'ask questions about your customers', 'personal analyst', 'know what to do next in minutes not hours'.",
+      "what_changed": "Heap is prominently marketing 'Sense Chat' as conversational AI for analytics: 'ask questions about your customers', 'personal analyst', 'know what to do next in minutes not hours'.",
+      "why_it_matters": "Positions Heap for buyers who want to skip SQL/dashboard learning curves. Targets less technical product managers and marketers who fear traditional analytics complexity.",
+      "recommended_action": "Audit own AI/NL query capabilities for competitive parity. If gap exists, flag to Product. If parity or better, arm PMM with comparison assets.",
+      "materiality_score": 0.55,
+      "confidence": 0.75,
+      "evidence_ids": [
+        "https://www.heap.io/platform/artificial-intelligence"
+      ],
+      "delta_id": 370,
+      "thesis_id": null
+    }
+  ],
+  "theses": [
+    {
+      "thesis_id": 3,
+      "competitor_id": 9,
+      "competitor_name": "Heap",
+      "thesis": "Contentsquare is collapsing its acquisition portfolio into a single brand identity, weaponizing aggregate scale (1.3M sites) as social proof to reposition Heap from standalone product to enterprise platform feature.",
+      "status": "active",
+      "confidence": 0.55,
+      "supporting_delta_count": 1,
+      "contradicting_delta_count": 0,
+      "updated_at": "2026-07-08T05:59:24.482656Z"
+    }
+  ],
   "run_health": {
-    "run_id": "gate7-amplitude-1783488735",
+    "run_id": "gate7-amplitude-1783490307",
     "report_id": 3,
-    "generated_at": "2026-07-08T05:32:44.999531Z",
+    "generated_at": "2026-07-08T05:59:24.514026Z",
     "model_tier": "judgment",
     "source_family_count": 2,
-    "material_delta_count": 0,
-    "delivery_status": "sent",
-    "quality_review_status": "passed"
+    "material_delta_count": 2,
+    "delivery_status": "failed",
+    "quality_review_status": "failed"
   },
   "build_status": {
     "build_id": null,
@@ -57,7 +107,10 @@
     "services": [],
     "last_error": "no build-status provider injected"
   },
-  "material_delta_ids": [],
+  "material_delta_ids": [
+    369,
+    370
+  ],
   "action_item_ids": [],
   "delivery_ids": [
     3

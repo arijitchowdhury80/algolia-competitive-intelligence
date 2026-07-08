@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
   "is_quiet": false,
-  "top_attention_level": "watch",
+  "top_attention_level": "act_now",
   "tenant_id": 2,
   "cadence": "daily",
-  "generated_at": "2026-07-08T05:32:15.410271Z",
+  "generated_at": "2026-07-08T05:58:27.277117Z",
   "argus_read": {
     "useful_truth": "Argus daily brief for spryker.",
     "what_changed": null,
@@ -41,37 +41,37 @@
     {
       "competitor_id": 4,
       "competitor_name": "commercetools",
-      "attention_score": 72.0,
-      "attention_level": "watch",
-      "action_cue": "Draft counter-positioning that reframes 'autonomous commerce' as vendor lock-in dressed up as AI, contrasting with Algolia's open, composable AI search that works with any stack.",
-      "top_signal_headline": "commercetools is retiring 'headless commerce' as their primary differentiator and introducing 'autonomous commerce' and 'agentic commerce' as new category language across their blog and content taxonomy.",
-      "what_changed": "commercetools is retiring 'headless commerce' as their primary differentiator and introducing 'autonomous commerce' and 'agentic commerce' as new category language across their blog and content taxonomy.",
-      "why_it_matters": "This signals commercetools believes the 'headless' positioning is commoditized and they need fresh category air. The 'autonomous' framing suggests they will compete on AI-driven automation rather than architecture flexibility.",
-      "recommended_action": "Draft counter-positioning that reframes 'autonomous commerce' as vendor lock-in dressed up as AI, contrasting with Algolia's open, composable AI search that works with any stack.",
-      "materiality_score": 0.72,
-      "confidence": 0.8,
+      "attention_score": 75.0,
+      "attention_level": "act_now",
+      "action_cue": "Develop counter-narrative positioning Algolia as the intelligence layer that autonomous commerce depends on. 'Autonomous commerce is only as good as its understanding of intent.' Prepare battle card for deals where commercetools is primary platform.",
+      "top_signal_headline": "commercetools announced 'autonomous commerce' as their new strategic category. They claim AI systems will sense signals, determine actions, and execute within rules without human input. Sphere platform cited as powering $100B+ annualized GMV.",
+      "what_changed": "commercetools announced 'autonomous commerce' as their new strategic category. They claim AI systems will sense signals, determine actions, and execute within rules without human input. Sphere platform cited as powering $100B+ annualized GMV.",
+      "why_it_matters": "This is a category creation play. commercetools is trying to own the 'AI era of commerce' narrative before competitors define it. The framing that 'autonomous commerce extends AI across enterprise operations' positions them as the infrastructure layer for AI agents making commerce decisions.",
+      "recommended_action": "Develop counter-narrative positioning Algolia as the intelligence layer that autonomous commerce depends on. 'Autonomous commerce is only as good as its understanding of intent.' Prepare battle card for deals where commercetools is primary platform.",
+      "materiality_score": 0.75,
+      "confidence": 0.85,
       "evidence_ids": [
-        "https://commercetools.com/blog"
+        "https://commercetools.com/press-releases/commercetools-introduces-autonomous-commerce"
       ],
-      "delta_id": 52,
+      "delta_id": 329,
       "thesis_id": null
     },
     {
       "competitor_id": 4,
       "competitor_name": "commercetools",
-      "attention_score": 65.0,
+      "attention_score": 55.0,
       "attention_level": "watch",
-      "action_cue": "Verify what specific coding agent integrations commercetools has shipped (Cursor, Copilot, Claude). If Algolia has similar or better developer AI tooling, surface it in competitive battlecards.",
-      "top_signal_headline": "commercetools published messaging stating 'Your coding agent already knows commercetools. Now it can build with it.' indicating they have launched or are launching integrations with AI coding assistants.",
-      "what_changed": "commercetools published messaging stating 'Your coding agent already knows commercetools. Now it can build with it.' indicating they have launched or are launching integrations with AI coding assistants.",
-      "why_it_matters": "This targets the developer experience angle, making it easier for AI-assisted development workflows to scaffold and extend commercetools implementations. It reduces friction for prospects evaluating build complexity.",
-      "recommended_action": "Verify what specific coding agent integrations commercetools has shipped (Cursor, Copilot, Claude). If Algolia has similar or better developer AI tooling, surface it in competitive battlecards.",
-      "materiality_score": 0.65,
+      "action_cue": "Confirm Algolia is a certified integration within Commerce Integration Layer. If not, prioritize partnership discussion. Sales Enablement should track which commercetools accounts are adopting this layer.",
+      "top_signal_headline": "commercetools launched Commerce Integration Layer that 'simplifies connections between commerce, content, search, promotions and tax systems.' Positioned as reducing integration complexity and accelerating time to value.",
+      "what_changed": "commercetools launched Commerce Integration Layer that 'simplifies connections between commerce, content, search, promotions and tax systems.' Positioned as reducing integration complexity and accelerating time to value.",
+      "why_it_matters": "By centralizing integration orchestration, commercetools creates a chokepoint. If search integration becomes a managed service within their layer, they control the relationship and can steer toward preferred vendors or their own capabilities.",
+      "recommended_action": "Confirm Algolia is a certified integration within Commerce Integration Layer. If not, prioritize partnership discussion. Sales Enablement should track which commercetools accounts are adopting this layer.",
+      "materiality_score": 0.55,
       "confidence": 0.7,
       "evidence_ids": [
-        "https://commercetools.com/blog"
+        "https://commercetools.com/press-releases/commercetools-reduces-enterprise-commerce-delivery"
       ],
-      "delta_id": 53,
+      "delta_id": 330,
       "thesis_id": null
     }
   ],
@@ -80,22 +80,22 @@
       "thesis_id": 2,
       "competitor_id": 4,
       "competitor_name": "commercetools",
-      "thesis": "commercetools abandoning \"headless\" signals the architecture war is over and the next battleground is AI-orchestrated commerce, forcing every competitor to either own \"agentic\" category language or cede positioning to whoever does.",
+      "thesis": "commercetools is abandoning the headless positioning battle (now commoditized) and betting the company on a new \"autonomous commerce\" category where the moat is AI orchestration over transactions, not composability of APIs.",
       "status": "active",
       "confidence": 0.55,
       "supporting_delta_count": 1,
       "contradicting_delta_count": 0,
-      "updated_at": "2026-07-08T05:32:15.369606Z"
+      "updated_at": "2026-07-08T05:58:27.235996Z"
     }
   ],
   "run_health": {
-    "run_id": "gate7-spryker-1783488684",
+    "run_id": "gate7-spryker-1783490244",
     "report_id": 2,
-    "generated_at": "2026-07-08T05:32:15.405213Z",
+    "generated_at": "2026-07-08T05:58:27.269462Z",
     "model_tier": "judgment",
     "source_family_count": 3,
     "material_delta_count": 2,
-    "delivery_status": "sent",
+    "delivery_status": "failed",
     "quality_review_status": "failed"
   },
   "build_status": {
@@ -107,8 +107,8 @@
     "last_error": "no build-status provider injected"
   },
   "material_delta_ids": [
-    52,
-    53
+    329,
+    330
   ],
   "action_item_ids": [],
   "delivery_ids": [

@@ -43,6 +43,26 @@ def _path_depth(path: str) -> int:
     return len([seg for seg in path.split("/") if seg])
 
 
+# Listing/taxonomy pages nested under a blog index (e.g. /blog/category/x,
+# /blog/tag/y, paginated indexes). They pass the depth check but are not
+# articles: a claim citing one is unverifiable, which the live quality
+# reviewer rejects (Gate 7 rehearsal, Elastic category-URL failure).
+_LISTING_SEGMENTS = frozenset(
+    {"category", "categories", "tag", "tags", "topic", "topics", "author",
+     "authors", "archive", "page", "label", "labels", "section"}
+)
+
+
+def _looks_like_listing(path: str) -> bool:
+    segments = [s.lower() for s in path.split("/") if s]
+    if any(s in _LISTING_SEGMENTS for s in segments):
+        return True
+    # Article slugs are long and hyphenated; a terminal segment like "platform"
+    # or "2" is a taxonomy bucket or pagination, not an article.
+    last = segments[-1] if segments else ""
+    return len(last) < 12 and "-" not in last
+
+
 def resolve_article_links(html: str, base_url: str, cap: int = DEFAULT_ARTICLE_LINK_CAP) -> list[str]:
     """Extract candidate article links from an index page's HTML.
 
@@ -75,6 +95,8 @@ def resolve_article_links(html: str, base_url: str, cap: int = DEFAULT_ARTICLE_L
             continue
         path = _normalized_path(parts.path)
         if path == base_path or _path_depth(path) <= base_depth:
+            continue
+        if _looks_like_listing(path):
             continue
         canonical = urlunsplit((parts.scheme, parts.netloc, path, "", ""))
         if canonical in seen:

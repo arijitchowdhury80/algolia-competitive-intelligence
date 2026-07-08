@@ -32,6 +32,9 @@ class ContentFetchResult(BaseModel):
     status: FetchStatus
     http_status: Optional[int] = None
     text: str = ""
+    # Raw HTML body (pre text-extraction). Article-link resolution needs the
+    # anchor tags that `text` has already stripped; empty for non-HTML fetches.
+    raw_html: str = ""
     error: Optional[str] = None
     collector: str = "direct_http"
     duration_ms: Optional[int] = None

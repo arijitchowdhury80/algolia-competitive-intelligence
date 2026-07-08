@@ -126,7 +126,12 @@ class CollectionRunner:
 
         article_urls: list[str] = []
         if source.source_family in INDEX_SOURCE_FAMILIES:
-            article_urls = resolve_article_links(fetch_result.text, context.url)[: self._article_fetch_cap]
+            # Resolve from raw HTML: `text` has anchor tags stripped, so link
+            # resolution against it silently finds nothing (Gate 7 rehearsal
+            # false-green). Fall back to text for fetchers that supply none.
+            article_urls = resolve_article_links(
+                fetch_result.raw_html or fetch_result.text, context.url
+            )[: self._article_fetch_cap]
 
         if article_urls:
             # A genuine index/blog page: extract per resolved article so

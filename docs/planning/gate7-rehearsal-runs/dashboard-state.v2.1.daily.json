@@ -4,7 +4,7 @@
   "top_attention_level": "watch",
   "tenant_id": 1,
   "cadence": "daily",
-  "generated_at": "2026-07-08T05:31:24.502761Z",
+  "generated_at": "2026-07-08T05:57:24.527796Z",
   "argus_read": {
     "useful_truth": "Argus daily brief for algolia.",
     "what_changed": null,
@@ -39,81 +39,81 @@
   },
   "competitor_cards": [
     {
-      "competitor_id": 1,
-      "competitor_name": "Elastic",
+      "competitor_id": 3,
+      "competitor_name": "Coveo",
       "attention_score": 72.0,
       "attention_level": "watch",
-      "action_cue": "Prepare competitive talk track contrasting managed search relevance tuning versus DIY vector infrastructure complexity.",
-      "top_signal_headline": "Elastic is promoting 'context engineering' narrative focused on delivering relevant context to AI agents for accurate outcomes, tied to vector capabilities.",
-      "what_changed": "Elastic is promoting 'context engineering' narrative focused on delivering relevant context to AI agents for accurate outcomes, tied to vector capabilities.",
-      "why_it_matters": "Signals Elastic sees AI agent/RAG infrastructure as a growth vector. They are framing Elasticsearch as the context layer for agentic AI, directly competing with vector database positioning.",
-      "recommended_action": "Prepare competitive talk track contrasting managed search relevance tuning versus DIY vector infrastructure complexity.",
+      "action_cue": "PMM should evaluate whether Algolia has an agentic commerce story and whether to contest or differentiate from this framing.",
+      "top_signal_headline": "Coveo published a 10-paper research roundup positioning themselves as the authority on 'agentic commerce' where LLMs browse, evaluate, plan, compare, and execute multi-step purchasing tasks autonomously.",
+      "what_changed": "Coveo published a 10-paper research roundup positioning themselves as the authority on 'agentic commerce' where LLMs browse, evaluate, plan, compare, and execute multi-step purchasing tasks autonomously.",
+      "why_it_matters": "This is a narrative land-grab. Coveo is attempting to define the next category (AI agents in commerce) before competitors can. If they own 'agentic commerce' as a term, they control how the market frames the problem.",
+      "recommended_action": "PMM should evaluate whether Algolia has an agentic commerce story and whether to contest or differentiate from this framing.",
       "materiality_score": 0.72,
-      "confidence": 0.65,
+      "confidence": 0.85,
       "evidence_ids": [
-        "https://www.elastic.co/blog"
+        "https://www.coveo.com/blog/agentic-commerce-research-papers"
       ],
-      "delta_id": 25,
+      "delta_id": 230,
       "thesis_id": null
     },
     {
-      "competitor_id": 1,
-      "competitor_name": "Elastic",
-      "attention_score": 60.0,
+      "competitor_id": 3,
+      "competitor_name": "Coveo",
+      "attention_score": 65.0,
       "attention_level": "watch",
-      "action_cue": "Pull full announcement text and assess for strategic shifts. Defer judgment until content is read.",
-      "top_signal_headline": "Elastic CEO communicated an organizational change internally, now surfaced on blog.",
-      "what_changed": "Elastic CEO communicated an organizational change internally, now surfaced on blog.",
-      "why_it_matters": "Org announcements from CEOs often signal strategic pivots, restructuring, or leadership changes. Content unknown from snippet alone.",
-      "recommended_action": "Pull full announcement text and assess for strategic shifts. Defer judgment until content is read.",
-      "materiality_score": 0.6,
-      "confidence": 0.4,
+      "action_cue": "Develop counter-positioning and talk track for when prospects reference this 'trade-off' framing.",
+      "top_signal_headline": "Coveo published content asserting that enterprise search historically forced users to 'meet the system halfway' and that their conversational search eliminates this compromise entirely.",
+      "what_changed": "Coveo published content asserting that enterprise search historically forced users to 'meet the system halfway' and that their conversational search eliminates this compromise entirely.",
+      "why_it_matters": "This is a direct competitive positioning statement. Coveo is framing all prior enterprise search (including Algolia) as fundamentally compromised, positioning their AI approach as the only solution.",
+      "recommended_action": "Develop counter-positioning and talk track for when prospects reference this 'trade-off' framing.",
+      "materiality_score": 0.65,
+      "confidence": 0.8,
       "evidence_ids": [
-        "https://www.elastic.co/blog"
+        "https://www.coveo.com/blog/coveo-conversational-search"
       ],
-      "delta_id": 27,
+      "delta_id": 231,
       "thesis_id": null
     },
     {
-      "competitor_id": 1,
-      "competitor_name": "Elastic",
+      "competitor_id": 3,
+      "competitor_name": "Coveo",
       "attention_score": 55.0,
       "attention_level": "watch",
-      "action_cue": "No immediate action unless client competes in security observability. Flag for quarterly competitive landscape update.",
-      "top_signal_headline": "Forrester recognized Elastic as a Strong Performer in Extended Detection and Response evaluation.",
-      "what_changed": "Forrester recognized Elastic as a Strong Performer in Extended Detection and Response evaluation.",
-      "why_it_matters": "Third-party validation strengthens Elastic's security credibility. They will use this in enterprise security deals to counter point-solution incumbents.",
-      "recommended_action": "No immediate action unless client competes in security observability. Flag for quarterly competitive landscape update.",
+      "action_cue": "Validate whether Boston Scientific is an active Coveo customer and assess competitive exposure in medical B2B pipeline.",
+      "top_signal_headline": "Coveo's B2B journey mapping content references Boston Scientific (global medical devices) as a customer success story, with claims about projected results from introducing Coveo.",
+      "what_changed": "Coveo's B2B journey mapping content references Boston Scientific (global medical devices) as a customer success story, with claims about projected results from introducing Coveo.",
+      "why_it_matters": "Medical devices B2B is a high-value vertical. If Boston Scientific is a referenceable Coveo win, it affects competitive positioning in enterprise B2B commerce deals.",
+      "recommended_action": "Validate whether Boston Scientific is an active Coveo customer and assess competitive exposure in medical B2B pipeline.",
       "materiality_score": 0.55,
-      "confidence": 0.7,
+      "confidence": 0.6,
       "evidence_ids": [
-        "https://www.elastic.co/blog"
+        "https://www.coveo.com/blog/b2b-customer-journey-map"
       ],
-      "delta_id": 26,
+      "delta_id": 232,
       "thesis_id": null
     }
   ],
   "theses": [
     {
       "thesis_id": 1,
-      "competitor_id": 1,
-      "competitor_name": "Elastic",
-      "thesis": "Elastic is reframing its vector play as \"context engineering for AI agents,\" signaling a pivot from search vendor to AI infrastructure provider and a direct collision course with Algolia's enterprise agentic narrative.",
+      "competitor_id": 3,
+      "competitor_name": "Coveo",
+      "thesis": "Coveo is racing to own the \"agentic commerce\" category before it crystallizes, betting that whoever defines the narrative around LLM-driven autonomous purchasing will set the competitive frame for the next wave of commerce infrastructure.",
       "status": "active",
       "confidence": 0.55,
       "supporting_delta_count": 1,
       "contradicting_delta_count": 0,
-      "updated_at": "2026-07-08T05:31:24.462995Z"
+      "updated_at": "2026-07-08T05:57:24.471463Z"
     }
   ],
   "run_health": {
-    "run_id": "gate7-algolia-1783488624",
+    "run_id": "gate7-algolia-1783490158",
     "report_id": 1,
-    "generated_at": "2026-07-08T05:31:24.497881Z",
+    "generated_at": "2026-07-08T05:57:24.508424Z",
     "model_tier": "judgment",
     "source_family_count": 3,
     "material_delta_count": 3,
-    "delivery_status": "sent",
+    "delivery_status": "failed",
     "quality_review_status": "failed"
   },
   "build_status": {
@@ -125,9 +125,9 @@
     "last_error": "no build-status provider injected"
   },
   "material_delta_ids": [
-    25,
-    27,
-    26
+    230,
+    231,
+    232
   ],
   "action_item_ids": [],
   "delivery_ids": [

@@ -123,6 +123,7 @@ class HttpContentFetcher:
                 status=FetchStatus.OK,
                 http_status=response.status_code,
                 text=text[:MAX_TEXT_CHARS],
+                raw_html=body,
                 error=None,
                 collector="direct_http",
                 duration_ms=int((time.time() - started) * 1000),
