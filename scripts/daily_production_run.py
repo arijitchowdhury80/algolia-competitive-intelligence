@@ -813,7 +813,9 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
             "SELECT count(*) FROM intel_fetch_runs WHERE tenant_id = %s AND status = 'completed'",
             (tenant_id,),
         ).fetchone()
-        cold_start = (prior_runs or {"count": 0})["count"] <= 1  # this run included
+        # app_conn may or may not use dict_row; support both shapes.
+        _count = (prior_runs["count"] if isinstance(prior_runs, dict) else prior_runs[0]) if prior_runs else 0
+        cold_start = _count <= 1  # this run included
         baseline_note = (
             "BASELINE MODE: this is the FIRST collection cycle for this reader. "
             "There is no prior snapshot, so you cannot claim anything changed in "
