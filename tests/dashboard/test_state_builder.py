@@ -472,3 +472,33 @@ def test_cards_merge_llm_paraphrases_of_same_story():
     assert len(state.competitor_cards) == 2
     counts = sorted(c.duplicate_count for c in state.competitor_cards)
     assert counts == [1, 3]
+
+
+def test_theses_merge_paraphrases_of_same_hypothesis():
+    """Regression for the 2026-07-08 live brief page: the Living Theses
+    section showed the same Elastic 'context engineering repositioning'
+    hypothesis six-plus times in slightly different words. _build_theses had
+    no dedup at all. Paraphrases of one hypothesis (same competitor) must
+    merge into one thesis, keeping the highest-confidence wording and
+    unioning evidence counts; distinct hypotheses stay separate."""
+    theses = {
+        1: [
+            thesis(id=1, competitor_id=5, competitor_name="Elastic", confidence=0.5,
+                   text="Elastic is reframing search infrastructure as the retrieval layer for AI agents, signaling that context engineering will become a contested battleground.",
+                   supporting=2),
+            thesis(id=2, competitor_id=5, competitor_name="Elastic", confidence=0.8,
+                   text="Elastic is repositioning search infrastructure as the retrieval layer for agents, and context engineering will become the contested battleground for that layer.",
+                   supporting=3),
+            thesis(id=3, competitor_id=5, competitor_name="Elastic", confidence=0.6,
+                   text="Elastic is pivoting from search-for-humans to retrieval-for-agents, positioning Elasticsearch as AI infrastructure.",
+                   supporting=1),
+        ]
+    }
+    builder = make_builder(coverage={1: full_coverage()}, theses=theses)
+    state = builder.build(tenant_id=1, cadence="daily")
+    # theses 1 and 2 are one hypothesis; 3 is related but distinct wording --
+    # at minimum the 1/2 pair must merge.
+    texts = [t.thesis for t in state.theses]
+    assert len(state.theses) < 3
+    # highest-confidence wording is kept for the merged pair.
+    assert any(t.startswith("Elastic is repositioning search infrastructure") for t in texts)

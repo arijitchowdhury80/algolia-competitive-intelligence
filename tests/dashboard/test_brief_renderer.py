@@ -185,3 +185,41 @@ def test_from_state_uses_luxury_editorial_tokens() -> None:
     html_out = render_brief_page_from_state(_state([_card(1)]), "2026-07-08")
     assert '--font-display: "Playfair Display", Georgia, serif;' in html_out
     assert "Playfair+Display" in html_out
+
+
+def test_from_state_headline_is_distilled_not_a_paragraph() -> None:
+    long_wc = ("Elastic currently promotes 'context engineering for AI agents' as a primary "
+               "Elasticsearch use case, framing the product as infrastructure that delivers the "
+               "most relevant context to agents so that they deliver accurate and trusted outcomes.")
+    card = _card(1)
+    card = card.model_copy(update={"top_signal_headline": long_wc, "what_changed": long_wc})
+    html_out = render_brief_page_from_state(_state([card]), "2026-07-08")
+    start = html_out.index('class="card-headline">') + len('class="card-headline">')
+    headline = html_out[start:html_out.index("<", start)]
+    assert len(headline.split()) <= 16
+
+
+def test_from_state_plays_capped_at_five_ranked_by_urgency() -> None:
+    plays = [
+        PrescriptionSummary(title=f"Monthly play {i}", team="Marketing",
+                            play=["step"], urgency_window="this_month")
+        for i in range(6)
+    ] + [PrescriptionSummary(title="Urgent play", team="Sales Enablement",
+                             play=["step one", "step two"], urgency_window="act_now")]
+    html_out = render_brief_page_from_state(_state([_card(1)], plays=plays), "2026-07-08")
+    assert html_out.count('class="play-item"') == 5
+    assert "Urgent play" in html_out
+    assert "more plays on the" in html_out
+    # steps are collapsed behind a disclosure, not dumped inline
+    assert "<details><summary>Steps (2)</summary>" in html_out
+
+
+def test_from_state_theses_capped_at_six() -> None:
+    theses = [
+        LivingThesis(thesis_id=i, competitor_id=1, thesis=f"Distinct hypothesis number {i}.",
+                     status="active", supporting_delta_count=1, contradicting_delta_count=0)
+        for i in range(9)
+    ]
+    html_out = render_brief_page_from_state(_state([_card(1)], theses=theses), "2026-07-08")
+    assert html_out.count('class="thesis-item"') == 6
+    assert "more theses on the" in html_out

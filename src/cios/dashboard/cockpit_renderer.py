@@ -1847,6 +1847,13 @@ def _truncate(text: str, limit: int) -> str:
     return f"{cut}…" if cut else f"{text[:limit].rstrip()}…"
 
 
+_HEADLINE_DANGLERS = {
+    "the", "a", "an", "as", "that", "which", "can", "its", "their", "with",
+    "for", "and", "or", "but", "to", "of", "in", "on", "at", "by", "is",
+    "are", "was", "has", "have", "framing", "called", "under", "over",
+}
+
+
 def _word_cap(text: str, max_words: int) -> str:
     """Deterministic word-count cap for the hero headline. Unlike _truncate
     (character-length, mid-word-safe, ellipsis-terminated), this never cuts
@@ -1864,7 +1871,12 @@ def _word_cap(text: str, max_words: int) -> str:
     words = text.split()
     if len(words) <= max_words:
         return text
-    return " ".join(words[:max_words])
+    kept = words[:max_words]
+    # Never end a display headline on a dangling function word ("framing
+    # the", "that can") -- trim trailing stopwords after the cut.
+    while kept and kept[-1].lower().strip(",;:'\"") in _HEADLINE_DANGLERS:
+        kept.pop()
+    return " ".join(kept).rstrip(",;:")
 
 
 def _hero_headline(state: DashboardState) -> str:
@@ -2471,91 +2483,191 @@ def _brief_page_shell(body_html: str, date_label: str) -> str:
     .brief-body strong {{ color: var(--ink); font-weight: 650; }}
     .brief-body a {{ color: var(--gold); text-decoration: underline; }}
     .brief-empty {{ color: var(--muted); font-style: italic; }}
-    .brief-backnav {{
+    .brief-masthead {{
+      background: var(--ink);
+      color: var(--paper);
+      margin: -48px calc((100vw - min(760px, calc(100vw - 48px))) / -2) 44px;
+      padding: 34px calc((100vw - min(760px, calc(100vw - 48px))) / 2) 40px;
+    }}
+    .brief-masthead .brief-backnav {{
       display: inline-block;
-      margin-bottom: 18px;
+      margin-bottom: 26px;
       font-family: var(--font-body);
       font-size: 11px;
       font-weight: 650;
-      letter-spacing: .14em;
+      letter-spacing: .16em;
       text-transform: uppercase;
       color: var(--gold);
       text-decoration: none;
     }}
-    .brief-backnav:hover {{ text-decoration: underline; }}
+    .brief-masthead .brief-backnav:hover {{ text-decoration: underline; }}
+    .brief-masthead .masthead-eyebrow {{
+      font-size: 11px;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: rgba(251, 250, 247, .55);
+      margin-bottom: 14px;
+    }}
+    .brief-masthead h1 {{
+      font-family: var(--font-display);
+      font-size: clamp(30px, 4.5vw, 44px);
+      font-weight: 600;
+      line-height: 1.12;
+      margin: 0 0 14px;
+      color: var(--paper);
+    }}
+    .brief-masthead .masthead-deck {{
+      font-size: 13px;
+      color: rgba(251, 250, 247, .65);
+      letter-spacing: .04em;
+    }}
+    .brief-section-head {{
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 10px;
+      margin: 0 0 6px;
+    }}
+    .brief-section-head h2 {{
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0;
+    }}
+    .brief-section-head .read-cue {{
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      white-space: nowrap;
+    }}
     .brief-section-kicker {{
       font-family: var(--font-body);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--muted);
-      margin: -6px 0 18px;
+      margin: 8px 0 24px;
     }}
-    .brief-cards {{ margin: 0 0 40px; }}
+    .brief-cards {{ margin: 0 0 56px; }}
     .signal-card {{
-      border: 1px solid var(--line);
-      border-left: 3px solid var(--gold);
-      background: var(--paper);
-      padding: 18px 20px;
-      margin: 0 0 14px;
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      gap: 18px;
+      padding: 22px 0;
+      border-bottom: 1px solid var(--line);
+    }}
+    .signal-card .card-rank {{
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-style: italic;
+      color: var(--gold);
+      line-height: 1;
+      padding-top: 2px;
     }}
     .signal-card .card-eyebrow {{
-      font-size: 11px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 6px;
       display: flex;
       justify-content: space-between;
       gap: 12px;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
     }}
     .signal-card .card-headline {{
       font-family: var(--font-display);
-      font-size: 19px;
+      font-size: 21px;
       font-weight: 600;
+      line-height: 1.25;
       color: var(--ink);
-      margin: 0 0 8px;
+      margin: 0 0 10px;
     }}
-    .signal-card p {{ font-size: 14px; line-height: 1.6; margin: 0 0 8px; color: var(--ink); }}
+    .signal-card p {{ font-size: 14px; line-height: 1.65; margin: 0 0 8px; color: var(--ink-2, var(--ink)); }}
+    .signal-card .card-why {{ color: var(--muted); }}
     .signal-card .card-action {{
+      font-size: 13px;
       font-weight: 650;
       color: var(--ink);
-      border-top: 1px solid var(--line);
-      padding-top: 8px;
       margin-top: 10px;
     }}
-    .merge-badge {{ color: var(--gold); font-weight: 650; white-space: nowrap; }}
-    .brief-theses {{
-      margin: 0 0 40px;
-      border-top: 2px solid var(--ink);
-      padding-top: 22px;
+    .signal-card .card-action::before {{
+      content: "DO";
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      color: var(--paper);
+      background: var(--gold);
+      padding: 2px 6px;
+      margin-right: 8px;
+      vertical-align: 2px;
     }}
-    .thesis-item {{
-      padding: 12px 0 14px;
+    .merge-badge {{ color: var(--gold); white-space: nowrap; }}
+    .brief-plays {{ margin: 0 0 56px; }}
+    .play-item {{
+      padding: 14px 0;
       border-bottom: 1px solid var(--line);
     }}
+    .play-item .play-row {{
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+    }}
+    .play-item .play-title {{ font-weight: 650; color: var(--ink); font-size: 15px; }}
+    .play-item .play-meta {{
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }}
+    .play-item .play-meta .urgency-now {{ color: var(--gold); }}
+    .play-item details {{ margin-top: 8px; }}
+    .play-item summary {{
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      list-style: none;
+    }}
+    .play-item summary::-webkit-details-marker {{ display: none; }}
+    .play-item ul {{ margin: 8px 0 4px 18px; padding: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink-2, var(--ink)); }}
+    .play-item .play-effect {{ font-size: 12.5px; color: var(--muted); margin-top: 6px; }}
+    .brief-more-note {{ font-size: 12px; color: var(--muted); margin-top: 14px; }}
+    .brief-theses {{ margin: 0 0 48px; }}
+    .thesis-item {{ padding: 16px 0; border-bottom: 1px solid var(--line); }}
     .thesis-item .thesis-text {{
       font-family: var(--font-display);
       font-style: italic;
-      font-size: 16px;
+      font-size: 17px;
       line-height: 1.55;
       color: var(--ink-2, var(--ink));
-      margin: 0 0 6px;
+      margin: 0 0 8px;
     }}
     .thesis-item .thesis-meta {{
-      font-size: 12px;
+      font-size: 10px;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
       color: var(--muted);
-      letter-spacing: .04em;
     }}
-    .brief-plays {{ margin: 0 0 40px; }}
-    .play-item {{ margin: 0 0 14px; }}
-    .play-item .play-title {{ font-weight: 650; color: var(--ink); font-size: 14px; }}
-    .play-item ul {{ margin: 6px 0 6px 18px; padding: 0; font-size: 14px; line-height: 1.6; }}
-    .play-item .play-meta {{ font-size: 12px; color: var(--muted); }}
   </style>
 </head>
 <body>
   <div class="brief-shell">
-    <a class="brief-backnav" href="./">&larr; Argus Cockpit</a>
-    <div class="eyebrow">Argus &middot; Daily Competitive Brief &middot; {date_label}</div>
+    <header class="brief-masthead">
+      <a class="brief-backnav" href="./">&larr; Argus Cockpit</a>
+      <div class="masthead-eyebrow">Argus &middot; Daily Competitive Brief</div>
+      <h1>Your competitive picture</h1>
+      <div class="masthead-deck">{date_label}</div>
+    </header>
     <div class="brief-body">
       {body_html}
     </div>
@@ -2566,47 +2678,58 @@ def _brief_page_shell(body_html: str, date_label: str) -> str:
 
 
 _URGENCY_LABELS = {"act_now": "Act now", "this_week": "This week", "this_month": "This month"}
+_URGENCY_RANK = {"act_now": 0, "this_week": 1, "this_month": 2}
 
 
 def render_brief_page_from_state(state, report_date: str) -> str:
-    """State-first brief page (P0 punch list, 2026-07-08): composes the
-    published brief.html directly from the DEDUPED DashboardState instead of
-    the raw reader_text signal list, so one story = one card.
+    """State-first brief page (P0 punch list + editorial redesign,
+    2026-07-08): composes the published brief.html directly from the DEDUPED
+    DashboardState, so one story = one card.
 
-    Contract (punch item 2), enforced visually and in copy:
+    Contract, enforced visually and in copy:
       - Signal Card = what changed NOW plus the action. Read daily, act.
-        Capped at 5, materiality-ranked (state builder order), each carrying
-        a "seen in N sources" merge badge when near-duplicates were folded.
+        Capped at 5, materiality-ranked, DISTILLED: the display headline is
+        word-capped and the body texts are truncated -- the brief is the
+        five-minute read, the cockpit holds the full record.
       - Living Thesis = standing strategic hypothesis accumulating evidence.
-        Read weekly, orient. Distinct visual weight (serif italic, heavier
-        section rule) and never buried under an uncapped card list.
+        Read weekly, orient. Serif-italic, capped, never buried.
+      - Your Plays = top 5 by urgency then materiality, steps collapsed
+        behind a disclosure so the section scans as five lines, not a wall.
 
-    Also renders YOUR PLAYS from state.prescriptions. Always returns the
-    Luxury Editorial page (never the legacy blue template) and is honest on
-    empty state."""
+    Always returns the Luxury Editorial page (never the legacy blue
+    template) and is honest on empty state."""
     parts: list[str] = []
 
     cards = list(state.competitor_cards)[:5]
     if cards:
         parts.append('<section class="brief-cards">')
-        parts.append("<h2>Today&rsquo;s Signals</h2>")
+        parts.append('<div class="brief-section-head"><h2>Today&rsquo;s Signals</h2>'
+                     '<span class="read-cue">Read daily &middot; Act</span></div>')
         parts.append('<p class="brief-section-kicker">What changed now, ranked by materiality. '
                      "One story, one card. Read daily, act.</p>")
-        for c in cards:
+        for i, c in enumerate(cards, start=1):
             badge = (f'<span class="merge-badge">seen in {c.duplicate_count} sources</span>'
                      if c.duplicate_count > 1 else "")
+            headline = _word_cap(c.top_signal_headline or c.action_cue or "", 16)
             body = []
-            if c.what_changed:
-                body.append(f"<p>{_esc(c.what_changed)}</p>")
+            what = _truncate(c.what_changed or "", 240)
+            # When the headline was distilled from what_changed itself, the
+            # body paragraph would open by repeating the headline verbatim --
+            # skip it and let why_it_matters carry the body (the cockpit
+            # holds the full record).
+            headline_from_what = (c.what_changed or "").startswith(headline[:40])
+            if what and not headline_from_what:
+                body.append(f"<p>{_esc(what)}</p>")
             if c.why_it_matters:
-                body.append(f"<p>{_esc(c.why_it_matters)}</p>")
+                body.append(f'<p class="card-why">{_esc(_truncate(c.why_it_matters, 200))}</p>')
             if c.recommended_action:
-                body.append(f'<p class="card-action">Do: {_esc(c.recommended_action)}</p>')
+                body.append(f'<p class="card-action">{_esc(_truncate(c.recommended_action, 180))}</p>')
             parts.append(
                 '<article class="signal-card">'
+                f'<div class="card-rank">{i:02d}</div><div>'
                 f'<div class="card-eyebrow"><span>{_esc(c.competitor_name)}</span>{badge}</div>'
-                f'<h3 class="card-headline">{_esc(c.top_signal_headline or c.action_cue)}</h3>'
-                + "".join(body) + "</article>"
+                f'<h3 class="card-headline">{_esc(headline)}</h3>'
+                + "".join(body) + "</div></article>"
             )
         parts.append("</section>")
     else:
@@ -2614,27 +2737,44 @@ def render_brief_page_from_state(state, report_date: str) -> str:
                      "Coverage details are on the cockpit.</p>")
 
     if state.prescriptions:
+        ranked_plays = sorted(
+            state.prescriptions,
+            key=lambda p: (_URGENCY_RANK.get(p.urgency_window, 9),
+                           -(p.materiality_score or 0.0)),
+        )
+        shown = ranked_plays[:5]
         parts.append('<section class="brief-plays">')
-        parts.append("<h2>Your Plays</h2>")
-        for p in state.prescriptions:
+        parts.append('<div class="brief-section-head"><h2>Your Plays</h2>'
+                     '<span class="read-cue">Top 5 &middot; By urgency</span></div>')
+        for p in shown:
             steps = "".join(f"<li>{_esc(s)}</li>" for s in p.play)
-            effect = f' &middot; {_esc(p.expected_effect)}' if p.expected_effect else ""
+            effect = (f'<div class="play-effect">{_esc(_truncate(p.expected_effect, 160))}</div>'
+                      if p.expected_effect else "")
             urgency = _URGENCY_LABELS.get(p.urgency_window, p.urgency_window)
+            urgency_cls = ' class="urgency-now"' if p.urgency_window == "act_now" else ""
+            detail = (f"<details><summary>Steps ({len(p.play)})</summary><ul>{steps}</ul>{effect}</details>"
+                      if p.play else effect)
             parts.append(
                 '<div class="play-item">'
-                f'<div class="play-title">{_esc(p.title)}</div>'
-                f"<ul>{steps}</ul>"
-                f'<div class="play-meta">{_esc(p.team)} &middot; {_esc(urgency)}{effect}</div>'
+                '<div class="play-row">'
+                f'<span class="play-title">{_esc(p.title)}</span>'
+                f'<span class="play-meta"><span{urgency_cls}>{_esc(urgency)}</span> &middot; {_esc(p.team)}</span>'
                 "</div>"
+                f"{detail}</div>"
             )
+        if len(ranked_plays) > 5:
+            parts.append(f'<p class="brief-more-note">{len(ranked_plays) - 5} more plays on the '
+                         '<a href="./">cockpit</a>.</p>')
         parts.append("</section>")
 
     if state.theses:
+        shown_theses = list(state.theses)[:6]
         parts.append('<section class="brief-theses">')
-        parts.append("<h2>Living Theses</h2>")
+        parts.append('<div class="brief-section-head"><h2>Living Theses</h2>'
+                     '<span class="read-cue">Read weekly &middot; Orient</span></div>')
         parts.append('<p class="brief-section-kicker">Standing strategic hypotheses that '
                      "accumulate evidence over time. Read weekly, orient.</p>")
-        for t in state.theses:
+        for t in shown_theses:
             conf = f" &middot; confidence {t.confidence:.0%}" if t.confidence is not None else ""
             who = f"{_esc(t.competitor_name)} &middot; " if t.competitor_name else ""
             parts.append(
@@ -2644,6 +2784,9 @@ def render_brief_page_from_state(state, report_date: str) -> str:
                 f"{t.supporting_delta_count} supporting / {t.contradicting_delta_count} contradicting"
                 f"{conf}</div></div>"
             )
+        if len(state.theses) > 6:
+            parts.append(f'<p class="brief-more-note">{len(state.theses) - 6} more theses on the '
+                         '<a href="./">cockpit</a>.</p>')
         parts.append("</section>")
 
     return _brief_page_shell("\n".join(parts), _esc(report_date))

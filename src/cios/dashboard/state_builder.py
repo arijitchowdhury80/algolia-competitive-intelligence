@@ -311,19 +311,35 @@ class DashboardStateBuilder:
 
     def _build_theses(self, tenant_id: int) -> list[LivingThesis]:
         rows = self._theses.get_active_theses(tenant_id)
+        # Same-hypothesis dedup (2026-07-08 live-page regression: one Elastic
+        # repositioning hypothesis rendered six-plus times in paraphrase).
+        # Cluster per competitor on the thesis text; keep the highest-
+        # confidence wording, union the evidence ids so no supporting or
+        # contradicting delta is dropped by the merge.
+        clusters = cluster_by_similarity(
+            rows,
+            group_key=lambda r: r.get("competitor_id"),
+            text=lambda r: r.get("thesis") or "",
+        )
         theses: list[LivingThesis] = []
-        for r in rows:
+        for cluster in clusters:
+            best = max(cluster.members, key=lambda r: float(r.get("confidence") or 0.0))
+            supporting: set = set()
+            contradicting: set = set()
+            for m in cluster.members:
+                supporting.update(m.get("supporting_delta_ids") or [])
+                contradicting.update(m.get("contradicting_delta_ids") or [])
             theses.append(
                 LivingThesis(
-                    thesis_id=r["id"],
-                    competitor_id=r["competitor_id"],
-                    competitor_name=r.get("competitor_name"),
-                    thesis=r["thesis"],
-                    status=r.get("status", "active"),
-                    confidence=r.get("confidence"),
-                    supporting_delta_count=len(r.get("supporting_delta_ids") or []),
-                    contradicting_delta_count=len(r.get("contradicting_delta_ids") or []),
-                    updated_at=r.get("updated_at"),
+                    thesis_id=best["id"],
+                    competitor_id=best["competitor_id"],
+                    competitor_name=best.get("competitor_name"),
+                    thesis=best["thesis"],
+                    status=best.get("status", "active"),
+                    confidence=best.get("confidence"),
+                    supporting_delta_count=len(supporting),
+                    contradicting_delta_count=len(contradicting),
+                    updated_at=best.get("updated_at"),
                 )
             )
         return theses
