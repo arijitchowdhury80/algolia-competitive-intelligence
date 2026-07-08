@@ -83,6 +83,7 @@ from cios.brain.types import (
     Pattern,
     Signal,
     SynthesisInput,
+    Thesis,
     Verdict,
     WeeklySynthesisResult,
 )
@@ -94,6 +95,15 @@ from cios.collect.types import FetchStatus, Snapshot, SourceContext
 from cios.dashboard.publisher import default_filename, publish_to_file, to_json_str
 from cios.dashboard.state_builder import DashboardStateBuilder
 from cios.db.repos.cadence import PgDailySignalLedger, PgWeeklyResultLedger
+from cios.horizon.connector import DotConnector
+from cios.horizon.industry import HorizonSynthesizer
+from cios.horizon.ledger_scan import LedgerRecord, bucket_boundaries, scan_all_horizons
+from cios.horizon.types import Horizon
+from cios.ownbrand.collector import OwnBrandCollector
+from cios.ownbrand.position import BrandPositionCompiler
+from cios.ownbrand.types import BrandPositionRead, OwnBrandSource, OwnBrandSourceSpec
+from cios.prescribe.engine import PrescriptionEngine
+from cios.prescribe.types import Prescription
 from cios.db.repos.collect import (
     PgDeltaRepository,
     PgFactRepository,
@@ -126,7 +136,7 @@ from cios.platform.channels.types import (
 from cios.platform.models.providers.claude_cli import ClaudeCliShimProvider
 from cios.platform.models.types import ModelRequest
 
-LLM_BUDGET = 25
+LLM_BUDGET = 35
 LLM_CALLS = {"count": 0}
 
 # Cutover 2026-07-08 (Arijit's explicit order): V2 IS the system. V0 cron
@@ -561,6 +571,128 @@ def insert_dashboard_state(conn, tenant_id, daily_json, material_ids, delivery_i
             )
 
 
+def _apply_cold_start_labels(text: str, cold_start: bool) -> str:
+    """Re-applies the cold-start (first cycle, no prior snapshot) heading
+    swap. Factored out so every reader_text rebuild (initial synth, revise
+    pass, post-prescriptions rebuild) stays consistent instead of only the
+    first render getting the swap."""
+    if not cold_start:
+        return text
+    return text.replace(
+        "## Your competitive picture", "## Your competitive BASELINE (first cycle)", 1
+    ).replace("## WHAT HAPPENED (24h)", "## WHERE YOUR COMPETITORS STAND TODAY", 1)
+
+
+def prescription_to_action_item(p: Prescription, report_id: Optional[int] = None) -> dict:
+    """Maps a Prescription onto an action_items row (schema: src/cios/db/schema.sql).
+    No schema change needed -- action_items already has owner/recommendation/
+    evidence_ids/priority/confidence/due_window/report_id, a good-enough fit
+    for a prescription's shape. Deviation: there is no dedicated `payload`
+    jsonb column on action_items, so the play steps are folded into
+    `recommendation` (title + steps) rather than dropped, and grounding
+    thesis_ids (the only non-URL evidence reference) are carried in
+    `source_delta_ids` since that is the closest existing jsonb column for
+    "what this traces back to" that is not `evidence_ids` itself."""
+    g = p.grounding
+    steps = "; ".join(p.play)
+    recommendation = f"{p.title}: {steps}" if steps else p.title
+    return {
+        "tenant_id": p.tenant_id,
+        "owner": p.team.value,
+        "recommendation": recommendation,
+        "evidence_ids": list(dict.fromkeys(g.evidence_urls)),
+        "source_delta_ids": list(g.thesis_ids),
+        "priority": p.urgency_window.value,
+        "confidence": p.materiality_score,
+        "due_window": p.urgency_window.value,
+        "report_id": report_id,
+    }
+
+
+def insert_action_item(conn, row: dict) -> Optional[int]:
+    with tenant_context(conn, row["tenant_id"]):
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO action_items
+                    (tenant_id, owner, recommendation, evidence_ids, source_delta_ids,
+                     priority, confidence, due_window, report_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    row["tenant_id"], row["owner"], row["recommendation"],
+                    Json(row["evidence_ids"]), Json(row["source_delta_ids"]),
+                    row["priority"], row["confidence"], row["due_window"], row["report_id"],
+                ),
+            )
+            fetched = cur.fetchone()
+            return fetched["id"] if fetched else None
+
+
+class DbLedgerRecords:
+    """LedgerRepo (cios.horizon.ledger_scan.LedgerRepo) backed by published
+    semantic_deltas -- industry-wide (not filtered to a single named
+    competitor), per doctrine Addendum 2 point 1. evidence_ids on
+    semantic_deltas is a jsonb array of URL strings (Delta.evidence_urls);
+    the first one becomes the LedgerRecord's source_url, matching the
+    1-URL-per-record shape ledger_scan expects."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def records_in_window(self, tenant_id: int, start, end) -> list[LedgerRecord]:
+        with tenant_context(self._conn, tenant_id):
+            with self._conn.cursor(row_factory=dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT competitor_id, created_at::date AS observed_at, delta_type,
+                           what_changed, evidence_ids
+                    FROM semantic_deltas
+                    WHERE tenant_id = %s AND quality_status = 'published'
+                      AND created_at::date BETWEEN %s AND %s
+                    """,
+                    (tenant_id, start, end),
+                )
+                rows = cur.fetchall()
+        out: list[LedgerRecord] = []
+        for r in rows:
+            evidence = r["evidence_ids"] or []
+            url = evidence[0] if evidence else None
+            out.append(LedgerRecord(
+                competitor_id=r["competitor_id"], observed_at=r["observed_at"],
+                kind=r["delta_type"] or "signal", summary=r["what_changed"] or "", source_url=url,
+            ))
+        return out
+
+
+def _format_horizon_section(horizon_reads: list, connections: list) -> str:
+    """Renders the weekly-only multi-horizon industry read + dot-connections
+    section (doctrine Addendum 2 point 1). Returns "" (no section) when
+    there is genuinely nothing to show -- never a fabricated placeholder."""
+    lines: list[str] = []
+    any_content = False
+    for read in horizon_reads:
+        if not read.notable_movements and not read.themes:
+            continue
+        any_content = True
+        lines.append(f"### Horizon {read.horizon.value} (as of {read.as_of.isoformat()})")
+        for m in read.notable_movements:
+            lines.append(f"- {m}")
+        for theme in read.themes:
+            lines.append(f"- [{theme.confidence.value}] {theme.theme} (evidence={theme.evidence_urls})")
+        lines.append("")
+    if connections:
+        any_content = True
+        lines.append("### This week connects to")
+        for c in connections:
+            lines.append(f"- ({c.horizon.value}) {c.connection}")
+        lines.append("")
+    if not any_content:
+        return ""
+    return "## MULTI-HORIZON INDUSTRY READ\n\n" + "\n".join(lines).rstrip() + "\n"
+
+
 def _format_weekly_brief(result: WeeklySynthesisResult) -> str:
     lines = [f"Weekly pattern review - competitor {result.competitor_id}", ""]
     if not result.patterns:
@@ -657,6 +789,54 @@ async def run_weekly_if_due(
         await _deliver_cadence_report(app_conn, tenant_id, slug, adapter, Cadence.WEEKLY, report_id,
                                        f"Argus weekly review - {slug}", brief)
 
+    # Multi-horizon industry read + dot-connections (doctrine Addendum 2
+    # point 1): industry-wide (not per-competitor), computed once per tenant
+    # per week. Wrapped so a failure here never blocks the per-competitor
+    # weekly pattern reviews above, which have already been delivered.
+    try:
+        as_of = now.date()
+        ledger_repo = DbLedgerRecords(app_conn)
+        obs_by_horizon = scan_all_horizons(ledger_repo, tenant_id, as_of)
+        horizon_synth = HorizonSynthesizer(model=model)
+        horizon_reads = []
+        for horizon in Horizon:
+            start, end = bucket_boundaries(as_of, horizon)
+            read = await horizon_synth.synthesize(
+                tenant_id, horizon, as_of, obs_by_horizon[horizon], (start, end)
+            )
+            horizon_reads.append(read)
+
+        week_records = ledger_repo.records_in_window(tenant_id, week_start, as_of)
+        week_signals = [
+            Signal(
+                competitor_id=r.competitor_id if r.competitor_id is not None else 0,
+                signal_type=r.kind or "signal", headline=(r.summary or "")[:120],
+                what_changed=r.summary or "", recommended_action="", owner="PMM",
+                team_to_involve="Marketing", materiality_score=0.5,
+                evidence_urls=[r.source_url],
+            )
+            for r in week_records if r.source_url
+        ]
+        connector = DotConnector(model=model)
+        connections = await connector.connect(tenant_id, week_signals, horizon_reads) if week_signals else []
+
+        horizon_brief = _format_horizon_section(horizon_reads, connections)
+        if horizon_brief:
+            h_metadata = {
+                "horizon_reads": [r.model_dump(mode="json") for r in horizon_reads],
+                "dot_connections": [c.model_dump(mode="json") for c in connections],
+            }
+            h_report_id = insert_report(
+                app_conn, tenant_id, "weekly", f"Weekly horizon review - {slug}",
+                "multi-horizon industry read", metadata=h_metadata,
+            )
+            await _deliver_cadence_report(
+                app_conn, tenant_id, slug, adapter, Cadence.WEEKLY, h_report_id,
+                f"Argus weekly horizon review - {slug}", horizon_brief,
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"WARNING: weekly horizon/dot-connection integration failed for {slug}: {exc}")
+
 
 async def run_monthly_if_due(
     app_conn, tenant_id: int, slug: str, adapter: ChannelAdapter, model, now: datetime
@@ -690,7 +870,10 @@ async def run_monthly_if_due(
                                        f"Argus monthly roll-up - {slug}", brief)
 
 
-async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAdapter) -> TenantResult:
+async def run_tenant(
+    slug, tenant_id, plan, app_conn, model, adapter: ChannelAdapter,
+    own_brand_plan: Optional[list[dict]] = None,
+) -> TenantResult:
     res = TenantResult(slug)
     res.tenant_id = tenant_id
     run_id = f"daily-{slug}-{int(time.time())}"
@@ -795,6 +978,35 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         LaneStatus(lane="exec_speech", ran=exec_speech_ran, error=None if exec_speech_ran else "exec-speech scanner not run this pass"),
     ])
 
+    # Own-brand read (doctrine Addendum 2 point 2): feeds the "where you are"
+    # leg of the three-position framing via SynthesisInput.own_position_facts.
+    # Bounded (max 3 sources, max 2 articles each) and wrapped -- a failure
+    # or missing config here must never block the core competitor brief.
+    own_brand_read: Optional[BrandPositionRead] = None
+    own_position_facts: list[str] = []
+    tenant_company_name: Optional[str] = slug.capitalize()
+    try:
+        if not own_brand_plan:
+            res.errors.append(f"own-brand: no source config for tenant '{slug}' in {CONFIG_PATH}; skipped")
+        else:
+            ob_specs = [
+                OwnBrandSourceSpec(
+                    tenant_id=tenant_id,
+                    source_type=OwnBrandSource(s["source_type"]),
+                    url=s["url"],
+                    name=s.get("name"),
+                )
+                for s in own_brand_plan[:3]
+            ]
+            ob_collector = OwnBrandCollector(content_fetcher=content_fetcher, article_fetch_cap=2)
+            observations = ob_collector.collect(tenant_id, ob_specs)
+            if observations:
+                compiler = BrandPositionCompiler(model=model)
+                own_brand_read = await compiler.compile(tenant_id, tenant_company_name, observations)
+                own_position_facts = own_brand_read.to_own_position_facts()
+    except Exception as exc:  # noqa: BLE001
+        res.errors.append(f"own-brand error: {exc}")
+
     synthesizer = Synthesizer(model=model)
     promoted: list[dict] = []
     verdict = None
@@ -832,6 +1044,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         inp = SynthesisInput(tenant_id=tenant_id, competitor_id=best_comp, competitor_name=comp_name,
                              deltas=best_deltas, facts=comp_facts, exec_signals=[],
                              prior_theses=[], coverage=coverage,
+                             tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
                              extra_instructions=baseline_note)
         try:
             sr = await synthesizer.synthesize(inp)
@@ -876,10 +1089,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         tenant_name=slug,
         brief_date=date.today(),
     )
-    if cold_start:
-        reader_text = reader_text.replace(
-            "## Your competitive picture", "## Your competitive BASELINE (first cycle)", 1
-        ).replace("## WHAT HAPPENED (24h)", "## WHERE YOUR COMPETITORS STAND TODAY", 1)
+    reader_text = _apply_cold_start_labels(reader_text, cold_start)
     quality_reviewer = QualityReviewer(llm_reviewer=ClaudeQualityReviewer(
         os.environ.get("CIOS_CLAUDE_SHIM_URL", "http://127.0.0.1:8663"), model_alias="opus"))
     qr = quality_reviewer.review(_ReviewInput(tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
@@ -896,6 +1106,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         revise_inp = SynthesisInput(
             tenant_id=tenant_id, competitor_id=best_comp, competitor_name=comp_name,
             deltas=best_deltas, coverage=coverage,
+            tenant_company_name=tenant_company_name, own_position_facts=own_position_facts,
             extra_instructions=(
                 "REVISION PASS. An editorial review rejected specific claims. "
                 f"Required fixes: {fixes_text}. Remove or hedge every flagged "
@@ -922,6 +1133,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
                     tenant_name=slug,
                     brief_date=date.today(),
                 )
+                reader_text = _apply_cold_start_labels(reader_text, cold_start)
                 qr = quality_reviewer.review(_ReviewInput(
                     tenant_id=tenant_id, run_id=run_id, claims=claims_for_review,
                     reader_text=reader_text, quiet_verdict=False,
@@ -933,6 +1145,40 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
 
     res.quality_status = qr.status.value
     res.quality_fixes = qr.required_fixes
+
+    # Prescriptions (doctrine Addendum 2 point 3): post revise-loop, before
+    # delivery, so the delivered brief includes the "YOUR PLAYS" section.
+    # Grounded in this cycle's promoted signals + standing theses + the
+    # own-brand read above. No horizon connections on the daily path --
+    # those are weekly-only (Addendum 2 point 1, see run_weekly_if_due).
+    prescriptions: list[Prescription] = []
+    try:
+        theses_rows = DbTheses(app_conn).get_active_theses(tenant_id)
+        theses_objs = [
+            Thesis(
+                id=t["id"], tenant_id=tenant_id, competitor_id=t["competitor_id"],
+                thesis=t["thesis"], status=t["status"],
+                confidence=float(t["confidence"]) if t.get("confidence") is not None else None,
+            )
+            for t in theses_rows
+        ]
+        signal_objs = [Signal(**{k: v for k, v in s.items() if k in Signal.model_fields}) for s in promoted]
+        prescribe_engine = PrescriptionEngine(model=model)
+        prescriptions = await prescribe_engine.prescribe(
+            tenant_id=tenant_id, signals=signal_objs, connections=[],
+            theses=theses_objs, brand_position=own_brand_read,
+        )
+    except Exception as exc:  # noqa: BLE001
+        res.errors.append(f"prescription engine error: {exc}")
+
+    if prescriptions:
+        reader_text = compose_daily_brief(
+            [Signal(**{k: v for k, v in s.items() if k in Signal.model_fields}) for s in promoted],
+            tenant_name=slug,
+            brief_date=date.today(),
+            prescriptions=prescriptions,
+        )
+        reader_text = _apply_cold_start_labels(reader_text, cold_start)
 
     # Real false-negative audit: real raw observations vs real promoted
     # signals only, no synthetic planted-miss fixture (that was a one-time
@@ -979,6 +1225,21 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
         insert_thesis(app_conn, tenant_id, s0["competitor_id"], updated.thesis, updated.confidence, updated.evidence_ids)
 
     report_id = insert_report(app_conn, tenant_id, "daily", f"Argus daily brief - {slug}", reader_text[:200])
+
+    # Persist prescriptions as action_items (doctrine Addendum 2 point 3):
+    # collateral generation is deliberately NOT triggered here (see
+    # scripts/generate_collateral.py) -- this only records the decision-layer
+    # row so a human can later run collateral generation against it.
+    action_item_ids: list[int] = []
+    try:
+        for p in prescriptions:
+            row = prescription_to_action_item(p, report_id=report_id)
+            aid = insert_action_item(app_conn, row)
+            if aid is not None:
+                action_item_ids.append(aid)
+    except Exception as exc:  # noqa: BLE001
+        res.errors.append(f"action_items persistence error: {exc}")
+
     message_markdown = build_daily_message(reader_text)
     recorder = LearningRecorder(
         learning_events=PgLearningEventRepository(app_conn),
@@ -1010,7 +1271,7 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, adapter: ChannelAda
                 "model_tier": "judgment", "source_family_count": len(res.sources_fetched),
                 "delivery_status": "sent" if res.delivered else "failed", "quality_review_status": res.quality_status,
                 "argus_read": {"useful_truth": reader_text.split(chr(10))[0]},
-                "action_item_ids": [], "delivery_ids": [d["id"] for d in res.deliveries]}
+                "action_item_ids": action_item_ids, "delivery_ids": [d["id"] for d in res.deliveries]}
     builder = DashboardStateBuilder(signals=DbMaterialSignals(app_conn), theses=DbTheses(app_conn),
                                     coverage=DbCoverage(cov_dict), runs=DbRuns(run_dict),
                                     report_history=PgReportHistoryRepository(app_conn),
@@ -1048,6 +1309,7 @@ async def main() -> int:
 
     model = CountingModel(provider)
     tenant_plan = load_tenant_plan()
+    own_brand_map: dict = tenant_plan.get("own_brand", {}) or {}
 
     results: list[TenantResult] = []
     now = _now()
@@ -1067,7 +1329,8 @@ async def main() -> int:
                 "TELEGRAM_BOT_TOKEN": os.environ.get("TELEGRAM_BOT_TOKEN", ""),
                 "CIOS_TELEGRAM_CHAT_ID": os.environ.get("CIOS_TELEGRAM_CHAT_ID", ""),
             })
-            r = await run_tenant(slug, tenant_id, plan, app_conn, model, adapter)
+            r = await run_tenant(slug, tenant_id, plan, app_conn, model, adapter,
+                                 own_brand_plan=own_brand_map.get(slug))
             results.append(r)
             print(f"  sources={len(r.sources_fetched)} facts={r.facts_extracted} deltas={r.deltas_extracted} "
                   f"signals={len(r.promoted_signals)} verdict={r.synth_verdict} quality={r.quality_status} "

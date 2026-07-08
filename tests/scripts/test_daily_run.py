@@ -10,6 +10,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from cios.brain.brief import compose_daily_brief
+from cios.brain.types import Signal
+from cios.prescribe.types import Effort, Grounding, Prescription, Team, UrgencyWindow
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "daily_production_run.py"
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "tenants-sources.yaml"
 
@@ -87,3 +91,109 @@ def test_select_adapter_for_tenant_real_for_delivered(daily_run):
     assert not isinstance(adapter, daily_run.CapturingTelegramAdapter)
     assert adapter.bot_token == "tok-123"
     assert adapter.default_chat_id == "chat-456"
+
+
+def test_llm_budget_raised_to_35(daily_run):
+    assert daily_run.LLM_BUDGET == 35
+
+
+def _prescription(
+    title: str = "Counter-position the price cut",
+    urgency: UrgencyWindow = UrgencyWindow.ACT_NOW,
+    team: Team = Team.MARKETING,
+) -> Prescription:
+    return Prescription(
+        tenant_id=1,
+        title=title,
+        play=["Brief the field by EOD", "Publish a comparison one-pager"],
+        team=team,
+        urgency_window=urgency,
+        grounding=Grounding(
+            signal_evidence_urls=["https://rival.com/pricing"],
+            evidence_urls=["https://rival.com/pricing"],
+        ),
+        expected_effect="Neutralizes the price objection before it spreads.",
+        effort=Effort.M,
+        materiality_score=0.8,
+    )
+
+
+class _StubPrescriptionEngine:
+    """No-live-LLM stand-in for cios.prescribe.engine.PrescriptionEngine,
+    matching its async .prescribe(...) signature."""
+
+    def __init__(self, prescriptions: list[Prescription]) -> None:
+        self._prescriptions = prescriptions
+
+    async def prescribe(self, tenant_id, signals, connections=None, theses=None, brand_position=None):
+        return self._prescriptions
+
+
+# -- "YOUR PLAYS" brief section (via a fake/stub PrescriptionEngine) --------
+
+
+@pytest.mark.asyncio
+async def test_stub_prescription_engine_feeds_your_plays_section():
+    stub = _StubPrescriptionEngine([_prescription()])
+    prescriptions = await stub.prescribe(tenant_id=1, signals=[])
+    from datetime import date as _date
+
+    md = compose_daily_brief([], "Acme Corp", _date(2026, 7, 8), prescriptions=prescriptions)
+    assert "## YOUR PLAYS" in md
+    assert "Counter-position the price cut" in md
+    assert "Brief the field by EOD" in md
+
+
+# -- brief.py prescription rendering (unit test the render function) -------
+
+
+def test_format_your_plays_renders_title_steps_team_urgency(daily_run):
+    from cios.brain.brief import _format_your_plays
+
+    lines = _format_your_plays([_prescription()])
+    text = "\n".join(lines)
+    assert "## YOUR PLAYS" in text
+    assert "Counter-position the price cut" in text
+    assert "Marketing" in text
+    assert "act now" in text
+    assert "Brief the field by EOD" in text
+    assert "Expected effect: Neutralizes the price objection before it spreads." in text
+
+
+def test_format_your_plays_sorts_act_now_first(daily_run):
+    from cios.brain.brief import _format_your_plays
+
+    later = _prescription(title="This-month play", urgency=UrgencyWindow.THIS_MONTH)
+    now_play = _prescription(title="Act-now play", urgency=UrgencyWindow.ACT_NOW)
+    text = "\n".join(_format_your_plays([later, now_play]))
+    assert text.index("Act-now play") < text.index("This-month play")
+
+
+def test_format_your_plays_empty_when_no_prescriptions(daily_run):
+    from cios.brain.brief import _format_your_plays
+
+    assert _format_your_plays([]) == []
+    assert _format_your_plays(None) == []
+
+
+# -- action_items mapping from a Prescription -------------------------------
+
+
+def test_prescription_to_action_item_maps_evidence_and_team(daily_run):
+    p = _prescription()
+    row = daily_run.prescription_to_action_item(p, report_id=99)
+    assert row["tenant_id"] == 1
+    assert row["owner"] == "Marketing"
+    assert "Counter-position the price cut" in row["recommendation"]
+    assert "Brief the field by EOD" in row["recommendation"]
+    assert row["evidence_ids"] == ["https://rival.com/pricing"]
+    assert row["priority"] == "act_now"
+    assert row["due_window"] == "act_now"
+    assert row["report_id"] == 99
+    # action_items schema CHECK: evidence_ids must be non-empty.
+    assert len(row["evidence_ids"]) > 0
+
+
+def test_prescription_to_action_item_no_report_id_is_none(daily_run):
+    row = daily_run.prescription_to_action_item(_prescription())
+    assert row["report_id"] is None
