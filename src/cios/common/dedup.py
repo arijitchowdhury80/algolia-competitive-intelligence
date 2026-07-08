@@ -77,6 +77,7 @@ def cluster_by_similarity(
     group_key: Callable[[T], object],
     text: Callable[[T], str],
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    match: str = "representative",
 ) -> list[DuplicateCluster[T]]:
     """Groups `items` sharing the same group_key(item) whose text() is a
     near-duplicate of an existing cluster's representative text
@@ -93,7 +94,16 @@ def cluster_by_similarity(
         for cluster in clusters:
             if group_key(cluster.representative) != key:
                 continue
-            if token_set_similarity(item_text, text(cluster.representative)) >= threshold:
+            if match == "any":
+                # Transitive linking: join if similar to ANY member, not just
+                # the representative. Needed for living theses, where six
+                # rewordings of one hypothesis form a chain (A~B, B~C) whose
+                # ends never clear the threshold against each other.
+                hit = any(token_set_similarity(item_text, text(m)) >= threshold
+                          for m in cluster.members)
+            else:
+                hit = token_set_similarity(item_text, text(cluster.representative)) >= threshold
+            if hit:
                 cluster.members.append(item)
                 placed = True
                 break

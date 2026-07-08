@@ -316,10 +316,19 @@ class DashboardStateBuilder:
         # Cluster per competitor on the thesis text; keep the highest-
         # confidence wording, union the evidence ids so no supporting or
         # contradicting delta is dropped by the merge.
+        # Threshold 0.4 with transitive linking, both measured on the real
+        # 2026-07-08 production theses: six rewordings of one Elastic
+        # hypothesis scored 0.35-0.53 pairwise (rep-only 0.6 merged zero),
+        # while genuinely distinct stories measured <= 0.35. NOTE this is
+        # symptomatic relief -- the upstream thesis writer should UPDATE the
+        # standing thesis row instead of minting a fresh paraphrase each run
+        # (tracked as its own task).
         clusters = cluster_by_similarity(
             rows,
             group_key=lambda r: r.get("competitor_id"),
             text=lambda r: r.get("thesis") or "",
+            threshold=0.4,
+            match="any",
         )
         theses: list[LivingThesis] = []
         for cluster in clusters:

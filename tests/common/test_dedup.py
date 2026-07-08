@@ -50,3 +50,24 @@ def test_cluster_never_merges_across_group_key_even_if_text_identical():
     )
     assert len(clusters) == 2
 
+
+
+def test_match_any_links_paraphrase_chains():
+    """Transitive linking regression (2026-07-08 live theses): six rewordings
+    of one hypothesis form a chain where the ends are not similar enough to
+    the representative, only to intermediate members. match="any" must merge
+    the chain; unrelated text must stay out."""
+    from cios.common.dedup import cluster_by_similarity
+
+    items = [
+        {"k": 1, "t": "Elastic is reframing search infrastructure as the retrieval layer for agentic AI, signaling that context engineering will become a contested battleground."},
+        {"k": 1, "t": "Elastic is repositioning from search vendor to AI agent infrastructure layer, signaling that context engineering will become the new battleground for incumbents."},
+        {"k": 1, "t": "Elastic is pivoting from search-for-humans to retrieval-for-agents, positioning Elasticsearch as infrastructure that AI systems call rather than humans query."},
+        {"k": 1, "t": "Constructor is staking a claim that agentic commerce will be the next category frame, repositioning itself as an autonomous reasoning engine."},
+    ]
+    clusters = cluster_by_similarity(
+        items, group_key=lambda d: d["k"], text=lambda d: d["t"],
+        threshold=0.4, match="any",
+    )
+    sizes = sorted(c.count for c in clusters)
+    assert sizes == [1, 3]
