@@ -46,3 +46,32 @@ amplitude:
     domain: heap.io
     url: https://www.heap.io/blog
     family: blog
+
+# Own-brand sources per tenant (docs/planning/CI-OS-product-doctrine-2026-07-08.md
+# Addendum 2 point 2): the tenant's own blog/newsroom/press feed the "where
+# you are" leg of the three-position framing via src/cios/ownbrand. Same
+# real-URL, real-reachability bar as the competitor sources above.
+own_brand:
+  algolia:
+    - name: Algolia Blog
+      source_type: own_blog
+      url: https://www.algolia.com/blog
+    - name: Algolia Newsroom
+      source_type: newsroom
+      url: https://www.algolia.com/newsroom/
+
+  spryker:
+    - name: Spryker Blog
+      source_type: own_blog
+      url: https://spryker.com/en/blog/
+    - name: Spryker Newsroom
+      source_type: newsroom
+      url: https://spryker.com/en/news/
+
+  amplitude:
+    - name: Amplitude Blog
+      source_type: own_blog
+      url: https://amplitude.com/blog
+    - name: Amplitude Newsroom
+      source_type: newsroom
+      url: https://amplitude.com/newsroom
