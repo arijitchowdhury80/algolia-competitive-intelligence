@@ -81,14 +81,16 @@ from cios.db.repos.collect import (
     PgSnapshotRepository,
 )
 from cios.db.repos.delivery import PgBotDeliveryRepository, PgDeliveryAttemptRepository
+from cios.db.repos.learn import PgImprovementQueueRepository, PgLearningEventRepository
 from cios.db.repos.sources import PgSourceRepository
 from cios.db.session import get_dsn, tenant_context
 from cios.delivery.action_router import ActionRouter
-from cios.delivery.commander import DeliveryCommander
+from cios.delivery.gated_commander import GatedDeliveryCommander
 from cios.delivery.types import Cadence, DeliveryRequest, ReportReadyEvent
 from cios.hunter.lifecycle import SourceLifecycle
 from cios.hunter.types import HealthEventType, SourceHealthEvent
 from cios.hunter.validator import SourceValidator, normalize_url
+from cios.learn.recorder import LearningRecorder
 from cios.learn.types import FalseNegativeAuditStatus
 from cios.platform.channels.adapter import ChannelAdapter
 from cios.platform.channels.types import (
@@ -678,18 +680,28 @@ async def run_tenant(slug, tenant_id, plan, app_conn, model, out_dir) -> TenantR
                                 new_evidence_ids=[s0["evidence_urls"][0]])
         insert_thesis(app_conn, tenant_id, s0["competitor_id"], updated.thesis, updated.confidence, updated.evidence_ids)
 
-    # delivery (real commander; fake capturing channel)
+    # delivery (real GATED commander; fake capturing channel). Gate 7 blocker fix:
+    # a failed quality verdict must never ship, so the commander requires the
+    # QualityReview verdict computed above and only forwards a PASSED one.
     report_id = insert_report(app_conn, tenant_id, "daily", f"Argus daily brief - {slug}", reader_text[:200])
     adapter = CapturingTelegramAdapter()
-    commander = DeliveryCommander(adapters=SingleAdapterRegistry(adapter),
-                                  bot_deliveries=PgBotDeliveryRepository(app_conn),
-                                  delivery_attempts=PgDeliveryAttemptRepository(app_conn))
+    recorder = LearningRecorder(
+        learning_events=PgLearningEventRepository(app_conn),
+        improvement_queue=PgImprovementQueueRepository(app_conn),
+    )
+    commander = GatedDeliveryCommander(adapters=SingleAdapterRegistry(adapter),
+                                       bot_deliveries=PgBotDeliveryRepository(app_conn),
+                                       delivery_attempts=PgDeliveryAttemptRepository(app_conn),
+                                       recorder=recorder)
     router = ActionRouter(channel_config=TelegramOnlyChannelConfig("6789423537"))
     report_event = ReportReadyEvent(report_id=report_id, tenant_id=tenant_id, cadence=Cadence.DAILY,
                                     title=f"Argus daily brief - {slug}", summary=reader_text[:200],
                                     markdown_body=reader_text, dashboard_url=f"https://ci.chowmes.com/{slug}")
     plan_route = router.route_report(report_event)
-    outcome = await commander.deliver(DeliveryRequest(tenant_id=tenant_id, report=report_event, plan=plan_route))
+    outcome = await commander.deliver(
+        DeliveryRequest(tenant_id=tenant_id, report=report_event, plan=plan_route),
+        quality_verdict=qr,
+    )
     res.delivered = outcome.delivered
     res.captured_channel = [c.channel.value for c in adapter.captured]
     res.deliveries = [{"channel": b.channel.value, "status": b.status.value, "id": b.id} for b in outcome.bot_deliveries]

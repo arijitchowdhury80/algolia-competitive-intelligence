@@ -159,6 +159,122 @@ def test_collection_runner_snapshots_even_on_fetch_error_status():
 
 
 # ---------------------------------------------------------------------------
+# Index/blog-family sources: article-level resolution
+# ---------------------------------------------------------------------------
+
+
+def make_blog_source(source_id: int, url: str) -> Source:
+    return Source(
+        id=source_id,
+        tenant_id=1,
+        competitor_id=1,
+        source_family="blog",
+        url=url,
+        normalized_url=url,
+        status=SourceStatus.ACTIVE,
+    )
+
+
+INDEX_HTML = (
+    '<html><body>'
+    '<a href="/blog/coveo-launches-agentic-search">Coveo launches agentic search</a>'
+    '</body></html>'
+)
+
+
+def test_blog_family_source_snapshots_index_but_cites_article_url_as_evidence():
+    source = make_blog_source(1, "https://coveo.com/blog")
+    context = make_context(url=source.url)
+    article_url = "https://coveo.com/blog/coveo-launches-agentic-search"
+    fetcher = FakeContentFetcher({
+        source.url: ContentFetchResult(status=FetchStatus.OK, text=INDEX_HTML),
+        article_url: ContentFetchResult(
+            status=FetchStatus.OK,
+            text="Acme Corp uses Coveo and saw a 40% increase in conversion after launch.",
+        ),
+    })
+    snapshots, facts, deltas, fetch_runs = FakeSnapshotRepository(), FakeFactRepository(), FakeDeltaRepository(), FakeFetchRunRepository()
+    runner = CollectionRunner(fetcher, snapshots, facts, deltas, fetch_runs)
+
+    result = runner.run(tenant_id=1, sources=[(source, context)])
+
+    assert result.snapshot_count == 1
+    assert snapshots.saved[0].source_id == source.id
+    assert snapshots.saved[0].text == INDEX_HTML  # index page itself still snapshotted
+    assert facts.saved, "expected a fact extracted from the article, not the index page"
+    assert all(f.evidence_url == article_url for f in facts.saved)
+    assert all(d.evidence_urls == [article_url] for d in deltas.saved if d.evidence_urls)
+
+
+def test_blog_family_source_bounds_total_fetches_to_index_plus_cap():
+    source = make_blog_source(1, "https://coveo.com/blog")
+    context = make_context(url=source.url)
+    many_links = "".join(
+        f'<a href="/blog/post-{i}">Post {i}</a>' for i in range(20)
+    )
+    index_html = f"<html><body>{many_links}</body></html>"
+
+    fetched: list[str] = []
+
+    class CountingFetcher:
+        def fetch_content(self, url: str) -> ContentFetchResult:
+            fetched.append(url)
+            if url == source.url:
+                return ContentFetchResult(status=FetchStatus.OK, text=index_html)
+            return ContentFetchResult(status=FetchStatus.OK, text=f"Widget Inc uses Coveo. ({url})")
+
+    snapshots, facts, deltas, fetch_runs = FakeSnapshotRepository(), FakeFactRepository(), FakeDeltaRepository(), FakeFetchRunRepository()
+    runner = CollectionRunner(CountingFetcher(), snapshots, facts, deltas, fetch_runs, article_fetch_cap=3)
+
+    runner.run(tenant_id=1, sources=[(source, context)])
+
+    assert len(fetched) == 1 + 3  # index + capped article fetches
+
+
+def test_blog_family_source_isolates_a_single_article_fetch_failure():
+    source = make_blog_source(1, "https://coveo.com/blog")
+    context = make_context(url=source.url)
+    good_url = "https://coveo.com/blog/good-post"
+    bad_url = "https://coveo.com/blog/bad-post"
+    index_html = (
+        f'<a href="{bad_url}">Bad post</a>'
+        f'<a href="{good_url}">Good post</a>'
+    )
+
+    fetcher = FakeContentFetcher({
+        source.url: ContentFetchResult(status=FetchStatus.OK, text=index_html),
+        bad_url: ContentFetchResult(status=FetchStatus.ERROR, error="timeout"),
+        good_url: ContentFetchResult(
+            status=FetchStatus.OK,
+            text="Acme Corp uses Coveo and saw a 40% increase in conversion after launch.",
+        ),
+    })
+    snapshots, facts, deltas, fetch_runs = FakeSnapshotRepository(), FakeFactRepository(), FakeDeltaRepository(), FakeFetchRunRepository()
+    runner = CollectionRunner(fetcher, snapshots, facts, deltas, fetch_runs)
+
+    result = runner.run(tenant_id=1, sources=[(source, context)])
+
+    assert result.status == "completed"
+    assert facts.saved and all(f.evidence_url == good_url for f in facts.saved)
+
+
+def test_non_blog_family_index_source_behavior_unchanged():
+    source = make_source(1, "https://coveo.com/customer-stories")
+    context = make_context(url=source.url)
+    fetcher = FakeContentFetcher({
+        source.url: ContentFetchResult(status=FetchStatus.OK, text="Acme Corp uses Coveo."),
+    })
+    snapshots, facts, deltas, fetch_runs = FakeSnapshotRepository(), FakeFactRepository(), FakeDeltaRepository(), FakeFetchRunRepository()
+    runner = CollectionRunner(fetcher, snapshots, facts, deltas, fetch_runs)
+
+    result = runner.run(tenant_id=1, sources=[(source, context)])
+
+    assert result.snapshot_count == 1
+    assert snapshots.saved[0].text == "Acme Corp uses Coveo."
+    assert "article_snapshots" not in snapshots.saved[0].metadata
+
+
+# ---------------------------------------------------------------------------
 # run_discovery_sweep
 # ---------------------------------------------------------------------------
 
