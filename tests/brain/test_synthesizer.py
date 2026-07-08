@@ -52,6 +52,38 @@ async def test_promotes_material_signal_with_evidence() -> None:
     assert len(result.signals) == 1
     assert result.signals[0].evidence_urls == ["https://rival.com/pricing"]
     assert result.signals[0].owner == "PMM"
+    assert result.signals[0].team_to_involve == "Marketing"
+
+
+async def test_signal_missing_team_to_involve_is_suppressed() -> None:
+    payload = signal_payload()
+    payload["team_to_involve"] = "Marketing Ops"  # not in the doctrine's valid set
+    model = FakeModel([{"signals": [payload]}])
+    result = await Synthesizer(model).synthesize(_input())
+    assert result.signals == []
+    assert any(e.event_type is BrainEventType.MATERIALITY_SUPPRESSED for e in result.events)
+
+
+async def test_tenant_own_position_omitted_when_no_evidence_supplied() -> None:
+    """evidence-or-silence extends to the tenant's own position: with no
+    own_position_facts, the data block must say so rather than inventing a
+    'where you are' claim, and must never state a company name we were not
+    given."""
+    model = FakeModel([{"signals": []}])
+    inp = _input()
+    data_block = Synthesizer._build_data_block(inp)
+    assert "do not fabricate" in data_block.lower()
+
+
+async def test_tenant_own_position_surfaced_when_evidence_supplied() -> None:
+    model = FakeModel([{"signals": []}])
+    inp = _input(
+        tenant_company_name="Acme Corp",
+        own_position_facts=["Acme holds 30% share in the mid-market segment per its own Q2 investor deck."],
+    )
+    data_block = Synthesizer._build_data_block(inp)
+    assert "Acme Corp" in data_block
+    assert "30% share" in data_block
 
 
 async def test_signal_without_url_is_rejected_not_promoted() -> None:

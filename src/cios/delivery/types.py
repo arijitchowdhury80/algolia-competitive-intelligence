@@ -56,6 +56,7 @@ class DeliveryAttemptStatus(str, Enum):
 class Cadence(str, Enum):
     DAILY = "daily"
     WEEKLY = "weekly"
+    MONTHLY = "monthly"
     AD_HOC = "ad_hoc"
     ALERT = "alert"
 

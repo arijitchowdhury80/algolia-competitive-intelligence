@@ -45,6 +45,7 @@ def signal_payload(
     evidence_urls: Optional[list[str]] = None,
     materiality_score: float = 0.8,
     owner: str = "PMM",
+    team_to_involve: str = "Marketing",
     recommended_action: str = "Brief the field on the pricing shift.",
     signal_type: str = "pricing change",
     headline: str = "Competitor cuts entry price 20%",
@@ -57,7 +58,34 @@ def signal_payload(
         "implication": "Expect price objections in Q3 deals.",
         "recommended_action": recommended_action,
         "owner": owner,
+        "team_to_involve": team_to_involve,
         "materiality_score": materiality_score,
         "confidence": 0.7,
+        "evidence_urls": evidence_urls if evidence_urls is not None else ["https://rival.com/pricing"],
+    }
+
+
+def weekly_pattern_payload(
+    *,
+    evidence_urls: Optional[list[str]] = None,
+    pattern: str = "Rival has cut list price twice this week across two tiers.",
+    materiality_score: float = 0.7,
+) -> dict[str, Any]:
+    return {
+        "pattern": pattern,
+        "materiality_score": materiality_score,
+        "evidence_urls": evidence_urls if evidence_urls is not None else ["https://rival.com/pricing"],
+    }
+
+
+def weekly_action_payload(
+    *,
+    evidence_urls: Optional[list[str]] = None,
+    action: str = "Brief the field on the sustained pricing pressure.",
+    team_to_involve: str = "Sales Enablement",
+) -> dict[str, Any]:
+    return {
+        "action": action,
+        "team_to_involve": team_to_involve,
         "evidence_urls": evidence_urls if evidence_urls is not None else ["https://rival.com/pricing"],
     }

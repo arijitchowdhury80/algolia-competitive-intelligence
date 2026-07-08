@@ -45,6 +45,10 @@ from .types import (
 logger = logging.getLogger("cios.brain.synthesizer")
 
 VALID_OWNERS = {"PMM", "Sales Enablement", "Product", "Executive Review"}
+# Doctrine-facing team label (CI-OS-product-doctrine-2026-07-08.md): who the
+# tenant's CMO should route this to. Distinct vocabulary from VALID_OWNERS
+# (the internal routing function) -- see Signal's docstring in types.py.
+VALID_TEAMS_TO_INVOLVE = {"Marketing", "Content", "Product", "Sales Enablement", "Executive"}
 DEFAULT_MATERIALITY_FLOOR = 0.35
 SYNTHESIS_TASK_PROFILE = "brain.synthesis"
 
@@ -189,14 +193,24 @@ class Synthesizer:
             score = 0.0
 
         owner = cand.get("owner") or ""
+        team_to_involve = cand.get("team_to_involve") or ""
         recommended_action = (cand.get("recommended_action") or "").strip()
-        # decision-layer-not-feed: no owner or no action => not decision-grade.
-        if owner not in VALID_OWNERS or not recommended_action:
+        # decision-layer-not-feed: no owner, no team, or no action => not
+        # decision-grade for the tenant's CMO reader.
+        if (
+            owner not in VALID_OWNERS
+            or team_to_involve not in VALID_TEAMS_TO_INVOLVE
+            or not recommended_action
+        ):
             events.append(
                 BrainEvent(
                     event_type=BrainEventType.MATERIALITY_SUPPRESSED,
-                    detail="signal lacked a valid owner or recommended action",
-                    payload={"owner": owner, "headline": cand.get("headline", "")[:200]},
+                    detail="signal lacked a valid owner, team_to_involve, or recommended action",
+                    payload={
+                        "owner": owner,
+                        "team_to_involve": team_to_involve,
+                        "headline": cand.get("headline", "")[:200],
+                    },
                 )
             )
             return None
@@ -228,6 +242,7 @@ class Synthesizer:
                 implication=cand.get("implication"),
                 recommended_action=recommended_action,
                 owner=owner,
+                team_to_involve=team_to_involve,
                 materiality_score=score,
                 confidence=confidence,
                 evidence_urls=urls,
@@ -263,6 +278,14 @@ class Synthesizer:
     def _build_data_block(inp: SynthesisInput) -> str:
         lines: list[str] = []
         lines.append(f"CLIENT COMPETITOR: {inp.competitor_name} (id={inp.competitor_id})")
+        if inp.tenant_company_name:
+            lines.append(f"TENANT COMPANY (the reader): {inp.tenant_company_name}")
+
+        lines.append("\nTENANT'S OWN POSITION (evidence-backed only; if empty, do not invent one):")
+        if inp.own_position_facts:
+            lines.extend(f"  - {fact}" for fact in inp.own_position_facts)
+        else:
+            lines.append("  (none supplied -- omit the 'where you are' framing, do not fabricate it)")
 
         urls = sorted(inp.evidence_urls())
         lines.append("\nEVIDENCE URLS (only cite from this list):")

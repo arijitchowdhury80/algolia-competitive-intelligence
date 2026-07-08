@@ -19,6 +19,7 @@ def _signal(evidence_urls=None, headline="Rival cuts entry price 20%") -> Signal
         why_it_matters="undercuts mid-market",
         recommended_action="Brief the field.",
         owner="PMM",
+        team_to_involve="Marketing",
         materiality_score=0.8,
         evidence_urls=evidence_urls if evidence_urls is not None else ["https://rival.com/pricing"],
     )
