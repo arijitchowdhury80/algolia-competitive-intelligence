@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import psycopg
 from psycopg.rows import dict_row
 
-from cios.dashboard.cockpit_renderer import render_brief_page, render_cockpit_html
+from cios.dashboard.cockpit_renderer import render_brief_page_from_state, render_cockpit_html
 from cios.db.repos.dashboard import PgReportHistoryRepository, PgSuppressedSignalsRepository
 from cios.dashboard.state_builder import DashboardStateBuilder
 
@@ -74,24 +74,20 @@ def main() -> int:
     (out_dir / "argus-dashboard.html").write_text(cockpit)
     (out_dir / "argus-dashboard.json").write_text(runner.to_json_str(state))
 
-    # brief.html from the newest rendered report's markdown for this tenant.
+    # brief.html is ALWAYS rebuilt from the same deduped DashboardState as
+    # the cockpit (P0 punch list 2026-07-08): capped ranked signal cards,
+    # living theses, plays. Never gated on reader_text availability -- the
+    # legacy blue template must never survive a re-render.
     row = conn.execute(
-        "SELECT metadata, title, report_date FROM reports WHERE tenant_id = %s "
+        "SELECT report_date FROM reports WHERE tenant_id = %s "
         "ORDER BY report_date DESC, id DESC LIMIT 1",
         (tenant_id,),
     ).fetchone()
-    brief_md = ""
-    if row:
-        meta = row["metadata"] or {}
-        if isinstance(meta, str):
-            meta = json.loads(meta or "{}")
-        brief_md = meta.get("reader_text") or meta.get("markdown") or ""
-    if brief_md:
-        brief_html = render_brief_page(brief_md, str(row["report_date"]))
-        (out_dir / "brief.html").write_text(brief_html)
-        print("brief.html written")
-    else:
-        print("no report markdown found; brief.html not written")
+    from datetime import date as _date
+    report_date = str(row["report_date"]) if row else _date.today().isoformat()
+    brief_html = render_brief_page_from_state(state, report_date)
+    (out_dir / "brief.html").write_text(brief_html)
+    print("brief.html written (state-first)")
 
     print(f"re-rendered cockpit {len(cockpit)} bytes from live DB state")
     return 0

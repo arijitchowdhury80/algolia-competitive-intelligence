@@ -1474,7 +1474,7 @@ async def main() -> int:
 
         delivered_result = next((r for r in results if r.slug == deliver_tenant), None)
         if delivered_result is not None and delivered_result.dashboard_state is not None:
-            from cios.dashboard.cockpit_renderer import render_brief_page, render_cockpit_html
+            from cios.dashboard.cockpit_renderer import render_brief_page_from_state, render_cockpit_html
 
             # Two artifacts, same run: the cockpit (Arijit's designed Luxury
             # Editorial surface, built from DashboardState) is the primary
@@ -1492,7 +1492,10 @@ async def main() -> int:
             cockpit_path.parent.mkdir(parents=True, exist_ok=True)
             cockpit_path.write_text(cockpit_out, encoding="utf-8")
 
-            brief_out = render_brief_page(delivered_result.reader_text or "", str(date.today()))
+            # State-first brief (P0 punch list 2026-07-08): composed from the
+            # DEDUPED DashboardState (capped ranked cards + living theses +
+            # plays), not the raw reader_text signal list.
+            brief_out = render_brief_page_from_state(delivered_result.dashboard_state, str(date.today()))
             brief_path = html_path.parent / "brief.html"
             brief_path.write_text(brief_out, encoding="utf-8")
 

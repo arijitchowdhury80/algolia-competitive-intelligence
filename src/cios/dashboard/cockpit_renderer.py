@@ -2414,8 +2414,16 @@ def render_brief_page(reader_text: str, report_date: str) -> str:
     else:
         body_html = _markdown_to_brief_html(reader_text)
 
-    date_label = _esc(report_date)
+    return _brief_page_shell(body_html, _esc(report_date))
 
+
+def _brief_page_shell(body_html: str, date_label: str) -> str:
+    """The shared Luxury Editorial brief page frame: same _STYLE tokens as
+    the cockpit, plus the brief-only CSS (narrative body, signal cards,
+    living theses, plays) and the back-navigation link to the cockpit
+    homepage (P0 punch list item 4, 2026-07-08). Both brief renderers --
+    reader_text markdown and state-first -- publish through this one shell
+    so the old blue template can never reach the public URL again."""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -2463,10 +2471,90 @@ def render_brief_page(reader_text: str, report_date: str) -> str:
     .brief-body strong {{ color: var(--ink); font-weight: 650; }}
     .brief-body a {{ color: var(--gold); text-decoration: underline; }}
     .brief-empty {{ color: var(--muted); font-style: italic; }}
+    .brief-backnav {{
+      display: inline-block;
+      margin-bottom: 18px;
+      font-family: var(--font-body);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      text-decoration: none;
+    }}
+    .brief-backnav:hover {{ text-decoration: underline; }}
+    .brief-section-kicker {{
+      font-family: var(--font-body);
+      font-size: 12px;
+      color: var(--muted);
+      margin: -6px 0 18px;
+    }}
+    .brief-cards {{ margin: 0 0 40px; }}
+    .signal-card {{
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--gold);
+      background: var(--paper);
+      padding: 18px 20px;
+      margin: 0 0 14px;
+    }}
+    .signal-card .card-eyebrow {{
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }}
+    .signal-card .card-headline {{
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--ink);
+      margin: 0 0 8px;
+    }}
+    .signal-card p {{ font-size: 14px; line-height: 1.6; margin: 0 0 8px; color: var(--ink); }}
+    .signal-card .card-action {{
+      font-weight: 650;
+      color: var(--ink);
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      margin-top: 10px;
+    }}
+    .merge-badge {{ color: var(--gold); font-weight: 650; white-space: nowrap; }}
+    .brief-theses {{
+      margin: 0 0 40px;
+      border-top: 2px solid var(--ink);
+      padding-top: 22px;
+    }}
+    .thesis-item {{
+      padding: 12px 0 14px;
+      border-bottom: 1px solid var(--line);
+    }}
+    .thesis-item .thesis-text {{
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 16px;
+      line-height: 1.55;
+      color: var(--ink-2, var(--ink));
+      margin: 0 0 6px;
+    }}
+    .thesis-item .thesis-meta {{
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: .04em;
+    }}
+    .brief-plays {{ margin: 0 0 40px; }}
+    .play-item {{ margin: 0 0 14px; }}
+    .play-item .play-title {{ font-weight: 650; color: var(--ink); font-size: 14px; }}
+    .play-item ul {{ margin: 6px 0 6px 18px; padding: 0; font-size: 14px; line-height: 1.6; }}
+    .play-item .play-meta {{ font-size: 12px; color: var(--muted); }}
   </style>
 </head>
 <body>
   <div class="brief-shell">
+    <a class="brief-backnav" href="./">&larr; Argus Cockpit</a>
     <div class="eyebrow">Argus &middot; Daily Competitive Brief &middot; {date_label}</div>
     <div class="brief-body">
       {body_html}
@@ -2475,3 +2563,87 @@ def render_brief_page(reader_text: str, report_date: str) -> str:
 </body>
 </html>
 """
+
+
+_URGENCY_LABELS = {"act_now": "Act now", "this_week": "This week", "this_month": "This month"}
+
+
+def render_brief_page_from_state(state, report_date: str) -> str:
+    """State-first brief page (P0 punch list, 2026-07-08): composes the
+    published brief.html directly from the DEDUPED DashboardState instead of
+    the raw reader_text signal list, so one story = one card.
+
+    Contract (punch item 2), enforced visually and in copy:
+      - Signal Card = what changed NOW plus the action. Read daily, act.
+        Capped at 5, materiality-ranked (state builder order), each carrying
+        a "seen in N sources" merge badge when near-duplicates were folded.
+      - Living Thesis = standing strategic hypothesis accumulating evidence.
+        Read weekly, orient. Distinct visual weight (serif italic, heavier
+        section rule) and never buried under an uncapped card list.
+
+    Also renders YOUR PLAYS from state.prescriptions. Always returns the
+    Luxury Editorial page (never the legacy blue template) and is honest on
+    empty state."""
+    parts: list[str] = []
+
+    cards = list(state.competitor_cards)[:5]
+    if cards:
+        parts.append('<section class="brief-cards">')
+        parts.append("<h2>Today&rsquo;s Signals</h2>")
+        parts.append('<p class="brief-section-kicker">What changed now, ranked by materiality. '
+                     "One story, one card. Read daily, act.</p>")
+        for c in cards:
+            badge = (f'<span class="merge-badge">seen in {c.duplicate_count} sources</span>'
+                     if c.duplicate_count > 1 else "")
+            body = []
+            if c.what_changed:
+                body.append(f"<p>{_esc(c.what_changed)}</p>")
+            if c.why_it_matters:
+                body.append(f"<p>{_esc(c.why_it_matters)}</p>")
+            if c.recommended_action:
+                body.append(f'<p class="card-action">Do: {_esc(c.recommended_action)}</p>')
+            parts.append(
+                '<article class="signal-card">'
+                f'<div class="card-eyebrow"><span>{_esc(c.competitor_name)}</span>{badge}</div>'
+                f'<h3 class="card-headline">{_esc(c.top_signal_headline or c.action_cue)}</h3>'
+                + "".join(body) + "</article>"
+            )
+        parts.append("</section>")
+    else:
+        parts.append('<p class="brief-empty">No material signals in this reporting window. '
+                     "Coverage details are on the cockpit.</p>")
+
+    if state.prescriptions:
+        parts.append('<section class="brief-plays">')
+        parts.append("<h2>Your Plays</h2>")
+        for p in state.prescriptions:
+            steps = "".join(f"<li>{_esc(s)}</li>" for s in p.play)
+            effect = f' &middot; {_esc(p.expected_effect)}' if p.expected_effect else ""
+            urgency = _URGENCY_LABELS.get(p.urgency_window, p.urgency_window)
+            parts.append(
+                '<div class="play-item">'
+                f'<div class="play-title">{_esc(p.title)}</div>'
+                f"<ul>{steps}</ul>"
+                f'<div class="play-meta">{_esc(p.team)} &middot; {_esc(urgency)}{effect}</div>'
+                "</div>"
+            )
+        parts.append("</section>")
+
+    if state.theses:
+        parts.append('<section class="brief-theses">')
+        parts.append("<h2>Living Theses</h2>")
+        parts.append('<p class="brief-section-kicker">Standing strategic hypotheses that '
+                     "accumulate evidence over time. Read weekly, orient.</p>")
+        for t in state.theses:
+            conf = f" &middot; confidence {t.confidence:.0%}" if t.confidence is not None else ""
+            who = f"{_esc(t.competitor_name)} &middot; " if t.competitor_name else ""
+            parts.append(
+                '<div class="thesis-item">'
+                f'<p class="thesis-text">{_esc(t.thesis)}</p>'
+                f'<div class="thesis-meta">{who}{_esc(t.status)} &middot; '
+                f"{t.supporting_delta_count} supporting / {t.contradicting_delta_count} contradicting"
+                f"{conf}</div></div>"
+            )
+        parts.append("</section>")
+
+    return _brief_page_shell("\n".join(parts), _esc(report_date))

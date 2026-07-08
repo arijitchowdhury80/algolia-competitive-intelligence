@@ -76,3 +76,112 @@ def test_empty_reader_text_is_honest_not_broken() -> None:
 def test_date_label_present() -> None:
     html_out = render_brief_page(SAMPLE_BRIEF_MD, "2026-07-08")
     assert "2026-07-08" in html_out
+
+
+# ---------------------------------------------------------------------------
+# render_brief_page_from_state: the state-first brief (P0 punch list
+# 2026-07-08). Cards come from the DEDUPED DashboardState (never the raw
+# reader_text signal list), are capped and ranked, theses render as a
+# visually distinct "Living Theses" section, and the page always carries a
+# back-navigation link to the cockpit.
+# ---------------------------------------------------------------------------
+
+from cios.dashboard.cockpit_renderer import render_brief_page_from_state
+from cios.dashboard.types import (
+    AttentionLevel,
+    CompetitorSignalCard,
+    DashboardState,
+    LivingThesis,
+    PrescriptionSummary,
+)
+
+
+def _card(i: int, *, name: str | None = None, dup: int = 1) -> CompetitorSignalCard:
+    return CompetitorSignalCard(
+        competitor_id=i,
+        competitor_name=name or f"Competitor {i}",
+        attention_score=90.0 - i,
+        attention_level=AttentionLevel.WATCH,
+        action_cue=f"Watch launch {i}",
+        top_signal_headline=f"Headline {i}",
+        what_changed=f"Change {i}",
+        why_it_matters=f"Matters {i}",
+        recommended_action=f"Act on {i}",
+        materiality_score=0.9 - i * 0.05,
+        duplicate_count=dup,
+    )
+
+
+def _state(cards: list, theses: list | None = None, plays: list | None = None) -> DashboardState:
+    return DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        competitor_cards=cards,
+        theses=theses or [],
+        prescriptions=plays or [],
+    )
+
+
+def test_from_state_caps_cards_at_five_ranked() -> None:
+    html_out = render_brief_page_from_state(_state([_card(i) for i in range(8)]), "2026-07-08")
+    for i in range(5):
+        assert f"Headline {i}" in html_out
+    for i in range(5, 8):
+        assert f"Headline {i}" not in html_out
+
+
+def test_from_state_shows_merge_badge_for_deduped_card() -> None:
+    html_out = render_brief_page_from_state(_state([_card(1, dup=3)]), "2026-07-08")
+    assert "3 sources" in html_out
+
+
+def test_from_state_card_vs_thesis_contract() -> None:
+    thesis = LivingThesis(
+        thesis_id=7, competitor_id=1, competitor_name="Constructor",
+        thesis="Constructor is repositioning as AI-native search.",
+        status="active", confidence=0.7,
+        supporting_delta_count=4, contradicting_delta_count=1,
+    )
+    html_out = render_brief_page_from_state(_state([_card(1)], theses=[thesis]), "2026-07-08")
+    # Distinct sections with distinct copy contracts.
+    assert 'class="brief-cards"' in html_out
+    assert 'class="brief-theses"' in html_out
+    assert "Read daily" in html_out          # card contract: now + action
+    assert "Read weekly" in html_out         # thesis contract: orient
+    assert "Constructor is repositioning as AI-native search." in html_out
+    assert "4 supporting" in html_out
+    assert "1 contradicting" in html_out
+
+
+def test_from_state_back_navigation_to_cockpit() -> None:
+    html_out = render_brief_page_from_state(_state([_card(1)]), "2026-07-08")
+    assert 'class="brief-backnav"' in html_out
+    assert 'href="./"' in html_out
+
+
+def test_from_state_plays_section() -> None:
+    play = PrescriptionSummary(
+        title="Publish comparison page", team="Marketing",
+        play=["Draft page", "Brief SEO"], urgency_window="act_now",
+        expected_effect="Blunt the launch narrative",
+    )
+    html_out = render_brief_page_from_state(_state([_card(1)], plays=[play]), "2026-07-08")
+    assert "Publish comparison page" in html_out
+    assert "act now" in html_out.lower()
+
+
+def test_from_state_empty_is_honest_never_blue_template() -> None:
+    html_out = render_brief_page_from_state(_state([]), "2026-07-08")
+    assert "--gold: #d4af37;" in html_out         # Luxury Editorial tokens
+    # Never the legacy blue template (its distinctive canvas/soft tokens).
+    assert "#f6f8fc" not in html_out
+    assert "#eef3ff" not in html_out
+    assert "Algolia Competitive Intelligence" not in html_out
+    assert "No material signals" in html_out
+    assert 'class="brief-backnav"' in html_out
+
+
+def test_from_state_uses_luxury_editorial_tokens() -> None:
+    html_out = render_brief_page_from_state(_state([_card(1)]), "2026-07-08")
+    assert '--font-display: "Playfair Display", Georgia, serif;' in html_out
+    assert "Playfair+Display" in html_out
