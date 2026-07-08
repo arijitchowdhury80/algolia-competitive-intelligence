@@ -31,6 +31,12 @@ Hard rules:
 4. Meaning before volume. Fewer, sharper signals beat a long list. If nothing
    is material, return an empty signals array. Do not manufacture signals.
 5. No em dashes in any text you write. Use plain sentences.
+6. Specifics must be quotable. Any company name, figure, date, product name,
+   or quoted phrase in a claim must appear in the supplied evidence text
+   itself, not inferred from it. Interpretive framing (what a change implies
+   or how it differs from something else) must be labeled as your read, e.g.
+   "this reads as ...", never stated as the source's own assertion. When in
+   doubt, drop the specific and keep the observation.
 """
 
 # The output contract. Kept separate and stable for prompt caching.

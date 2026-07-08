@@ -302,4 +302,7 @@ class Synthesizer:
             state = "ran" if (lane.ran and not lane.error) else f"FAILED ({lane.error or 'did not run'})"
             lines.append(f"  - {lane.lane}: {state}")
 
+        if inp.extra_instructions:
+            lines.append(f"\nADDITIONAL INSTRUCTIONS (mandatory):\n{inp.extra_instructions}")
+
         return "\n".join(lines)

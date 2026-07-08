@@ -92,6 +92,10 @@ class SynthesisInput(BaseModel):
     exec_signals: list[dict[str, Any]] = Field(default_factory=list)
     prior_theses: list[str] = Field(default_factory=list)
     coverage: CoverageReport = Field(default_factory=CoverageReport)
+    # Set on a quality-loop revision pass: the reviewer's required_fixes,
+    # framed as instructions the synthesizer must apply (cut or hedge the
+    # flagged specifics). Empty on a normal first pass.
+    extra_instructions: str = ""
 
     def evidence_urls(self) -> set[str]:
         """The set of source URLs the brain is allowed to cite. Anything the
