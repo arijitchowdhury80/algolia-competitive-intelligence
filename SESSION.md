@@ -1,6 +1,15 @@
 # CI-OS — SESSION.md
 
-Updated: 2026-07-08 ~15:30 ET (SESSION CLOSED — cockpit interactive, machine autonomous) (Claude Fable 5, caveman mode, overnight multi-agent build)
+Updated: 2026-07-08 ~16:25 ET (P0 PUNCH LIST DONE + LIVE-VERIFIED) (Claude Fable 5, caveman mode)
+
+## P0 punch list (Arijit 15:50 ET) — CLOSED, live-verified
+All 4 items shipped and verified by curling the live page (not code-level claims):
+1. Brief cards deduped + capped 5 + ranked — brief.html is now composed state-first from the deduped DashboardState (`render_brief_page_from_state`) in BOTH daily runner and rerender script. Live page showed 5 unique stories with "seen in N sources" merge badges (6/3/2/2).
+2. Card-vs-thesis contract enforced visually + in copy: signal cards ("What changed now... Read daily, act") vs Living Theses section ("Standing strategic hypotheses... Read weekly, orient"), distinct visual weight, theses reachable because cards capped.
+3. Luxury Editorial brief always published — blue template can never reach the URL again. TRUE root cause found: VPS `/root/.hermes/scripts/cios-daily.sh` NEVER copied brief.html to the public root, so the stale blue file survived every deploy. Patched (backup cios-daily.sh.bak-20260708) — now copies brief.html + v2/brief.html every run.
+4. Back-nav "← Argus Cockpit" link on brief page (shared `_brief_page_shell`).
+BONUS root-cause (class fix): dedup missed LLM paraphrases — `token_set_similarity` is now max(Jaccard, containment) and state_builder clusters on what_changed-only (why_it_matters diluted similarity to ~0.3). Regression tests added from the real live texts. 505 offline tests pass. Commits: 5053214 + follow-up dedup fix. Deployed to BOTH VPS copies (~/cios + /root/.hermes/apps/cios).
+NEXT: tomorrow 09:00 ET fully-automatic run — verify Telegram brief + cockpit + brief.html all refresh; Arijit's verdict drives the queue.
 
 ## Status
 V2 DEPLOYED LIVE (parallel run) on the VPS: real Telegram baseline brief delivered to Arijit's chat (quality passed), cron 09:15 UTC daily, real V0 history migrated. Arijit's product doctrine recorded (docs/planning/CI-OS-product-doctrine-2026-07-08.md) and briefs rebuilt to it. Previously: Brain live-certified (5/5 criteria) AND the 3-tenant Gate 7 rehearsal FULLY PASSED (~03:00 ET) after a 6-iteration fix loop. 18 commits, 259 offline + 16 integration tests. Delivery hard-gated on quality; evidence article-level; quotes verified verbatim; revise loop in. V0 untouched, cron intact.
