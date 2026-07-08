@@ -86,3 +86,33 @@ Hermes's first flagship use case. Open architecture question, explicitly
 assigned as a goal/loop to figure out: can Hermes be the center (gateway,
 channels, scheduling, agent runtime) with cios as the domain brain, or do
 they merge differently? Study assigned 2026-07-08.
+
+## Addendum 2 (same day): why Argus beats a Klue subscription — the dot-connector
+
+Arijit, verbatim intent: "If I'm a user and I got a Klue subscription, I got
+all the professional subscriptions — why the hell should I even look at
+Argus?" The answer, and therefore the product bar:
+
+1. **Argus connects the dots.** Not another feed. It does research over the
+   last 10 / 30 / 60 days (multi-horizon lookbacks) across the INDUSTRY, not
+   just the named competitors, and brings in what is interesting and helpful.
+2. **Argus researches the tenant's OWN brand too.** (Algolia today — plug
+   and play, just the example.) Own-brand perception/position research is a
+   first-class module beside competitor intel.
+3. **Contextualize → apply → prescribe.** Gather intel, contextualize it to
+   MY business, and hand me VERY specific strategies — marketing strategies,
+   ploys — grounded in what was gathered. Not observations. Prescriptions.
+4. **Offload collaterals from the intelligence.** A module that generates
+   marketing collateral from gathered intel: marketing dashboards and
+   marketing landing pages are the first two named. Intelligence that ends
+   in a produced asset, not a paragraph.
+5. Living doc discipline: Arijit adds product truth "as I'm remembering" —
+   capture every drop here, keep enhancing. This doc is append-only gold.
+
+## The dashboard experience bar (Addendum 2 continued)
+
+Arijit has not yet seen a screen he considers Argus. The old CI screen is his
+only reference. Dashboard must earn the "extraordinarily special" verdict:
+the three-position view, multi-horizon industry research, own-brand read,
+prescriptions with team routing, and generated collaterals — visible,
+premium, interactive. Design phase = frontend-builder flow against THIS list.
