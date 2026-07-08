@@ -1,19 +1,18 @@
 # CI-OS — SESSION.md
 
-Updated: 2026-07-08 ~00:55 ET (Claude Fable 5, caveman mode, overnight multi-agent build)
+Updated: 2026-07-08 ~03:40 ET (Claude Fable 5, caveman mode, overnight multi-agent build)
 
 ## Status
-V2 rebuild ~70% done in one night. Gates 1-6 code complete, committed, every subagent claim independently re-verified. 216 offline + 16 integration tests green. VPS Claude blocker CLEARED (live call verified). Live brain certification agent running at persist time.
+SYSTEM PROVEN END-TO-END. Brain live-certified (5/5 criteria) AND the 3-tenant Gate 7 rehearsal FULLY PASSED (~03:00 ET) after a 6-iteration fix loop. 18 commits, 259 offline + 16 integration tests. Delivery hard-gated on quality; evidence article-level; quotes verified verbatim; revise loop in. V0 untouched, cron intact.
 
 ## Resume action (do first, in order)
-1. Check whether `gate4-live-acceptance` agent delivered its verdict (5 hard criteria; harness at `scripts/gate4_live_acceptance.py` if it got that far). If passed → mark brain done. If failed → fix per its report, honestly.
-2. Eyeball the 09:00 ET daily brief in Telegram (chat 6789423537) — V0 hotfix live proof. Report quality.
-3. Build the Gate 5 dashboard via the frontend-builder skill flow (Luxury Editorial direction per goal-spec).
-4. Gate 7: three-tenant E2E rehearsal (Algolia/Spryker/Amplitude, tenant-bleed, FN-audit green, Argus voice check).
-5. V0 cutover ONLY after parity proof AND Arijit's explicit yes (Mandate Boundary).
+1. Arijit eyeballs the 09:00 ET Telegram brief (chat 6789423537) — V0 hotfix live proof. Report quality.
+2. Show Arijit the dashboard preview: python3 scripts/render_dashboard_preview.py docs/planning/gate7-rehearsal-runs/dashboard-state.v2.1.daily.json (renderer DONE, 1037df6; history/suppressed panels = flagged data gaps).
+3. Run the V0 sqlite migration against the REAL ci.sqlite on the VPS (3 duplicate copies to reconcile).
+4. V0 cutover ONLY after Arijit's explicit yes (Mandate Boundary). Rehearsal harness rerun: shim on :8663 + docker Postgres + schema/seed + cios_app password (see memory).
 
 ## Where we stopped (exact)
-All Gate 1-6 modules committed through `e09e8c6` (brain) + `83a516b` (db). Persist ran while `gate4-live-acceptance` (sonnet) was still executing: fetch real competitor pages → collect.extract → live Claude synthesis → 5-criteria certification. Its result had NOT arrived yet. Nothing else in flight.
+Gate 7 rehearsal FULL PASS committed (`2bb0673`); persist ran right after. Nothing in flight. Report: docs/planning/gate7-rehearsal-runs/2026-07-08-run.md (bottom line now computed, not hardcoded).
 
 ## Decisions locked (2026-07-07/08)
 - All prior locks (multi-tenant day 1; tiered models; telegram→email→dashboard; brain-before-breadth; V0 lives until parity cutover).
@@ -36,14 +35,14 @@ All Gate 1-6 modules committed through `e09e8c6` (brain) + `83a516b` (db). Persi
 - Vault: `Projects/CI-OS/index.md` + `tasks.md` + `log.md`. Memory: `ci-os-v2-build-2026-07-08`.
 
 ## What has NOT been done
-- Brain is NOT live-certified yet (unit tests only until the cert agent reports). Do not claim the brain works.
-- V0 hotfix NOT live-verified (9AM brief unseen).
-- Migration NOT run against real ci.sqlite.
-- Dashboard, Gate 7, cutover: not started.
-- V0 prod untouched beyond the 2026-07-07 hotfix; cron intact.
+- V0 hotfix NOT live-verified (9AM brief unseen) — the production system's proof is still pending.
+- Migration NOT run against real ci.sqlite (synthetic fixture only).
+- Dashboard renderer DONE (1037df6); report-history + suppressed-signals panels omitted pending truthful data sources.
+- Cutover: not proposed; V0 prod untouched beyond the 2026-07-07 hotfix; cron intact.
+- Exec-speech lane not exercised in rehearsal (module built + unit-tested only); coverage honestly marked incomplete in runs.
 
 ## Files written this session
-- CI-OS repo: 11 commits `349f25e..e09e8c6` + `83a516b` (src/cios/* + tests/* + deploy/* + pyproject/pytest.ini + .gitignore).
+- CI-OS repo: 19 commits `349f25e..1037df6` (src/cios/* + tests/* + deploy/* + pyproject/pytest.ini + .gitignore).
 - VPS: `~/.cios-anthropic.key` (chowmesadmin), `ANTHROPIC_API_KEY` line in `/root/.hermes/.env`.
 - Vault: `Projects/CI-OS/index.md` (compiled truth updated), `log.md` + `tasks.md` (new), `wiki/log.md` + `hot.md`, `Projects/AI-OS/My-Projects.md`.
 - Memory: `ci-os-v2-build-2026-07-08`, `build-status-report-format`, `haiku-eval-agents-unreliable`, `session_pointer`, `MEMORY.md`.

@@ -1,0 +1,48 @@
+# Tenant/competitor/source plan for scripts/daily_production_run.py.
+#
+# Same shape and content as scripts/gate7_e2e_rehearsal.py's TENANT_PLAN dict
+# (moved here so the production runner loads it instead of hardcoding it).
+# <= 6 sources per tenant (3 each). Blogs chosen for real reachability and
+# content, matching the Gate 7 rehearsal plan.
+
+algolia:
+  - name: Elastic
+    domain: elastic.co
+    url: https://www.elastic.co/blog
+    family: blog
+  - name: Constructor
+    domain: constructor.com
+    url: https://www.constructor.com/blog
+    family: blog
+  - name: Coveo
+    domain: coveo.com
+    url: https://www.coveo.com/blog
+    family: blog
+
+spryker:
+  - name: commercetools
+    domain: commercetools.com
+    url: https://commercetools.com/blog
+    family: blog
+  - name: BigCommerce
+    domain: bigcommerce.com
+    url: https://www.bigcommerce.com/blog/
+    family: blog
+  - name: VTEX
+    domain: vtex.com
+    url: https://vtex.com/en-us/blog/
+    family: blog
+
+amplitude:
+  - name: Mixpanel
+    domain: mixpanel.com
+    url: https://mixpanel.com/blog/
+    family: blog
+  - name: PostHog
+    domain: posthog.com
+    url: https://posthog.com/blog
+    family: blog
+  - name: Heap
+    domain: heap.io
+    url: https://www.heap.io/blog
+    family: blog
