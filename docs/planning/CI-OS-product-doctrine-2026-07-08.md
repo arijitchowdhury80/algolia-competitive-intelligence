@@ -116,3 +116,22 @@ only reference. Dashboard must earn the "extraordinarily special" verdict:
 the three-position view, multi-horizon industry research, own-brand read,
 prescriptions with team routing, and generated collaterals — visible,
 premium, interactive. Design phase = frontend-builder flow against THIS list.
+
+## Addendum 3 (same day): multi-user, multi-channel, content engine, company-swap
+
+1. **Multi-user, multi-channel.** Multiple people get Argus. Channels: Telegram,
+   email, Slack, iMessage push — and the dashboard ITSELF is a channel that
+   auto-updates with the daily focus and the weekly synthesis. Per-user,
+   per-channel subscription is a product primitive, not a config hack.
+2. **Content engine.** Argus recommends content: based on competitor moves,
+   on what content OTHERS are putting out that is moving the market or
+   sentiment, and on what the tenant should publish in response. (Schema
+   already reserves content_recommendations + weekly_content_plan.)
+3. **Company-swap modularity (the product test).** Algolia is just the test
+   bed. The mechanisms, infrastructure, decision logic, execution rigor,
+   interactivity, frequency, methodology, structure ALL stay constant; only
+   the primary company swaps — and the competitor list + source list update
+   as a consequence. Specifically: the SOURCE GATHERING module must be a
+   kick-offable pipeline that re-runs whenever the central company changes
+   (company in → competitors researched → sources discovered/validated/seeded).
+   This is the seller-side pre-build from rule 2, made executable.
