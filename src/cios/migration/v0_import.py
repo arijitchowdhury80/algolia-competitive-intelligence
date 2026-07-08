@@ -5,35 +5,93 @@ Per docs/planning/CI-OS-gate0-implementation-plan.md §1 (V0 inventory) and §3
 history"). V0 keeps running untouched until the Gate 6 cutover; this script
 only reads it.
 
+Column names below are verified against the REAL production `ci.sqlite`
+(copy pulled 2026-07-08, 43 sources / 351 snapshots / 13 semantic_facts / 86
+semantic_deltas / 351 source_health_events / 12 report_index / 12
+bot_deliveries / 0 signals / 0 action_items / 12 synthesis_runs). V0 has no
+`source_id` foreign keys on snapshots, semantic_facts, semantic_deltas, or
+source_health_events -- every one of those tables carries a `source_url`
+column instead, and joins back to `sources` by URL.
+
 Mapping table (V0 table -> V2 table, key decisions):
 
     V0 table              V2 table(s)              Key decision
     --------------------  -----------------------  ------------------------------------------------
     sources               competitors + sources    One `competitors` row derived per distinct V0
                                                      `competitor` value; `sources` rows link to it.
-                                                     `source_family` falls back to "unknown" if V0
-                                                     never recorded a type.
-    snapshots              source_snapshots         `fetch_run_id` left NULL -- V0 has no fetch-run
-                                                     concept, and the column is nullable in V2.
-                                                     V0 row id + a content preview are kept in
-                                                     `metadata` for provenance and dedup.
-    semantic_facts         semantic_facts           V2 requires non-empty `evidence_ids`
-                                                     (semantic_fact_needs_evidence); V0 rows with no
-                                                     evidence array get a synthetic
-                                                     "v0:semantic_facts:<id>" evidence id so the
-                                                     CHECK constraint holds without inventing claims.
-    semantic_deltas        semantic_deltas          Same evidence fallback. `quality_status` is
-                                                     forced back to 'draft' unless the V0 row already
-                                                     carries non-empty evidence, to respect
-                                                     semantic_delta_published_needs_evidence.
-    source_health_events   source_health_events     `event_type` is normalized to the V2 CHECK enum;
-                                                     unrecognized V0 event types map to 'fetch_error'
-                                                     (fail-safe, never silently dropped).
-    report_index            reports                 `cadence` defaults to 'daily' when V0 has no
-                                                     cadence column (V0 only ever produced daily
-                                                     briefs per the Gate 0 inventory).
-    bot_deliveries          bot_deliveries           `recipient` is redacted (last 4 chars kept) to
-                                                     match the `recipient_redacted` column contract.
+                                                     `source_family` <- `source_type`. V0 has no
+                                                     `name` column; title is derived from
+                                                     competitor + source_type.
+    snapshots              source_snapshots         Joined to `sources` by normalize_url(source_url)
+                                                     (raw-url fallback for edge cases). Rows whose
+                                                     source_url matches no known source are skipped
+                                                     and counted, never crash. `fetch_run_id` left
+                                                     NULL -- V0 has no fetch-run concept.
+    semantic_facts         semantic_facts           competitor_id resolved directly from the V0
+                                                     `competitor` column (present on this table in
+                                                     the real schema -- no join through sources
+                                                     needed for that FK). `statement` is derived
+                                                     from `evidence_text`, falling back to
+                                                     `fact_json`'s `strategic_claim`/`title` when
+                                                     evidence_text is blank. V2 requires non-empty
+                                                     `evidence_ids` (semantic_fact_needs_evidence);
+                                                     `evidence_url` becomes the sole evidence id, or
+                                                     a synthetic "v0:semantic_facts:<id>" id when
+                                                     absent, so the CHECK constraint holds without
+                                                     inventing claims. Still validated against the
+                                                     source_url map (§ source_url is the join key)
+                                                     and skipped if the source_url is unknown.
+    semantic_deltas         semantic_deltas         competitor_id likewise resolved directly from
+                                                     the V0 `competitor` column. `delta_summary` ->
+                                                     `what_changed`, `materiality_reason` ->
+                                                     `why_it_matters`, `algolia_implication` ->
+                                                     `implication`. `evidence_urls` (a JSON text
+                                                     list in V0) is parsed defensively into
+                                                     `evidence_ids`; parse failures or an empty list
+                                                     fall back to a synthetic evidence id. V2's
+                                                     `semantic_deltas` table has no owner/metadata
+                                                     column, so `action_owner` (when present) is
+                                                     folded into `recommended_action` as an
+                                                     "[Owner: ...]" prefix rather than silently
+                                                     dropped. `quality_status` is still forced back
+                                                     to 'draft' unless the row carries evidence, to
+                                                     respect semantic_delta_published_needs_evidence.
+    source_health_events   source_health_events     Joined to `sources` by source_url (same as
+                                                     snapshots); `status` is normalized to the V2
+                                                     CHECK enum via `event_type` -- unrecognized V0
+                                                     statuses map to 'fetch_error' (fail-safe, never
+                                                     silently dropped) with the original value kept
+                                                     in `metadata.v0_event_type`. `failure_reason` ->
+                                                     `detail`; failure_streak / last_success_at /
+                                                     last_failure_at / collector / duration_ms /
+                                                     quality_score / recommended_collector /
+                                                     replacement_recommendation all preserved in
+                                                     `metadata` (V2 has no column for them).
+    report_index            reports                 `date_start` -> `report_date`. `status`
+                                                     'generated' -> 'rendered' (V2 CHECK only allows
+                                                     draft/rendered/delivered); unrecognized statuses
+                                                     fall back to 'draft'. V0 has no `title` column;
+                                                     one is synthesized from cadence + report_date.
+                                                     `pdf_path`, `date_end`, `quality_score`,
+                                                     `top_signal_ids`, `top_action_owners`,
+                                                     `source_health_summary` all preserved in
+                                                     `metadata` (no matching V2 columns). The V0 id
+                                                     -> V2 id mapping built here is reused by
+                                                     bot_deliveries to resolve `report_id`.
+    bot_deliveries          bot_deliveries           `report_id` resolved via the report_index id
+                                                     map (nullable in V2 -- unresolved links keep
+                                                     `report_id = NULL` rather than skipping the
+                                                     delivery). `recipient` is redacted (last 4
+                                                     chars kept) to match the `recipient_redacted`
+                                                     column contract. V0 status strings (e.g.
+                                                     "queued_for_telegram") are normalized to the V2
+                                                     CHECK enum by keyword + `delivered_at`
+                                                     presence, never guessed blindly to 'sent'.
+                                                     `artifact_paths` / `delivery_metadata` have no
+                                                     home in V2's bot_deliveries schema (no metadata
+                                                     column) and are intentionally dropped --
+                                                     markdown_path/html_path/dashboard_url already
+                                                     cover the addressable artifacts.
 
     NOT migrated: `synthesis_runs` (no V2 equivalent table -- a synthesis run
     is process telemetry, not evidence, and Gate 4's synthesizer will emit its
@@ -55,13 +113,17 @@ Design:
   * Dry-run mode (`dry_run=True`) reads and maps everything but issues no
     writes; it reports row counts per table so an operator can sanity-check
     before committing.
+  * Rows referencing an unknown `source_url` are never dropped silently --
+    they are counted in `ImportReport.skipped_counts` and itemized (with
+    reason) in `ImportReport.skip_reasons`.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -71,9 +133,7 @@ from typing import Any, Callable, Iterable, Optional, Protocol
 class V0SchemaError(RuntimeError):
     """A V0 sqlite table is missing a column this migration needs.
 
-    Raised instead of guessing -- the exact V0 column names are unknown until
-    this runs against the real VPS `ci.sqlite` (3 duplicate copies to
-    reconcile, per Gate 0 §1), so silent fallback would risk mis-mapping
+    Raised instead of guessing -- silent fallback would risk mis-mapping
     evidence.
     """
 
@@ -86,35 +146,37 @@ class V0SchemaError(RuntimeError):
 REQUIRED_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
     "sources": {
         "id": ("id",),
-        "name": ("name", "source_name", "title"),
+        # Real prod ci.sqlite (2026-07-08) has NO name column at all; name is
+        # derived downstream from competitor + source_type when absent.
         "url": ("url", "source_url"),
         "competitor": ("competitor", "competitor_name"),
     },
     "snapshots": {
         "id": ("id",),
-        "source_id": ("source_id",),
+        # Real prod schema keys snapshots by source_url, not source_id.
+        "source_url": ("source_url", "url"),
         "fetched_at": ("fetched_at", "captured_at", "created_at"),
-        "content_hash": ("content_hash", "hash"),
     },
     "semantic_facts": {
         "id": ("id",),
-        "source_id": ("source_id", "competitor_source_id"),
-        "statement": ("statement", "fact", "text"),
+        "source_url": ("source_url",),
+        "competitor": ("competitor",),
     },
     "semantic_deltas": {
         "id": ("id",),
-        "source_id": ("source_id", "competitor_source_id"),
-        "what_changed": ("what_changed", "summary", "delta"),
+        "source_url": ("source_url",),
+        "competitor": ("competitor",),
+        "what_changed": ("delta_summary", "what_changed", "summary"),
     },
     "source_health_events": {
         "id": ("id",),
-        "source_id": ("source_id",),
-        "event_type": ("event_type", "status", "type"),
+        "source_url": ("source_url",),
+        "event_type": ("status", "event_type", "type"),
         "created_at": ("created_at", "occurred_at", "timestamp"),
     },
     "report_index": {
         "id": ("id",),
-        "report_date": ("report_date", "date"),
+        "report_date": ("date_start", "report_date", "date"),
     },
     "bot_deliveries": {
         "id": ("id",),
@@ -126,37 +188,57 @@ REQUIRED_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
 # optional columns read opportunistically -- absence never raises.
 OPTIONAL_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
     "sources": {
+        "name": ("name", "source_name", "title"),
         "source_family": ("type", "source_type", "source_family"),
-        "active": ("active", "is_active"),
+        "active": ("active", "is_active", "enabled"),
         "first_seen_at": ("first_seen_at", "created_at"),
-        "last_seen_at": ("last_seen_at",),
-        "last_checked_at": ("last_checked_at",),
+        "last_seen_at": ("last_seen_at", "updated_at"),
+        "last_checked_at": ("last_checked_at", "updated_at"),
     },
     "snapshots": {
-        "content": ("content", "text", "body"),
+        "content": ("content", "content_text", "text", "body"),
         "title": ("title",),
+        "content_hash": ("content_hash", "hash"),
+        "status": ("status",),
+        "http_status": ("http_status",),
+        "error": ("error",),
+        "collector": ("collector",),
+        "duration_ms": ("duration_ms",),
+        "quality_score": ("quality_score",),
     },
     "semantic_facts": {
         "fact_type": ("fact_type", "type"),
+        "fact_json": ("fact_json",),
+        "evidence_text": ("evidence_text",),
+        "evidence_url": ("evidence_url",),
         "confidence": ("confidence",),
-        "first_seen_at": ("first_seen_at", "created_at"),
-        "last_seen_at": ("last_seen_at",),
+        "first_seen_at": ("detected_date", "first_seen_at", "created_at"),
+        "last_seen_at": ("created_at", "last_seen_at"),
         "evidence_ids": ("evidence_ids",),
     },
     "semantic_deltas": {
         "delta_type": ("delta_type", "type"),
         "materiality_score": ("materiality_score", "materiality"),
-        "why_it_matters": ("why_it_matters",),
-        "implication": ("implication",),
+        "why_it_matters": ("materiality_reason", "why_it_matters"),
+        "implication": ("algolia_implication", "implication"),
         "recommended_action": ("recommended_action",),
+        "action_owner": ("action_owner", "owner"),
         "confidence": ("confidence",),
         "created_at": ("created_at",),
         "quality_status": ("quality_status", "status"),
-        "evidence_ids": ("evidence_ids",),
+        "evidence_urls": ("evidence_urls", "evidence_ids"),
     },
     "source_health_events": {
         "http_status": ("http_status",),
-        "detail": ("detail", "message", "error"),
+        "detail": ("failure_reason", "detail", "message", "error"),
+        "failure_streak": ("failure_streak",),
+        "last_success_at": ("last_success_at",),
+        "last_failure_at": ("last_failure_at",),
+        "collector": ("collector",),
+        "duration_ms": ("duration_ms",),
+        "quality_score": ("quality_score",),
+        "recommended_collector": ("recommended_collector",),
+        "replacement_recommendation": ("replacement_recommendation",),
     },
     "report_index": {
         "cadence": ("cadence",),
@@ -164,14 +246,25 @@ OPTIONAL_COLUMNS: dict[str, dict[str, tuple[str, ...]]] = {
         "status": ("status",),
         "markdown_path": ("markdown_path", "path"),
         "html_path": ("html_path",),
+        "pdf_path": ("pdf_path",),
+        "date_end": ("date_end",),
+        "quality_score": ("quality_score",),
+        "top_signal_ids": ("top_signal_ids",),
+        "top_action_owners": ("top_action_owners",),
+        "source_health_summary": ("source_health_summary",),
         "summary": ("summary",),
     },
     "bot_deliveries": {
+        "report_id": ("report_id",),
         "cadence": ("cadence",),
         "bot_profile": ("bot_profile", "profile"),
         "recipient": ("recipient", "chat_id", "recipient_id"),
         "status": ("status",),
         "error": ("error",),
+        "markdown_path": ("markdown_path",),
+        "html_path": ("html_path",),
+        "dashboard_url": ("dashboard_url",),
+        "delivered_at": ("delivered_at", "sent_at"),
     },
 }
 
@@ -184,7 +277,10 @@ _ALLOWED_HEALTH_EVENT_TYPES = {
     "recovered",
     "retired",
 }
-_ALLOWED_DELIVERY_STATUSES = {"queued", "sending", "sent", "delivered", "failed"}
+_ALLOWED_DELIVERY_STATUSES = {"queued", "sending", "sent", "delivered", "failed", "blocked"}
+_ALLOWED_REPORT_STATUSES = {"draft", "rendered", "delivered"}
+_ALLOWED_REPORT_CADENCES = {"daily", "weekly", "ad_hoc"}
+_ALLOWED_DELIVERY_CADENCES = {"daily", "weekly", "ad_hoc", "alert"}
 
 
 def introspect_columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -238,7 +334,7 @@ def read_v0_rows(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
         raise V0SchemaError(f"V0 table '{table}' does not exist in this sqlite file.")
     column_map = resolve_column_map(table, available)
 
-    select_cols = ", ".join(column_map.values())
+    select_cols = ", ".join(f'"{col}"' for col in column_map.values())
     cursor = conn.execute(f"SELECT {select_cols} FROM {table}")
     logical_names = list(column_map.keys())
     rows = []
@@ -264,6 +360,39 @@ def _is_truthy(value: Any) -> bool:
     return value in (1, True, "1", "true", "True")
 
 
+def _parse_json_list(raw: Any) -> list[str]:
+    """Defensively parse a V0 JSON-text list column (e.g. evidence_urls).
+
+    Never raises: malformed/blank/non-list JSON all collapse to an empty
+    list, letting the caller apply its own evidence fallback.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(item) for item in raw]
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed]
+    return []
+
+
+def _parse_json_object(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def map_competitor(row: dict[str, Any], tenant_id: int) -> dict[str, Any]:
     """sources.competitor -> a competitors row (one per distinct name)."""
     return {
@@ -282,7 +411,8 @@ def map_source(row: dict[str, Any], tenant_id: int, competitor_id: int) -> dict[
         "source_family": row.get("source_family") or "unknown",
         "url": row["url"],
         "normalized_url": normalize_url(row["url"]),
-        "title": row.get("name"),
+        # Prod V0 sources have no name column: derive a stable human title.
+        "title": row.get("name") or f"{row.get('competitor', '')} {row.get('source_family') or 'source'}".strip(),
         "status": "active" if _is_truthy(row.get("active", 1)) else "retired",
         "first_seen_at": row.get("first_seen_at"),
         "last_seen_at": row.get("last_seen_at"),
@@ -293,6 +423,13 @@ def map_source(row: dict[str, Any], tenant_id: int, competitor_id: int) -> dict[
 
 def map_snapshot(row: dict[str, Any], tenant_id: int, source_id: int) -> dict[str, Any]:
     content = row.get("content") or ""
+    metadata = {
+        "v0_snapshot_id": row["id"],
+        "content_preview": content[:500],
+    }
+    for key in ("status", "http_status", "error", "collector", "duration_ms", "quality_score"):
+        if row.get(key) is not None:
+            metadata[key] = row[key]
     return {
         "tenant_id": tenant_id,
         "source_id": source_id,
@@ -302,22 +439,34 @@ def map_snapshot(row: dict[str, Any], tenant_id: int, source_id: int) -> dict[st
         "title": row.get("title"),
         "text_path": None,
         "raw_path": None,
-        "metadata": {
-            "v0_snapshot_id": row["id"],
-            "content_preview": content[:500],
-        },
+        "metadata": metadata,
     }
 
 
 def map_semantic_fact(
     row: dict[str, Any], tenant_id: int, competitor_id: int
 ) -> dict[str, Any]:
-    evidence_ids = row.get("evidence_ids") or [f"v0:semantic_facts:{row['id']}"]
+    statement = (row.get("evidence_text") or "").strip()
+    if not statement:
+        fact_json = _parse_json_object(row.get("fact_json"))
+        for key in ("strategic_claim", "title", "topic"):
+            candidate = fact_json.get(key)
+            if candidate:
+                statement = str(candidate)
+                break
+    if not statement:
+        statement = f"[V0 semantic_facts id={row['id']}: no statement text recorded]"
+
+    evidence_ids = row.get("evidence_ids")
+    if not evidence_ids:
+        evidence_url = row.get("evidence_url")
+        evidence_ids = [evidence_url] if evidence_url else [f"v0:semantic_facts:{row['id']}"]
+
     return {
         "tenant_id": tenant_id,
         "competitor_id": competitor_id,
         "fact_type": row.get("fact_type"),
-        "statement": row["statement"],
+        "statement": statement,
         "evidence_ids": evidence_ids,
         "confidence": row.get("confidence"),
         "first_seen_at": row.get("first_seen_at"),
@@ -328,7 +477,11 @@ def map_semantic_fact(
 def map_semantic_delta(
     row: dict[str, Any], tenant_id: int, competitor_id: int
 ) -> dict[str, Any]:
-    evidence_ids = row.get("evidence_ids") or []
+    evidence_ids = row.get("evidence_urls")
+    if isinstance(evidence_ids, str):
+        evidence_ids = _parse_json_list(evidence_ids)
+    evidence_ids = list(evidence_ids or [])
+
     requested_status = row.get("quality_status") or "draft"
     # semantic_delta_published_needs_evidence: never carry a 'published'
     # status forward without evidence -- fall back to 'draft' instead of
@@ -336,6 +489,15 @@ def map_semantic_delta(
     quality_status = requested_status if evidence_ids or requested_status != "published" else "draft"
     if not evidence_ids:
         evidence_ids = [f"v0:semantic_deltas:{row['id']}"]
+
+    recommended_action = row.get("recommended_action")
+    action_owner = row.get("action_owner")
+    if action_owner:
+        # V2 semantic_deltas has no owner/metadata column -- fold the owner
+        # into recommended_action rather than silently dropping it.
+        prefix = f"[Owner: {action_owner}] "
+        recommended_action = prefix + (recommended_action or "")
+
     return {
         "tenant_id": tenant_id,
         "competitor_id": competitor_id,
@@ -344,7 +506,7 @@ def map_semantic_delta(
         "what_changed": row["what_changed"],
         "why_it_matters": row.get("why_it_matters"),
         "implication": row.get("implication"),
-        "recommended_action": row.get("recommended_action"),
+        "recommended_action": recommended_action,
         "evidence_ids": evidence_ids,
         "quality_status": quality_status,
         "confidence": row.get("confidence"),
@@ -363,9 +525,21 @@ def map_source_health_event(
         event_type = "fetch_error"
     else:
         original = None
-    metadata = {"v0_event_id": row["id"]}
+    metadata: dict[str, Any] = {"v0_event_id": row["id"]}
     if original is not None:
         metadata["v0_event_type"] = original
+    for key in (
+        "failure_streak",
+        "last_success_at",
+        "last_failure_at",
+        "collector",
+        "duration_ms",
+        "quality_score",
+        "recommended_collector",
+        "replacement_recommendation",
+    ):
+        if row.get(key) is not None:
+            metadata[key] = row[key]
     return {
         "tenant_id": tenant_id,
         "source_id": source_id,
@@ -379,38 +553,84 @@ def map_source_health_event(
 
 
 def map_report(row: dict[str, Any], tenant_id: int) -> dict[str, Any]:
+    cadence = row.get("cadence") or "daily"
+    if cadence not in _ALLOWED_REPORT_CADENCES:
+        cadence = "ad_hoc"
+
+    status = row.get("status") or "draft"
+    if status == "generated":
+        status = "rendered"
+    elif status not in _ALLOWED_REPORT_STATUSES:
+        status = "draft"
+
+    title = row.get("title") or f"{cadence.title()} report {row['report_date']}"
+
+    metadata: dict[str, Any] = {"v0_report_id": row["id"]}
+    for key in (
+        "pdf_path",
+        "date_end",
+        "quality_score",
+        "top_signal_ids",
+        "top_action_owners",
+        "source_health_summary",
+    ):
+        if row.get(key) is not None:
+            metadata[key] = row[key]
+
     return {
         "tenant_id": tenant_id,
-        "cadence": row.get("cadence") or "daily",
+        "cadence": cadence,
         "report_date": row["report_date"],
-        "title": row.get("title"),
-        "status": row.get("status") or "delivered",
+        "title": title,
+        "status": status,
         "markdown_path": row.get("markdown_path"),
         "html_path": row.get("html_path"),
         "json_path": None,
         "summary": row.get("summary"),
-        "metadata": {"v0_report_id": row["id"]},
+        "metadata": metadata,
     }
 
 
-def map_bot_delivery(row: dict[str, Any], tenant_id: int) -> dict[str, Any]:
+def _normalize_delivery_status(raw_status: Optional[str], delivered_at: Optional[str]) -> str:
+    status = (raw_status or "").lower()
+    if "fail" in status or "error" in status:
+        return "failed"
+    if "block" in status:
+        return "blocked"
+    if "delivered" in status:
+        return "delivered"
+    if "sending" in status:
+        return "sending"
+    if "queued" in status:
+        # queued_for_* style V0 statuses: trust an explicit delivered_at over
+        # the label, since the queue name doesn't reflect final delivery.
+        return "delivered" if delivered_at else "queued"
+    if "sent" in status:
+        return "sent"
+    if status in _ALLOWED_DELIVERY_STATUSES:
+        return status
+    return "delivered" if delivered_at else "sent"
+
+
+def map_bot_delivery(row: dict[str, Any], tenant_id: int, report_id: Optional[int]) -> dict[str, Any]:
     recipient = row.get("recipient")
     recipient_redacted = f"***{str(recipient)[-4:]}" if recipient else None
-    status = row.get("status") or "sent"
-    if status not in _ALLOWED_DELIVERY_STATUSES:
-        status = "sent"
+    cadence = row.get("cadence") or "daily"
+    if cadence not in _ALLOWED_DELIVERY_CADENCES:
+        cadence = "ad_hoc"
+    status = _normalize_delivery_status(row.get("status"), row.get("delivered_at"))
     return {
         "tenant_id": tenant_id,
-        "cadence": row.get("cadence") or "daily",
+        "cadence": cadence,
         "bot_profile": row.get("bot_profile"),
         "channel": row["channel"],
         "recipient_redacted": recipient_redacted,
         "status": status,
-        "markdown_path": None,
-        "html_path": None,
-        "dashboard_url": None,
-        "report_id": None,
-        "error": row.get("error"),
+        "markdown_path": row.get("markdown_path"),
+        "html_path": row.get("html_path"),
+        "dashboard_url": row.get("dashboard_url"),
+        "report_id": report_id,
+        "error": row.get("error") or None,
         "created_at": row["created_at"],
     }
 
@@ -442,6 +662,12 @@ class ImportReport:
     read_counts: dict[str, int] = field(default_factory=dict)
     inserted_counts: dict[str, int] = field(default_factory=dict)
     skipped_counts: dict[str, int] = field(default_factory=dict)
+    skip_reasons: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    def _record_skip(self, table: str, reason: str) -> None:
+        self.skipped_counts[table] = self.skipped_counts.get(table, 0) + 1
+        reasons = self.skip_reasons.setdefault(table, {})
+        reasons[reason] = reasons.get(reason, 0) + 1
 
 
 def _insert_if_absent(
@@ -551,7 +777,11 @@ class V0Importer:
             source_rows = read_v0_rows(conn, "sources")
             report.read_counts["sources"] = len(source_rows)
             competitor_ids: dict[str, Optional[int]] = {}
-            source_id_map: dict[Any, Optional[int]] = {}
+            # source_url is the join key for every downstream table -- build
+            # both a normalized-url map (primary) and a raw-url map
+            # (fallback) so odd casing/trailing-slash V0 data still resolves.
+            normalized_url_map: dict[str, Optional[int]] = {}
+            raw_url_map: dict[str, Optional[int]] = {}
             inserted_sources = 0
             skipped_sources = 0
 
@@ -568,7 +798,8 @@ class V0Importer:
                     (tenant_id, mapped["normalized_url"]),
                 )
                 new_id = self._get_or_create_source(tenant_id, mapped)
-                source_id_map[row["id"]] = new_id
+                normalized_url_map[mapped["normalized_url"]] = new_id
+                raw_url_map[row["url"]] = new_id
                 if before is None:
                     inserted_sources += 1
                 else:
@@ -577,81 +808,79 @@ class V0Importer:
             report.inserted_counts["sources"] = inserted_sources
             report.skipped_counts["sources"] = skipped_sources
 
-            # -- snapshots -------------------------------------------------
-            self._import_child_table(
+            def resolve_source_id(url: Optional[str]) -> tuple[bool, Optional[int]]:
+                if not url:
+                    return False, None
+                normalized = normalize_url(url)
+                if normalized in normalized_url_map:
+                    return True, normalized_url_map[normalized]
+                if url in raw_url_map:
+                    return True, raw_url_map[url]
+                return False, None
+
+            # -- snapshots ---------------------------------------------------
+            self._import_by_source_url(
                 conn,
                 v0_table="snapshots",
                 v2_table="source_snapshots",
                 report=report,
-                map_row=lambda row: map_snapshot(
-                    row, tenant_id, source_id_map.get(row["source_id"])
-                ),
-                natural_key=lambda mapped, row: {
+                resolve_source_id=resolve_source_id,
+                map_row=lambda row, source_id: map_snapshot(row, tenant_id, source_id),
+                natural_key=lambda mapped: {
                     "source_id": mapped["source_id"],
                     "content_hash": mapped["content_hash"],
                 },
-                requires_parent="source_id",
-                parent_map=source_id_map,
             )
 
-            # -- semantic facts (linked via source -> competitor) ----------
-            self._import_child_table(
+            # -- semantic facts (competitor resolved directly from row) -----
+            self._import_by_source_url(
                 conn,
                 v0_table="semantic_facts",
                 v2_table="semantic_facts",
                 report=report,
-                map_row=lambda row: map_semantic_fact(
-                    row,
-                    tenant_id,
-                    competitor_ids.get(self._competitor_for_source(row, source_rows)),
+                resolve_source_id=resolve_source_id,
+                map_row=lambda row, _source_id: map_semantic_fact(
+                    row, tenant_id, competitor_ids.get(row["competitor"])
                 ),
-                natural_key=lambda mapped, row: {
+                natural_key=lambda mapped: {
                     "competitor_id": mapped["competitor_id"],
                     "statement": mapped["statement"],
                 },
-                requires_parent="source_id",
-                parent_map=source_id_map,
             )
 
-            # -- semantic deltas --------------------------------------------
-            self._import_child_table(
+            # -- semantic deltas ----------------------------------------------
+            self._import_by_source_url(
                 conn,
                 v0_table="semantic_deltas",
                 v2_table="semantic_deltas",
                 report=report,
-                map_row=lambda row: map_semantic_delta(
-                    row,
-                    tenant_id,
-                    competitor_ids.get(self._competitor_for_source(row, source_rows)),
+                resolve_source_id=resolve_source_id,
+                map_row=lambda row, _source_id: map_semantic_delta(
+                    row, tenant_id, competitor_ids.get(row["competitor"])
                 ),
-                natural_key=lambda mapped, row: {
+                natural_key=lambda mapped: {
                     "competitor_id": mapped["competitor_id"],
                     "what_changed": mapped["what_changed"],
                 },
-                requires_parent="source_id",
-                parent_map=source_id_map,
             )
 
-            # -- source health events ---------------------------------------
-            self._import_child_table(
+            # -- source health events ------------------------------------------
+            self._import_by_source_url(
                 conn,
                 v0_table="source_health_events",
                 v2_table="source_health_events",
                 report=report,
-                map_row=lambda row: map_source_health_event(
-                    row, tenant_id, source_id_map.get(row["source_id"])
-                ),
-                natural_key=lambda mapped, row: {
+                resolve_source_id=resolve_source_id,
+                map_row=lambda row, source_id: map_source_health_event(row, tenant_id, source_id),
+                natural_key=lambda mapped: {
                     "source_id": mapped["source_id"],
                     "created_at": mapped["created_at"],
                     "event_type": mapped["event_type"],
                 },
-                requires_parent="source_id",
-                parent_map=source_id_map,
             )
 
             # -- reports (from report_index) ---------------------------------
-            self._import_flat_table(
+            report_id_map = self._import_flat_table(
                 conn,
                 v0_table="report_index",
                 v2_table="reports",
@@ -670,7 +899,9 @@ class V0Importer:
                 v0_table="bot_deliveries",
                 v2_table="bot_deliveries",
                 report=report,
-                map_row=lambda row: map_bot_delivery(row, tenant_id),
+                map_row=lambda row: map_bot_delivery(
+                    row, tenant_id, report_id_map.get(row.get("report_id"))
+                ),
                 natural_key=lambda mapped: {
                     "tenant_id": mapped["tenant_id"],
                     "channel": mapped["channel"],
@@ -684,48 +915,49 @@ class V0Importer:
 
         return report
 
-    @staticmethod
-    def _competitor_for_source(row: dict[str, Any], source_rows: list[dict[str, Any]]) -> Any:
-        source_id = row.get("source_id")
-        for source_row in source_rows:
-            if source_row["id"] == source_id:
-                return source_row["competitor"]
-        return None
-
-    def _import_child_table(
+    def _import_by_source_url(
         self,
         conn: sqlite3.Connection,
         *,
         v0_table: str,
         v2_table: str,
         report: ImportReport,
-        map_row: Callable[[dict[str, Any]], dict[str, Any]],
-        natural_key: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
-        requires_parent: str,
-        parent_map: dict[Any, Optional[int]],
+        resolve_source_id: Callable[[Optional[str]], tuple[bool, Optional[int]]],
+        map_row: Callable[[dict[str, Any], Optional[int]], dict[str, Any]],
+        natural_key: Callable[[dict[str, Any]], dict[str, Any]],
     ) -> None:
+        """Import a V0 table keyed by `source_url`, joining to `sources` by URL.
+
+        Rows whose source_url matches no known source are never inserted and
+        never crash the run -- they're counted as skipped with a reason.
+        """
         rows = read_v0_rows(conn, v0_table)
         report.read_counts[v0_table] = len(rows)
         inserted = 0
         skipped = 0
         for row in rows:
-            parent_v0_id = row.get(requires_parent)
-            if parent_v0_id not in parent_map or (
-                parent_map.get(parent_v0_id) is None and not self.dry_run
-            ):
-                # orphaned row (parent missing/blocked) -- never silently
-                # invent a parent; skip and count it.
+            found, source_id = resolve_source_id(row.get("source_url"))
+            if not found:
                 skipped += 1
+                report._record_skip(v0_table, "unknown_source_url")
                 continue
-            mapped = map_row(row)
+            if source_id is None and not self.dry_run:
+                # Source lookup resolved but returned no id outside dry-run --
+                # treat as a data integrity gap, never invent a parent.
+                skipped += 1
+                report._record_skip(v0_table, "source_not_persisted")
+                continue
+            mapped = map_row(row, source_id)
             inserted_flag = _insert_if_absent(
-                self.executor, v2_table, mapped, natural_key(mapped, row), self.dry_run
+                self.executor, v2_table, mapped, natural_key(mapped), self.dry_run
             )
             if inserted_flag:
                 inserted += 1
             else:
                 skipped += 1
+                report._record_skip(v0_table, "already_present")
         report.inserted_counts[v0_table] = inserted
+        report.skipped_counts.setdefault(v0_table, 0)
         report.skipped_counts[v0_table] = skipped
 
     def _import_flat_table(
@@ -737,19 +969,36 @@ class V0Importer:
         report: ImportReport,
         map_row: Callable[[dict[str, Any]], dict[str, Any]],
         natural_key: Callable[[dict[str, Any]], dict[str, Any]],
-    ) -> None:
+    ) -> dict[Any, Optional[int]]:
         rows = read_v0_rows(conn, v0_table)
         report.read_counts[v0_table] = len(rows)
         inserted = 0
         skipped = 0
+        id_map: dict[Any, Optional[int]] = {}
         for row in rows:
             mapped = map_row(row)
-            inserted_flag = _insert_if_absent(
-                self.executor, v2_table, mapped, natural_key(mapped), self.dry_run
+            key = natural_key(mapped)
+            existing = self.executor.fetchone(
+                f"SELECT id FROM {v2_table} WHERE "
+                + " AND ".join(f"{col} = %s" for col in key),
+                tuple(key.values()),
             )
-            if inserted_flag:
-                inserted += 1
-            else:
+            if existing is not None:
+                id_map[row["id"]] = existing["id"]
                 skipped += 1
+                continue
+            if self.dry_run:
+                id_map[row["id"]] = None
+                inserted += 1
+                continue
+            columns = list(mapped.keys())
+            placeholders = ", ".join(["%s"] * len(columns))
+            new_id = self.executor.execute(
+                f"INSERT INTO {v2_table} ({', '.join(columns)}) VALUES ({placeholders})",
+                tuple(mapped[c] for c in columns),
+            )
+            id_map[row["id"]] = new_id
+            inserted += 1
         report.inserted_counts[v0_table] = inserted
         report.skipped_counts[v0_table] = skipped
+        return id_map
