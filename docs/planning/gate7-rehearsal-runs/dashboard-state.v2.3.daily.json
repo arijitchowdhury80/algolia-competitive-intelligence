@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "is_quiet": false,
+  "top_attention_level": "normal",
+  "tenant_id": 3,
+  "cadence": "daily",
+  "generated_at": "2026-07-08T05:32:45.005266Z",
+  "argus_read": {
+    "useful_truth": "Argus daily brief for amplitude.",
+    "what_changed": null,
+    "why_it_matters": null,
+    "what_not_to_overbelieve": null,
+    "recommended_move": null,
+    "confidence": null
+  },
+  "coverage": {
+    "lanes": [
+      {
+        "lane": "collection",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "extraction",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "exec_speech",
+        "ran": false,
+        "error": "exec-speech scanner not run this pass"
+      }
+    ],
+    "coverage_score": 0.6667,
+    "false_negative_audit_status": "failed",
+    "missing_source_families": [
+      "exec_speech"
+    ]
+  },
+  "competitor_cards": [],
+  "theses": [],
+  "run_health": {
+    "run_id": "gate7-amplitude-1783488735",
+    "report_id": 3,
+    "generated_at": "2026-07-08T05:32:44.999531Z",
+    "model_tier": "judgment",
+    "source_family_count": 2,
+    "material_delta_count": 0,
+    "delivery_status": "sent",
+    "quality_review_status": "passed"
+  },
+  "build_status": {
+    "build_id": null,
+    "git_sha": null,
+    "deployed_at": null,
+    "environment": "unknown",
+    "services": [],
+    "last_error": "no build-status provider injected"
+  },
+  "material_delta_ids": [],
+  "action_item_ids": [],
+  "delivery_ids": [
+    3
+  ]
+}

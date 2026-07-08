@@ -1,0 +1,117 @@
+{
+  "schema_version": 2,
+  "is_quiet": false,
+  "top_attention_level": "watch",
+  "tenant_id": 2,
+  "cadence": "daily",
+  "generated_at": "2026-07-08T05:32:15.410271Z",
+  "argus_read": {
+    "useful_truth": "Argus daily brief for spryker.",
+    "what_changed": null,
+    "why_it_matters": null,
+    "what_not_to_overbelieve": null,
+    "recommended_move": null,
+    "confidence": null
+  },
+  "coverage": {
+    "lanes": [
+      {
+        "lane": "collection",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "extraction",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "exec_speech",
+        "ran": false,
+        "error": "exec-speech scanner not run this pass"
+      }
+    ],
+    "coverage_score": 0.6667,
+    "false_negative_audit_status": "failed",
+    "missing_source_families": [
+      "exec_speech"
+    ]
+  },
+  "competitor_cards": [
+    {
+      "competitor_id": 4,
+      "competitor_name": "commercetools",
+      "attention_score": 72.0,
+      "attention_level": "watch",
+      "action_cue": "Draft counter-positioning that reframes 'autonomous commerce' as vendor lock-in dressed up as AI, contrasting with Algolia's open, composable AI search that works with any stack.",
+      "top_signal_headline": "commercetools is retiring 'headless commerce' as their primary differentiator and introducing 'autonomous commerce' and 'agentic commerce' as new category language across their blog and content taxonomy.",
+      "what_changed": "commercetools is retiring 'headless commerce' as their primary differentiator and introducing 'autonomous commerce' and 'agentic commerce' as new category language across their blog and content taxonomy.",
+      "why_it_matters": "This signals commercetools believes the 'headless' positioning is commoditized and they need fresh category air. The 'autonomous' framing suggests they will compete on AI-driven automation rather than architecture flexibility.",
+      "recommended_action": "Draft counter-positioning that reframes 'autonomous commerce' as vendor lock-in dressed up as AI, contrasting with Algolia's open, composable AI search that works with any stack.",
+      "materiality_score": 0.72,
+      "confidence": 0.8,
+      "evidence_ids": [
+        "https://commercetools.com/blog"
+      ],
+      "delta_id": 52,
+      "thesis_id": null
+    },
+    {
+      "competitor_id": 4,
+      "competitor_name": "commercetools",
+      "attention_score": 65.0,
+      "attention_level": "watch",
+      "action_cue": "Verify what specific coding agent integrations commercetools has shipped (Cursor, Copilot, Claude). If Algolia has similar or better developer AI tooling, surface it in competitive battlecards.",
+      "top_signal_headline": "commercetools published messaging stating 'Your coding agent already knows commercetools. Now it can build with it.' indicating they have launched or are launching integrations with AI coding assistants.",
+      "what_changed": "commercetools published messaging stating 'Your coding agent already knows commercetools. Now it can build with it.' indicating they have launched or are launching integrations with AI coding assistants.",
+      "why_it_matters": "This targets the developer experience angle, making it easier for AI-assisted development workflows to scaffold and extend commercetools implementations. It reduces friction for prospects evaluating build complexity.",
+      "recommended_action": "Verify what specific coding agent integrations commercetools has shipped (Cursor, Copilot, Claude). If Algolia has similar or better developer AI tooling, surface it in competitive battlecards.",
+      "materiality_score": 0.65,
+      "confidence": 0.7,
+      "evidence_ids": [
+        "https://commercetools.com/blog"
+      ],
+      "delta_id": 53,
+      "thesis_id": null
+    }
+  ],
+  "theses": [
+    {
+      "thesis_id": 2,
+      "competitor_id": 4,
+      "competitor_name": "commercetools",
+      "thesis": "commercetools abandoning \"headless\" signals the architecture war is over and the next battleground is AI-orchestrated commerce, forcing every competitor to either own \"agentic\" category language or cede positioning to whoever does.",
+      "status": "active",
+      "confidence": 0.55,
+      "supporting_delta_count": 1,
+      "contradicting_delta_count": 0,
+      "updated_at": "2026-07-08T05:32:15.369606Z"
+    }
+  ],
+  "run_health": {
+    "run_id": "gate7-spryker-1783488684",
+    "report_id": 2,
+    "generated_at": "2026-07-08T05:32:15.405213Z",
+    "model_tier": "judgment",
+    "source_family_count": 3,
+    "material_delta_count": 2,
+    "delivery_status": "sent",
+    "quality_review_status": "failed"
+  },
+  "build_status": {
+    "build_id": null,
+    "git_sha": null,
+    "deployed_at": null,
+    "environment": "unknown",
+    "services": [],
+    "last_error": "no build-status provider injected"
+  },
+  "material_delta_ids": [
+    52,
+    53
+  ],
+  "action_item_ids": [],
+  "delivery_ids": [
+    2
+  ]
+}

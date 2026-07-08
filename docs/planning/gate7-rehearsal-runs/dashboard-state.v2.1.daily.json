@@ -1,0 +1,136 @@
+{
+  "schema_version": 2,
+  "is_quiet": false,
+  "top_attention_level": "watch",
+  "tenant_id": 1,
+  "cadence": "daily",
+  "generated_at": "2026-07-08T05:31:24.502761Z",
+  "argus_read": {
+    "useful_truth": "Argus daily brief for algolia.",
+    "what_changed": null,
+    "why_it_matters": null,
+    "what_not_to_overbelieve": null,
+    "recommended_move": null,
+    "confidence": null
+  },
+  "coverage": {
+    "lanes": [
+      {
+        "lane": "collection",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "extraction",
+        "ran": true,
+        "error": null
+      },
+      {
+        "lane": "exec_speech",
+        "ran": false,
+        "error": "exec-speech scanner not run this pass"
+      }
+    ],
+    "coverage_score": 0.6667,
+    "false_negative_audit_status": "failed",
+    "missing_source_families": [
+      "exec_speech"
+    ]
+  },
+  "competitor_cards": [
+    {
+      "competitor_id": 1,
+      "competitor_name": "Elastic",
+      "attention_score": 72.0,
+      "attention_level": "watch",
+      "action_cue": "Prepare competitive talk track contrasting managed search relevance tuning versus DIY vector infrastructure complexity.",
+      "top_signal_headline": "Elastic is promoting 'context engineering' narrative focused on delivering relevant context to AI agents for accurate outcomes, tied to vector capabilities.",
+      "what_changed": "Elastic is promoting 'context engineering' narrative focused on delivering relevant context to AI agents for accurate outcomes, tied to vector capabilities.",
+      "why_it_matters": "Signals Elastic sees AI agent/RAG infrastructure as a growth vector. They are framing Elasticsearch as the context layer for agentic AI, directly competing with vector database positioning.",
+      "recommended_action": "Prepare competitive talk track contrasting managed search relevance tuning versus DIY vector infrastructure complexity.",
+      "materiality_score": 0.72,
+      "confidence": 0.65,
+      "evidence_ids": [
+        "https://www.elastic.co/blog"
+      ],
+      "delta_id": 25,
+      "thesis_id": null
+    },
+    {
+      "competitor_id": 1,
+      "competitor_name": "Elastic",
+      "attention_score": 60.0,
+      "attention_level": "watch",
+      "action_cue": "Pull full announcement text and assess for strategic shifts. Defer judgment until content is read.",
+      "top_signal_headline": "Elastic CEO communicated an organizational change internally, now surfaced on blog.",
+      "what_changed": "Elastic CEO communicated an organizational change internally, now surfaced on blog.",
+      "why_it_matters": "Org announcements from CEOs often signal strategic pivots, restructuring, or leadership changes. Content unknown from snippet alone.",
+      "recommended_action": "Pull full announcement text and assess for strategic shifts. Defer judgment until content is read.",
+      "materiality_score": 0.6,
+      "confidence": 0.4,
+      "evidence_ids": [
+        "https://www.elastic.co/blog"
+      ],
+      "delta_id": 27,
+      "thesis_id": null
+    },
+    {
+      "competitor_id": 1,
+      "competitor_name": "Elastic",
+      "attention_score": 55.0,
+      "attention_level": "watch",
+      "action_cue": "No immediate action unless client competes in security observability. Flag for quarterly competitive landscape update.",
+      "top_signal_headline": "Forrester recognized Elastic as a Strong Performer in Extended Detection and Response evaluation.",
+      "what_changed": "Forrester recognized Elastic as a Strong Performer in Extended Detection and Response evaluation.",
+      "why_it_matters": "Third-party validation strengthens Elastic's security credibility. They will use this in enterprise security deals to counter point-solution incumbents.",
+      "recommended_action": "No immediate action unless client competes in security observability. Flag for quarterly competitive landscape update.",
+      "materiality_score": 0.55,
+      "confidence": 0.7,
+      "evidence_ids": [
+        "https://www.elastic.co/blog"
+      ],
+      "delta_id": 26,
+      "thesis_id": null
+    }
+  ],
+  "theses": [
+    {
+      "thesis_id": 1,
+      "competitor_id": 1,
+      "competitor_name": "Elastic",
+      "thesis": "Elastic is reframing its vector play as \"context engineering for AI agents,\" signaling a pivot from search vendor to AI infrastructure provider and a direct collision course with Algolia's enterprise agentic narrative.",
+      "status": "active",
+      "confidence": 0.55,
+      "supporting_delta_count": 1,
+      "contradicting_delta_count": 0,
+      "updated_at": "2026-07-08T05:31:24.462995Z"
+    }
+  ],
+  "run_health": {
+    "run_id": "gate7-algolia-1783488624",
+    "report_id": 1,
+    "generated_at": "2026-07-08T05:31:24.497881Z",
+    "model_tier": "judgment",
+    "source_family_count": 3,
+    "material_delta_count": 3,
+    "delivery_status": "sent",
+    "quality_review_status": "failed"
+  },
+  "build_status": {
+    "build_id": null,
+    "git_sha": null,
+    "deployed_at": null,
+    "environment": "unknown",
+    "services": [],
+    "last_error": "no build-status provider injected"
+  },
+  "material_delta_ids": [
+    25,
+    27,
+    26
+  ],
+  "action_item_ids": [],
+  "delivery_ids": [
+    1
+  ]
+}
