@@ -885,16 +885,31 @@ BEGIN
     FOREACH t IN ARRAY tenant_tables LOOP
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', t);
         EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY;', t);
+        -- current_setting('app.tenant_id', true) returns '' (empty string),
+        -- NOT NULL, when the GUC has never been set in this session/tx --
+        -- discovered by running this against a live Postgres 16 for the
+        -- first time (the doc comment above assumed NULL). ''::bigint
+        -- raises a hard error rather than failing closed, so NULLIF(...,'')
+        -- converts the unset case to a real NULL first; the NULL = NULL
+        -- comparison then correctly yields NULL -> zero rows (fail-closed).
         EXECUTE format($f$
             CREATE POLICY tenant_isolation ON %I
-            USING (tenant_id = current_setting('app.tenant_id', true)::bigint)
-            WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::bigint);
+            USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::bigint)
+            WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::bigint);
         $f$, t);
         -- grant CRUD to the app role (RLS still constrains rows to the tenant).
         EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO cios_app;', t);
     END LOOP;
 END
 $$;
+
+-- Schema usage: Postgres 15+ no longer grants USAGE on the `public` schema
+-- to PUBLIC by default, so without this the (non-superuser) cios_app role
+-- cannot see ANY table in `public` -- every query fails with "relation ...
+-- does not exist" (not a permissions error; RLS grants above are moot
+-- without this). Found by running this schema against a live Postgres 16
+-- for the first time.
+GRANT USAGE ON SCHEMA public TO cios_app;
 
 -- Global tables: readable by the app role (permissions catalog + tenant lookup).
 GRANT SELECT ON tenants, permissions TO cios_app;
