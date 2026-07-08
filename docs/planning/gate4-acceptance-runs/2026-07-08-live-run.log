@@ -1,0 +1,56 @@
+claude-shim health: healthy=True detail=None
+
+--- Fetching real evidence (live network) ---
+fetched https://www.elastic.co/blog: status=FetchStatus.OK http=200 chars=13790
+fetched https://www.coveo.com/blog: status=FetchStatus.OK http=200 chars=5579
+fetched https://www.constructor.com/blog: status=FetchStatus.OK http=200 chars=12853
+fetched https://www.bloomreach.com/en/blog: status=FetchStatus.OK http=200 chars=8573
+
+=== [PASS] (a) known-active-day promotes real signals ===
+Elastic: verdict=signals signals=3 events=[]
+    SIGNAL: 'Elastic CEO issues organizational announcement to employees' materiality=0.65 owner=Executive Review evidence_urls=['https://www.elastic.co/blog'] urls_in_input=True
+    SIGNAL: "Elastic positioning 'context engineering' for AI agents with vector search" materiality=0.7 owner=Sales Enablement evidence_urls=['https://www.elastic.co/blog'] urls_in_input=True
+    SIGNAL: 'Elastic named Strong Performer in Forrester XDR Wave' materiality=0.55 owner=PMM evidence_urls=['https://www.elastic.co/blog'] urls_in_input=True
+Constructor: verdict=signals signals=2 events=[]
+    SIGNAL: "Constructor doubling down on 'Commerce Reasoning Engine' and AI Shopping Agent positioning" materiality=0.65 owner=Sales Enablement evidence_urls=['https://www.constructor.com/blog'] urls_in_input=True
+    SIGNAL: 'Constructor launching vertical-specific positioning across B2B, Grocery, Fashion, Furniture, and Department stores' materiality=0.55 owner=PMM evidence_urls=['https://www.constructor.com/blog'] urls_in_input=True
+
+Total promoted: 5
+
+=== [PASS] (d) every published claim carries a source URL present in input evidence ===
+all 5 promoted signals carry >=1 evidence URL drawn from supplied input: True
+
+=== [PASS] (b) COVERAGE_FAILURE (not QUIET) when coverage incomplete + no material deltas ===
+verdict=coverage_failure signals=0 events=['coverage_failure']
+
+=== [PASS] (c) FN auditor catches a planted miss ===
+audit_status=failed risk_reason=planted signal 'PLANTED-PRICING-001' present in raw observations but not promoted recommended_recheck=['PLANTED-PRICING-001']
+(LLM client was never invoked — deterministic guard fired first, confirming 'a caught planted miss is never overridden by LLM judgment')
+
+=== [PASS] (e) competitor thesis updates with evidence + confidence, non-destructive history ===
+opening_thesis='Coveo is investing in AI-driven search content; initial monitoring thesis, low confidence pending more evidence.' confidence=0.3
+updated_thesis='Coveo is pivoting its narrative from traditional enterprise search to agentic and conversational AI, positioning these as the resolution to legacy search trade-offs and signaling a bet that agentic interfaces will replace query-based discovery in enterprise contexts.' confidence=0.55
+evidence_ids=['https://www.coveo.com/blog']
+history_len=1 history[0]='Coveo is investing in AI-driven search content; initial monitoring thesis, low confidence pending more evidence.'
+
+=== REFUTE PANEL (live, bonus) ===
+  KNOCKED DOWN: 'Elastic CEO issues organizational announcement to employees' evidence_ok=True refute_held=False rebuttal='refute verdict unparseable; failing closed'
+  KNOCKED DOWN: "Elastic positioning 'context engineering' for AI agents with vector search" evidence_ok=True refute_held=False rebuttal='refute verdict unparseable; failing closed'
+  KNOCKED DOWN: 'Elastic named Strong Performer in Forrester XDR Wave' evidence_ok=True refute_held=False rebuttal='refute verdict unparseable; failing closed'
+  KNOCKED DOWN: "Constructor doubling down on 'Commerce Reasoning Engine' and AI Shopping Agent positioning" evidence_ok=True refute_held=False rebuttal='refute verdict unparseable; failing closed'
+  KNOCKED DOWN: 'Constructor launching vertical-specific positioning across B2B, Grocery, Fashion, Furniture, and Department stores' evidence_ok=True refute_held=False rebuttal='refute verdict unparseable; failing closed'
+Survivors: []
+Knocked down: ['Elastic CEO issues organizational announcement to employees', "Elastic positioning 'context engineering' for AI agents with vector search", 'Elastic named Strong Performer in Forrester XDR Wave', "Constructor doubling down on 'Commerce Reasoning Engine' and AI Shopping Agent positioning", 'Constructor launching vertical-specific positioning across B2B, Grocery, Fashion, Furniture, and Department stores']
+
+Total live LLM calls used: 9 / 15 budget
+
+
+================= VERDICT TABLE =================
+  [PASS] (a) known-active-day promotes real signals
+  [PASS] (d) every published claim carries a source URL present in input evidence
+  [PASS] (b) COVERAGE_FAILURE (not QUIET) when coverage incomplete + no material deltas
+  [PASS] (c) FN auditor catches a planted miss
+  [PASS] (e) competitor thesis updates with evidence + confidence, non-destructive history
+===================================================
+
+OVERALL: ALL CRITERIA PASSED
