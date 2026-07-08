@@ -37,6 +37,12 @@ class BotDeliveryStatus(str, Enum):
     SENT = "sent"
     DELIVERED = "delivered"
     FAILED = "failed"
+    # A reviewable brief that failed quality review never reaches an adapter
+    # (manifesto Phase 6: a failed verdict must never ship). BLOCKED records
+    # that the gate stopped delivery, distinct from FAILED (adapter tried and
+    # failed) so operators can tell "we chose not to send" from "we tried and
+    # couldn't."
+    BLOCKED = "blocked"
 
 
 class DeliveryAttemptStatus(str, Enum):

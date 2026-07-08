@@ -832,7 +832,7 @@ CREATE TABLE bot_deliveries (
     channel           text   NOT NULL,
     recipient_redacted text,
     status            text   NOT NULL DEFAULT 'queued'
-                        CHECK (status IN ('queued','sending','sent','delivered','failed')),
+                        CHECK (status IN ('queued','sending','sent','delivered','failed','blocked')),
     markdown_path     text,
     html_path         text,
     dashboard_url     text,
