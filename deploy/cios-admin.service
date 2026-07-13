@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/root/.hermes/apps/cios
 Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
+User=hermes
+Group=hermes
 ExecStart=/root/.hermes/apps/cios/.venv/bin/python /root/.hermes/apps/cios/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5

@@ -151,6 +151,7 @@ exit 0
     )
     stale_out = app / "out"
     stale_out.mkdir(parents=True)
+    (stale_out / ".cios-output-dir").write_text("managed by CI-OS\n", encoding="utf-8")
     (stale_out / "argus-dashboard.html").write_text("stale cockpit", encoding="utf-8")
     (stale_out / "brief.html").write_text("stale brief", encoding="utf-8")
     (stale_out / "argus-dashboard.json").write_text('{"stale":true}', encoding="utf-8")
@@ -162,6 +163,24 @@ exit 0
     assert not (public / "index.html").exists()
     assert not (public / "brief.html").exists()
     assert not (public / "data" / "semantic-dashboard.json").exists()
+
+
+def test_hermes_wrapper_refuses_unmarked_existing_output_dir(tmp_path):
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        """#!/bin/sh
+exit 0
+""",
+    )
+    stale_out = app / "out"
+    stale_out.mkdir(parents=True)
+    (stale_out / "argus-dashboard.html").write_text("stale cockpit", encoding="utf-8")
+
+    result = _run_wrapper(app, public, env_file)
+
+    assert result.returncode == 2
+    assert "refusing to clean unmarked CIOS output directory" in result.stderr
+    assert (stale_out / "argus-dashboard.html").exists()
 
 
 def test_hermes_wrapper_writes_demand_source_gate_when_daily_blocks_publish(tmp_path):

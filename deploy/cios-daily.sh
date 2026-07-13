@@ -38,6 +38,21 @@ if [ -z "$OUT" ] || [ "$OUT" = "/" ]; then
   echo "unsafe CIOS output directory: $OUT" >&2
   exit 2
 fi
+case "$OUT" in
+  "$APP/out"|"$APP/out/"*) ;;
+  *)
+    echo "unsafe CIOS output directory outside app output root: $OUT" >&2
+    exit 2
+    ;;
+esac
+if [ -L "$OUT" ]; then
+  echo "unsafe CIOS output directory is a symlink: $OUT" >&2
+  exit 2
+fi
+if [ -e "$OUT" ] && [ ! -d "$OUT" ]; then
+  echo "unsafe CIOS output path is not a directory: $OUT" >&2
+  exit 2
+fi
 
 export CIOS_DASHBOARD_OUT="$OUT/argus-dashboard.html"
 export CIOS_COCKPIT_OUT="$CIOS_DASHBOARD_OUT"
@@ -74,8 +89,13 @@ case "$CIOS_DAILY_RUN_TIMEOUT_SECONDS" in
     ;;
 esac
 
-rm -rf "$OUT"
+if [ -d "$OUT" ] && [ ! -f "$OUT/.cios-output-dir" ]; then
+  echo "refusing to clean unmarked CIOS output directory: $OUT" >&2
+  exit 2
+fi
 mkdir -p "$OUT" "$PUB"
+touch "$OUT/.cios-output-dir"
+find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 
 cd "$APP"
 preflight_args="--app-dir $APP"

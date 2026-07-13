@@ -69,6 +69,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/root/.hermes/apps/cios
 Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
+User=hermes
+Group=hermes
 ExecStart=/root/.hermes/apps/cios/.venv/bin/python /root/.hermes/apps/cios/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
@@ -84,7 +86,8 @@ SAFE_WRAPPER = """#!/bin/sh
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
-rm -rf "$OUT"
+touch "$OUT/.cios-output-dir"
+find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP"
 .venv/bin/python scripts/audit_learning_policies.py --package-root "$APP"
 .venv/bin/python scripts/apply_product_market_schema.py
@@ -934,7 +937,8 @@ cp "$CIOS_DASHBOARD_OUT" "$PUB/index.html"
     assert "wrapper missing Argus operator handoff builder" in result.stderr
     assert "wrapper missing Argus data-plane manifest export" in result.stderr
     assert "wrapper missing daily-run timeout guard" in result.stderr
-    assert "wrapper missing stale-output cleanup" in result.stderr
+    assert "wrapper missing marked-output cleanup" in result.stderr
+    assert "wrapper missing scoped output cleanup" in result.stderr
     assert "wrapper missing current-run artifact validation" in result.stderr
     assert "wrapper missing staged publish directory" in result.stderr
 
@@ -949,6 +953,19 @@ def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
 
     assert result.returncode == 2
     assert "wrapper missing daily-run timeout guard" in result.stderr
+
+
+def test_preflight_fails_when_admin_service_runs_as_root(tmp_path):
+    app = _make_app(
+        tmp_path,
+        admin_service=SAFE_ADMIN_SERVICE.replace("User=hermes\nGroup=hermes\n", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "admin service must run as hermes user" in result.stderr
+    assert "admin service must run as hermes group" in result.stderr
 
 
 def test_preflight_can_require_scout_binary_for_product_market_runs(tmp_path):

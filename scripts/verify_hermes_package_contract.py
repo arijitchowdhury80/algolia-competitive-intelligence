@@ -90,7 +90,8 @@ WRAPPER_INVARIANTS = {
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
     "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
-    "wrapper missing stale-output cleanup": 'rm -rf "$OUT"',
+    "wrapper missing marked-output cleanup": ".cios-output-dir",
+    "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
 }
@@ -100,6 +101,8 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must bind to 127.0.0.1 only": "--host 127.0.0.1",
     "admin service must load /root/.hermes/cios-env": "--env-file /root/.hermes/cios-env",
     "admin service must use the expected local admin port": "--port 8765",
+    "admin service must run as hermes user": "User=hermes",
+    "admin service must run as hermes group": "Group=hermes",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "admin service must read Hermes product-market artifacts": "PrivateTmp=false",
 }
