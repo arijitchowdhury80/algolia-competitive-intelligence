@@ -155,3 +155,51 @@ def test_verify_rejects_missing_or_changed_files(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert "missing file: README.md" in result.stderr
     assert "checksum mismatch: src/app.py" in result.stderr
+
+
+def test_verify_rejects_manifest_paths_outside_app_directory(tmp_path: Path) -> None:
+    repo = _init_repo(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret\n", encoding="utf-8")
+    output = tmp_path / "release-record.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "generate",
+            "--source-root",
+            str(repo),
+            "--app-dir",
+            str(repo),
+            "--output",
+            str(output),
+        ],
+        check=True,
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload["files"].append(
+        {
+            "path": "../outside.txt",
+            "sha256": "0" * 64,
+            "size": outside.stat().st_size,
+        }
+    )
+    output.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "verify",
+            "--app-dir",
+            str(repo),
+            "--manifest",
+            str(output),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unsafe manifest path: ../outside.txt" in result.stderr

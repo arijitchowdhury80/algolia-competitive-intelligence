@@ -129,13 +129,23 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 def verify_manifest(manifest: dict[str, Any], app_dir: Path) -> list[str]:
     errors: list[str] = []
+    root = app_dir.resolve()
     for item in manifest.get("files", []):
         relative_path = item.get("path")
         expected_sha256 = item.get("sha256")
         if not isinstance(relative_path, str) or not isinstance(expected_sha256, str):
             errors.append("invalid manifest file entry")
             continue
+        candidate = Path(relative_path)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            errors.append(f"unsafe manifest path: {relative_path}")
+            continue
         path = app_dir / relative_path
+        try:
+            path.resolve().relative_to(root)
+        except ValueError:
+            errors.append(f"unsafe manifest path: {relative_path}")
+            continue
         if not path.exists():
             errors.append(f"missing file: {relative_path}")
             continue
