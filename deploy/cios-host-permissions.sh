@@ -6,6 +6,7 @@ SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-int
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
+HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
 APP_GROUP="${CIOS_APP_GROUP:-cios}"
@@ -84,6 +85,9 @@ fi
 if [ -f "$ENV_FILE" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ENV_FILE"
   chmod 640 "$ENV_FILE"
+  if [ "$HOST_ENV_FILE" != "$ENV_FILE" ]; then
+    install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
+  fi
 fi
 
 echo "CI-OS host ownership ready: app=$APP user=$APP_USER group=$HERMES_GROUP"

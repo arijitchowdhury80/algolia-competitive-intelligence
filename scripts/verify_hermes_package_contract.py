@@ -130,6 +130,7 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must create CI-OS app user": "useradd --system",
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
     "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
+    "host permissions must manage host env copy": 'HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"',
     "host permissions must know CI-OS shim user": 'SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"',
     "host permissions must prefer ACL traversal for cios": 'setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
@@ -139,7 +140,8 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
-    "host permissions must protect CI-OS env file": 'chmod 640 "$ENV_FILE"',
+    "host permissions must protect Hermes CI-OS env file": 'chmod 640 "$ENV_FILE"',
+    "host permissions must install host-readable CI-OS env file": 'install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
@@ -149,6 +151,7 @@ RUNNER_SERVICE_INVARIANTS = {
     "runner service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
     "runner service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",
     "runner service must set /opt CI-OS public directory": "Environment=CIOS_PUBLIC_DIR=/opt/cios/public",
+    "runner service must use host-readable CI-OS env file": "Environment=CIOS_ENV_FILE=/etc/cios-env",
     "runner service must call /opt host runner": "ExecStart=/opt/cios/app/deploy/cios-host-runner.sh",
     "runner service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "runner service must keep group-writable artifacts": "UMask=0007",
@@ -171,7 +174,7 @@ CLAUDE_SHIM_SERVICE_INVARIANTS = {
 ADMIN_SERVICE_INVARIANTS = {
     "admin service must run package admin runner": "scripts/run_admin.py",
     "admin service must bind to 127.0.0.1 only": "--host 127.0.0.1",
-    "admin service must load /root/.hermes/cios-env": "--env-file /root/.hermes/cios-env",
+    "admin service must load host-readable CI-OS env file": "--env-file /etc/cios-env",
     "admin service must use the expected local admin port": "--port 8765",
     "admin service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
     "admin service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",

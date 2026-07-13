@@ -10,6 +10,7 @@ SupplementaryGroups=hermes
 WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 Environment=CIOS_PUBLIC_DIR=/opt/cios/public
+Environment=CIOS_ENV_FILE=/etc/cios-env
 ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
 NoNewPrivileges=true
 PrivateTmp=false

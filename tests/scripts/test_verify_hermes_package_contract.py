@@ -76,7 +76,7 @@ WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 User=cios
 Group=cios
-ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
+ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /etc/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -140,6 +140,7 @@ SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-int
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
+HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
 SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"
@@ -160,6 +161,7 @@ PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
+install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
 """
 
 
@@ -174,6 +176,7 @@ SupplementaryGroups=hermes
 WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 Environment=CIOS_PUBLIC_DIR=/opt/cios/public
+Environment=CIOS_ENV_FILE=/etc/cios-env
 ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
 NoNewPrivileges=true
 UMask=0007
@@ -668,13 +671,13 @@ def test_preflight_fails_when_admin_service_binds_publicly(tmp_path):
 def test_preflight_fails_when_admin_service_skips_env_file(tmp_path):
     app = _make_app(
         tmp_path,
-        admin_service=SAFE_ADMIN_SERVICE.replace(" --env-file /root/.hermes/cios-env", ""),
+        admin_service=SAFE_ADMIN_SERVICE.replace(" --env-file /etc/cios-env", ""),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "admin service must load /root/.hermes/cios-env" in result.stderr
+    assert "admin service must load host-readable CI-OS env file" in result.stderr
 
 
 def test_preflight_fails_when_admin_service_private_tmp_hides_hermes_artifacts(tmp_path):
