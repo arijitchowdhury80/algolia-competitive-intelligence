@@ -39,6 +39,7 @@ REQUIRED_FILES = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
+    "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
