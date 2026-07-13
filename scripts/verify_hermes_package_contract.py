@@ -110,6 +110,8 @@ HOST_RUNNER_INVARIANTS = {
     "host runner missing handoff bypass": "CIOS_DISABLE_RUNNER_HANDOFF=1",
     "host runner missing app directory handoff": 'CIOS_APP_DIR="$APP"',
     "host runner missing public directory handoff": 'CIOS_PUBLIC_DIR="$PUB"',
+    "host runner must default to /opt CI-OS app mount": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
+    "host runner must default to /opt CI-OS public mount": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
     "host runner missing request glob": "*.request",
     "host runner missing result artifact": ".result",
     "host runner missing log artifact": ".log",
@@ -117,14 +119,22 @@ HOST_RUNNER_INVARIANTS = {
 }
 
 HOST_PERMISSIONS_INVARIANTS = {
+    "host permissions must define Hermes source app": 'SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"',
+    "host permissions must define Hermes source public dir": 'SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"',
+    "host permissions must default app runtime mount to /opt": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
+    "host permissions must default public runtime mount to /opt": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
+    "host permissions must bind-mount CI-OS app": 'mount --bind "$SOURCE_APP" "$APP"',
+    "host permissions must bind-mount CI-OS public dir": 'mount --bind "$SOURCE_PUB" "$PUB"',
+    "host permissions must persist app bind mount": 'app_fstab="$SOURCE_APP $APP none bind 0 0"',
+    "host permissions must persist public bind mount": 'pub_fstab="$SOURCE_PUB $PUB none bind 0 0"',
     "host permissions must create CI-OS app user": "useradd --system",
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
     "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
     "host permissions must know CI-OS shim user": 'SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"',
-    "host permissions must prefer ACL traversal for cios": 'setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps',
-    "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps',
+    "host permissions must prefer ACL traversal for cios": 'setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
+    "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must preserve execute-only Hermes traversal fallback": "chmod 711 /root/.hermes /root/.hermes/apps",
-    "host permissions must chown app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"',
+    "host permissions must chown source app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"',
     "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
@@ -136,14 +146,16 @@ RUNNER_SERVICE_INVARIANTS = {
     "runner service must run as cios user": "User=cios",
     "runner service must run as cios group": "Group=cios",
     "runner service must include hermes supplementary group": "SupplementaryGroups=hermes",
-    "runner service must use CI-OS app working directory": "WorkingDirectory=/root/.hermes/apps/cios",
-    "runner service must call host runner": "ExecStart=/root/.hermes/apps/cios/deploy/cios-host-runner.sh",
+    "runner service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
+    "runner service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",
+    "runner service must set /opt CI-OS public directory": "Environment=CIOS_PUBLIC_DIR=/opt/cios/public",
+    "runner service must call /opt host runner": "ExecStart=/opt/cios/app/deploy/cios-host-runner.sh",
     "runner service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "runner service must keep group-writable artifacts": "UMask=0007",
 }
 
 RUNNER_PATH_INVARIANTS = {
-    "runner path must watch request files": "PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request",
+    "runner path must watch /opt request files": "PathExistsGlob=/opt/cios/app/run-queue/*.request",
     "runner path must trigger runner service": "Unit=cios-runner.service",
 }
 
@@ -161,6 +173,8 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must bind to 127.0.0.1 only": "--host 127.0.0.1",
     "admin service must load /root/.hermes/cios-env": "--env-file /root/.hermes/cios-env",
     "admin service must use the expected local admin port": "--port 8765",
+    "admin service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
+    "admin service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",
     "admin service must run as cios user": "User=cios",
     "admin service must run as cios group": "Group=cios",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",

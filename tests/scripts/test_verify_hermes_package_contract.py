@@ -72,11 +72,11 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/root/.hermes/apps/cios
-Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
+WorkingDirectory=/opt/cios/app
+Environment=CIOS_APP_DIR=/opt/cios/app
 User=cios
 Group=cios
-ExecStart=/root/.hermes/apps/cios/.venv/bin/python /root/.hermes/apps/cios/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
+ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
@@ -121,8 +121,8 @@ mkdir -p "$STAGE"
 
 
 SAFE_HOST_RUNNER = """#!/bin/sh
-APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
-PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+APP="${CIOS_APP_DIR:-/opt/cios/app}"
+PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 QUEUE="$APP/run-queue"
 for request in "$QUEUE"/*.request; do
   base="${request%.request}"
@@ -135,8 +135,10 @@ done
 
 
 SAFE_HOST_PERMISSIONS = """#!/bin/sh
-APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
-PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
+SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+APP="${CIOS_APP_DIR:-/opt/cios/app}"
+PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
@@ -145,10 +147,14 @@ HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
 useradd --system --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$SHIM_USER"
-setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
-setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps
+setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
+setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
+mount --bind "$SOURCE_APP" "$APP"
+mount --bind "$SOURCE_PUB" "$PUB"
+app_fstab="$SOURCE_APP $APP none bind 0 0"
+pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
-chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
+chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
 chmod 2775 "$APP" "$APP/run-queue"
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
@@ -165,8 +171,10 @@ Type=oneshot
 User=cios
 Group=cios
 SupplementaryGroups=hermes
-WorkingDirectory=/root/.hermes/apps/cios
-ExecStart=/root/.hermes/apps/cios/deploy/cios-host-runner.sh
+WorkingDirectory=/opt/cios/app
+Environment=CIOS_APP_DIR=/opt/cios/app
+Environment=CIOS_PUBLIC_DIR=/opt/cios/public
+ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
 NoNewPrivileges=true
 UMask=0007
 """
@@ -176,7 +184,7 @@ SAFE_RUNNER_PATH = """[Unit]
 Description=Watch for CI-OS app-user runner requests
 
 [Path]
-PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request
+PathExistsGlob=/opt/cios/app/run-queue/*.request
 Unit=cios-runner.service
 """
 
@@ -1084,7 +1092,7 @@ def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp
 def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_path):
     app = _make_app(
         tmp_path,
-        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps', ""),
+        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps', ""),
     )
 
     result = _run_preflight(app)
@@ -1096,7 +1104,7 @@ def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_p
 def test_preflight_fails_when_host_permissions_do_not_grant_shim_acl_traversal(tmp_path):
     app = _make_app(
         tmp_path,
-        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps', ""),
+        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps', ""),
     )
 
     result = _run_preflight(app)
@@ -1151,7 +1159,7 @@ def test_preflight_fails_when_runner_path_does_not_watch_requests(tmp_path):
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "runner path must watch request files" in result.stderr
+    assert "runner path must watch /opt request files" in result.stderr
 
 
 def test_preflight_fails_when_claude_shim_service_lacks_hermes_group(tmp_path):

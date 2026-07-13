@@ -3,8 +3,8 @@
 # the dedicated `cios` app user and writes the result back for Hermes cron.
 set -eu
 
-APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
-PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+APP="${CIOS_APP_DIR:-/opt/cios/app}"
+PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 QUEUE="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
 
 mkdir -p "$QUEUE"

@@ -2,7 +2,7 @@
 Description=Watch for CI-OS app-user runner requests
 
 [Path]
-PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request
+PathExistsGlob=/opt/cios/app/run-queue/*.request
 Unit=cios-runner.service
 
 [Install]

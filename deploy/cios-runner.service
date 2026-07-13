@@ -7,10 +7,10 @@ Type=oneshot
 User=cios
 Group=cios
 SupplementaryGroups=hermes
-WorkingDirectory=/root/.hermes/apps/cios
-Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
-Environment=CIOS_PUBLIC_DIR=/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public
-ExecStart=/root/.hermes/apps/cios/deploy/cios-host-runner.sh
+WorkingDirectory=/opt/cios/app
+Environment=CIOS_APP_DIR=/opt/cios/app
+Environment=CIOS_PUBLIC_DIR=/opt/cios/public
+ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
 NoNewPrivileges=true
 PrivateTmp=false
 UMask=0007

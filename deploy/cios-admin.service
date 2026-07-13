@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/root/.hermes/apps/cios
-Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
+WorkingDirectory=/opt/cios/app
+Environment=CIOS_APP_DIR=/opt/cios/app
 User=cios
 Group=cios
-ExecStart=/root/.hermes/apps/cios/.venv/bin/python /root/.hermes/apps/cios/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
+ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

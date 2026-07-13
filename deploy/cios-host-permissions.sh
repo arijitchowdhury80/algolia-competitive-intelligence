@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
-APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
-PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
+SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+APP="${CIOS_APP_DIR:-/opt/cios/app}"
+PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
@@ -29,20 +31,33 @@ if id "$SHIM_USER" >/dev/null 2>&1; then
   usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 fi
 
+mkdir -p /opt/cios "$APP" "$PUB"
+if ! mountpoint -q "$APP"; then
+  mount --bind "$SOURCE_APP" "$APP"
+fi
+if ! mountpoint -q "$PUB"; then
+  mount --bind "$SOURCE_PUB" "$PUB"
+fi
+
+app_fstab="$SOURCE_APP $APP none bind 0 0"
+pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
+grep -Fqx "$app_fstab" /etc/fstab || printf '%s\n' "$app_fstab" >> /etc/fstab
+grep -Fqx "$pub_fstab" /etc/fstab || printf '%s\n' "$pub_fstab" >> /etc/fstab
+
 # CI-OS is hosted under the Hermes home as an extension. The app user needs
 # execute-only traversal through the parent directories, not read/list access.
 # Prefer ACLs so Hermes can keep its home directory mode at 700.
 if command -v setfacl >/dev/null 2>&1; then
-  setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
+  setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
   if id "$SHIM_USER" >/dev/null 2>&1; then
-    setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps
+    setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
   fi
 else
   chmod 711 /root/.hermes /root/.hermes/apps
 fi
 
-mkdir -p "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB/data" "$PUB/v2/data"
-chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
+mkdir -p "$SOURCE_APP/run-queue" "$SOURCE_APP/out" "$SOURCE_APP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
+chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
 chmod 2775 "$APP" "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
 
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
