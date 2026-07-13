@@ -54,6 +54,9 @@ Status: Premium cockpit mockup revised; design still in progress
 - Replaced the detached report drill-down with inline brief expansion. Each barometer row now exposes `Open brief`, which unfolds the article/report and source bibliography directly under that signal.
 - Removed the `Role-aware navigation model` route explainer from the cockpit mockup. Route architecture remains a planning/spec concern; the user-facing cockpit now demonstrates role-aware navigation through behavior instead of explanatory cards.
 - Recorded the 2026-07-01 design checkpoint at `docs/planning/CI-OS-dashboard-design-checkpoint-2026-07-01.md`.
+- 2026-07-10: Added the Market timeline and Semantic layer contract after live critique that a "today only" priority read was not a competitive intelligence operating system.
+- 2026-07-10: Market timeline now requires history calendar, report-history selector, Today/Yesterday/Last 7 days/Last 30 days windows, holistic daily coverage, and "Why this priority" rationale.
+- 2026-07-10: Semantic layer now requires a full watched-universe partner selector, cross-partner pattern map, heat map, market direction, Argus recommendation, confidence rubric, quality gate, and public-source boundary.
 
 ## Notes
 

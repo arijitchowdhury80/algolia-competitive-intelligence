@@ -386,6 +386,146 @@ The database is the product memory. Reports, dashboard state, Telegram delivery,
 - `created_at`
 - `updated_at`
 
+### Product-Market Intelligence
+
+This group is the missing muscle and demand layer behind Argus. The older
+daily scan layer captures what competitors say. These tables capture what
+competitors and the tenant actually ship, how those shipped capabilities map
+into a comparable feature taxonomy, and whether the tenant's audience is
+responding.
+
+`product_surfaces`
+
+- `id`
+- `tenant_id`
+- `competitor_id`
+- `company_name`
+- `company_role`: own, competitor, partner
+- `surface_family`: changelog, docs, release_notes, product_page, pricing, api_docs, integration, other
+- `url`
+- `normalized_url`
+- `title`
+- `status`: active, candidate, paused, retired, failed
+- `last_checked_at`
+- `metadata`
+- `created_at`
+- `updated_at`
+
+`feature_capabilities`
+
+- `id`
+- `tenant_id`
+- `canonical_name`
+- `taxonomy_path`
+- `description`
+- `status`: active, candidate, retired
+- `created_at`
+- `updated_at`
+
+`product_change_events`
+
+- `id`
+- `tenant_id`
+- `product_surface_id`
+- `competitor_id`
+- `feature_capability_id`
+- `company_name`
+- `company_role`
+- `capability_text`
+- `change_type`: release, docs_update, pricing_change, integration, deprecation
+- `summary`
+- `observed_at`
+- `evidence_refs`
+- `confidence`
+- `metadata`
+- `created_at`
+
+`company_feature_positions`
+
+- `id`
+- `tenant_id`
+- `feature_capability_id`
+- `competitor_id`
+- `company_name`
+- `company_role`
+- `position_status`: unknown, proven, claimed, gap, disproven
+- `summary`
+- `last_seen_at`
+- `evidence_refs`
+- `confidence`
+- `updated_at`
+
+`feature_evidence_links`
+
+- `id`
+- `tenant_id`
+- `feature_capability_id`
+- `product_change_event_id`
+- `raw_finding_id`
+- `source_url`
+- `captured_at`
+- `method`
+- `evidence_text`
+- `metadata`
+
+`conversation_themes`
+
+- `id`
+- `tenant_id`
+- `competitor_id`
+- `company_name`
+- `theme`
+- `summary`
+- `intensity`
+- `observed_at`
+- `evidence_refs`
+- `metadata`
+- `created_at`
+
+`demand_signals`
+
+- `id`
+- `tenant_id`
+- `topic`
+- `metric`
+- `value`
+- `change_pct`
+- `period_start`
+- `period_end`
+- `source_label`
+- `evidence_refs`
+- `metadata`
+- `created_at`
+
+`pattern_observations`
+
+- `id`
+- `tenant_id`
+- `pattern_type`: own_narrative_gap, own_product_gap, product_without_market_conversation, conversation_without_product_proof, competitive_pressure
+- `capability_text`
+- `summary`
+- `involved_companies`
+- `confidence`
+- `evidence_refs`
+- `created_at`
+
+`argus_recommendations`
+
+- `id`
+- `tenant_id`
+- `pattern_observation_id`
+- `owner`: PMM, Product, Sales, Content, Executive
+- `action`
+- `why_now`
+- `urgency`: act_now, this_week, this_month
+- `confidence`
+- `scorecard`: backend rubric with `total_score`, `verdict`, `summary`, and
+  `dimension_scores`
+- `evidence_refs`
+- `status`: open, accepted, dismissed, done
+- `created_at`
+- `updated_at`
+
 ### Semantic Layer
 
 `semantic_facts`
@@ -497,7 +637,9 @@ The database is the product memory. Reports, dashboard state, Telegram delivery,
 
 - `id`
 - `run_id`
-- `event_type`
+- `event_type`: fetch_failure, extraction_miss, quality_verdict,
+  user_feedback, false_negative, delivery_outcome,
+  recommendation_challenge
 - `lesson`
 - `proposed_change`
 - `status`
@@ -548,6 +690,11 @@ The database is the product memory. Reports, dashboard state, Telegram delivery,
 - No action owner without an `action_items` row.
 - No "market quiet" without coverage score and false-negative audit status.
 - No content recommendation without source observations or content traction signals.
+- No product change event without product/docs/changelog evidence.
+- No conversation theme without public-source evidence.
+- No demand signal without GA/Looker/export evidence.
+- No pattern observation without product, conversation, or demand evidence refs.
+- No Argus recommendation without evidence refs.
 - No delivery claim without a `bot_deliveries` row.
 - No model escalation without run metadata.
 - No channel request may access data before identity resolution and ACL evaluation.
