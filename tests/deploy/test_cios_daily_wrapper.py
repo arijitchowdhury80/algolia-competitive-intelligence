@@ -54,6 +54,59 @@ def _run_wrapper(
     )
 
 
+def test_hermes_wrapper_hands_off_to_app_user_runner_when_enabled(tmp_path):
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        """#!/bin/sh
+echo "daily body should not run before app-user handoff" >&2
+exit 99
+""",
+    )
+    queue = app / "run-queue"
+    watcher = subprocess.Popen(
+        [
+            "sh",
+            "-c",
+            (
+                "set -eu; "
+                f"queue={queue}; "
+                "while :; do "
+                'for request in "$queue"/*.request; do '
+                '[ -e "$request" ] || continue; '
+                'base="${request%.request}"; '
+                'printf "runner log\\n" > "$base.log"; '
+                'printf "17\\n" > "$base.result"; '
+                "exit 0; "
+                "done; "
+                "sleep 1; "
+                "done"
+            ),
+        ],
+        text=True,
+    )
+    try:
+        result = _run_wrapper(
+            app,
+            public,
+            env_file,
+            {
+                "CIOS_RUNNER_HANDOFF": "1",
+                "CIOS_RUNNER_QUEUE_DIR": str(queue),
+                "CIOS_RUNNER_WAIT_SECONDS": "8",
+            },
+        )
+    finally:
+        watcher.terminate()
+        watcher.wait(timeout=5)
+
+    assert result.returncode == 17
+    assert result.stdout == "runner log\n"
+    assert "queued CI-OS runner handoff request" in result.stderr
+    assert "daily body should not run" not in result.stderr
+    assert list(queue.glob("*.request"))
+    assert list(queue.glob("*.result"))
+
+
 def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_same_run_artifacts(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,

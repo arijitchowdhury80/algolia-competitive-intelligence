@@ -19,6 +19,9 @@ from pathlib import Path
 REQUIRED_PATHS = [
     "deploy/cios-admin.service",
     "deploy/cios-daily.sh",
+    "deploy/cios-host-runner.sh",
+    "deploy/cios-runner.service",
+    "deploy/cios-runner.path",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
     "scripts/run_product_market_intelligence.py",
@@ -90,10 +93,39 @@ WRAPPER_INVARIANTS = {
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
     "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
+    "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
+    "wrapper missing app-user runner request queue": ".request",
+    "wrapper missing app-user runner result wait": ".result",
+    "wrapper missing handoff bypass for app-user execution": "CIOS_DISABLE_RUNNER_HANDOFF",
     "wrapper missing marked-output cleanup": ".cios-output-dir",
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
+}
+
+HOST_RUNNER_INVARIANTS = {
+    "host runner missing handoff bypass": "CIOS_DISABLE_RUNNER_HANDOFF=1",
+    "host runner missing app directory handoff": 'CIOS_APP_DIR="$APP"',
+    "host runner missing public directory handoff": 'CIOS_PUBLIC_DIR="$PUB"',
+    "host runner missing request glob": "*.request",
+    "host runner missing result artifact": ".result",
+    "host runner missing log artifact": ".log",
+    "host runner missing cios daily wrapper call": "deploy/cios-daily.sh",
+}
+
+RUNNER_SERVICE_INVARIANTS = {
+    "runner service must run as cios user": "User=cios",
+    "runner service must run as cios group": "Group=cios",
+    "runner service must include hermes supplementary group": "SupplementaryGroups=hermes",
+    "runner service must use CI-OS app working directory": "WorkingDirectory=/root/.hermes/apps/cios",
+    "runner service must call host runner": "ExecStart=/root/.hermes/apps/cios/deploy/cios-host-runner.sh",
+    "runner service must keep no-new-privileges enabled": "NoNewPrivileges=true",
+    "runner service must keep group-writable artifacts": "UMask=0007",
+}
+
+RUNNER_PATH_INVARIANTS = {
+    "runner path must watch request files": "PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request",
+    "runner path must trigger runner service": "Unit=cios-runner.service",
 }
 
 ADMIN_SERVICE_INVARIANTS = {
@@ -200,6 +232,30 @@ def collect_wrapper_errors(app_dir: Path) -> list[str]:
         return []
     text = wrapper_path.read_text(encoding="utf-8")
     return [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+
+
+def collect_host_runner_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-host-runner.sh",
+        invariants=HOST_RUNNER_INVARIANTS,
+    )
+
+
+def collect_runner_service_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-runner.service",
+        invariants=RUNNER_SERVICE_INVARIANTS,
+    )
+
+
+def collect_runner_path_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-runner.path",
+        invariants=RUNNER_PATH_INVARIANTS,
+    )
 
 
 def collect_admin_service_errors(app_dir: Path) -> list[str]:
@@ -390,6 +446,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         errors.extend(collect_path_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
+        errors.extend(collect_host_runner_errors(app_dir))
+        errors.extend(collect_runner_service_errors(app_dir))
+        errors.extend(collect_runner_path_errors(app_dir))
         errors.extend(collect_admin_service_errors(app_dir))
         errors.extend(collect_manual_demand_fast_lane_errors(app_dir))
         errors.extend(collect_admin_refresh_errors(app_dir))

@@ -13,6 +13,9 @@ SCRIPT = ROOT / "scripts" / "verify_hermes_package_contract.py"
 
 REQUIRED_FILES = [
     "deploy/cios-daily.sh",
+    "deploy/cios-host-runner.sh",
+    "deploy/cios-runner.service",
+    "deploy/cios-runner.path",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
     "scripts/run_product_market_intelligence.py",
@@ -86,6 +89,7 @@ SAFE_WRAPPER = """#!/bin/sh
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
+case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP"
@@ -110,6 +114,44 @@ if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
 fi
 STAGE="$PUB/.argus-publish.$$"
 mkdir -p "$STAGE"
+"""
+
+
+SAFE_HOST_RUNNER = """#!/bin/sh
+APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
+PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+QUEUE="$APP/run-queue"
+for request in "$QUEUE"/*.request; do
+  base="${request%.request}"
+  log="$base.log"
+  result="$base.result"
+  CIOS_DISABLE_RUNNER_HANDOFF=1 CIOS_APP_DIR="$APP" CIOS_PUBLIC_DIR="$PUB" "$APP/deploy/cios-daily.sh" > "$log" 2>&1
+  printf "%s\\n" "$?" > "$result"
+done
+"""
+
+
+SAFE_RUNNER_SERVICE = """[Unit]
+Description=CI-OS app-user daily runner
+
+[Service]
+Type=oneshot
+User=cios
+Group=cios
+SupplementaryGroups=hermes
+WorkingDirectory=/root/.hermes/apps/cios
+ExecStart=/root/.hermes/apps/cios/deploy/cios-host-runner.sh
+NoNewPrivileges=true
+UMask=0007
+"""
+
+
+SAFE_RUNNER_PATH = """[Unit]
+Description=Watch for CI-OS app-user runner requests
+
+[Path]
+PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request
+Unit=cios-runner.service
 """
 
 
@@ -258,6 +300,9 @@ def _make_app(
     include_product_surface_repair_admin: bool = True,
     include_admin_service: bool = True,
     admin_service: str = SAFE_ADMIN_SERVICE,
+    host_runner: str = SAFE_HOST_RUNNER,
+    runner_service: str = SAFE_RUNNER_SERVICE,
+    runner_path: str = SAFE_RUNNER_PATH,
     demand_fast_lane: str = SAFE_DEMAND_FAST_LANE,
     admin_dashboard_refresh: str = SAFE_ADMIN_DASHBOARD_REFRESH,
     operator_handoff_builder: str = SAFE_OPERATOR_HANDOFF_BUILDER,
@@ -346,6 +391,12 @@ def _make_app(
             content = product_muscle_work_queue_admin
         elif rel == "src/cios/admin/app.py":
             content = admin_app
+        elif rel == "deploy/cios-host-runner.sh":
+            content = host_runner
+        elif rel == "deploy/cios-runner.service":
+            content = runner_service
+        elif rel == "deploy/cios-runner.path":
+            content = runner_path
         path.write_text(content, encoding="utf-8")
     for rel in REQUIRED_DIRS:
         if rel == "src/cios/intelligence" and not include_intelligence:
@@ -953,6 +1004,55 @@ def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
 
     assert result.returncode == 2
     assert "wrapper missing daily-run timeout guard" in result.stderr
+
+
+def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):
+    app = _make_app(
+        tmp_path,
+        wrapper=SAFE_WRAPPER.replace("CIOS_RUNNER_HANDOFF", "CIOS_RUNNER_DISABLED"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing app-user runner handoff switch" in result.stderr
+
+
+def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_runner=SAFE_HOST_RUNNER.replace("CIOS_DISABLE_RUNNER_HANDOFF=1", "CIOS_DISABLE_RUNNER_HANDOFF=0"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host runner missing handoff bypass" in result.stderr
+
+
+def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_service=SAFE_RUNNER_SERVICE.replace("User=cios\nGroup=cios\n", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner service must run as cios user" in result.stderr
+    assert "runner service must run as cios group" in result.stderr
+
+
+def test_preflight_fails_when_runner_path_does_not_watch_requests(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_path=SAFE_RUNNER_PATH.replace("*.request", "*.ignored"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner path must watch request files" in result.stderr
 
 
 def test_preflight_fails_when_admin_service_runs_as_root(tmp_path):

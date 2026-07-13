@@ -33,6 +33,73 @@ else
 fi
 set +a
 
+handoff_to_cios_runner_if_requested() {
+  case "$(printf '%s' "${CIOS_RUNNER_HANDOFF:-0}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) ;;
+    *) return 0 ;;
+  esac
+  if [ "${CIOS_DISABLE_RUNNER_HANDOFF:-0}" = "1" ]; then
+    return 0
+  fi
+
+  app_user="${CIOS_APP_USER:-cios}"
+  current_user="$(id -un 2>/dev/null || printf unknown)"
+  if [ "$current_user" = "$app_user" ]; then
+    return 0
+  fi
+
+  queue_dir="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
+  wait_seconds="${CIOS_RUNNER_WAIT_SECONDS:-1200}"
+  case "$wait_seconds" in
+    ''|*[!0-9]*)
+      echo "invalid CIOS_RUNNER_WAIT_SECONDS: $wait_seconds" >&2
+      exit 2
+      ;;
+  esac
+
+  mkdir -p "$queue_dir"
+  chmod 2775 "$queue_dir" 2>/dev/null || true
+  request_id="$(date -u +"%Y%m%dT%H%M%SZ")-$$"
+  request="$queue_dir/$request_id.request"
+  result="$queue_dir/$request_id.result"
+  log="$queue_dir/$request_id.log"
+  {
+    printf 'request_id=%s\n' "$request_id"
+    printf 'requested_at=%s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    printf 'requested_by=%s\n' "$current_user"
+    printf 'app_user=%s\n' "$app_user"
+    printf 'app_dir=%s\n' "$APP"
+    printf 'public_dir=%s\n' "$PUB"
+  } > "$request.tmp"
+  mv "$request.tmp" "$request"
+  echo "queued CI-OS runner handoff request: $request_id" >&2
+
+  elapsed=0
+  while [ ! -f "$result" ]; do
+    if [ "$elapsed" -ge "$wait_seconds" ]; then
+      echo "CI-OS runner handoff timed out after ${wait_seconds}s: $request_id" >&2
+      if [ -f "$log" ]; then
+        tail -120 "$log" >&2 || true
+      fi
+      exit 124
+    fi
+    sleep 2
+    elapsed=$((elapsed + 2))
+  done
+
+  if [ -f "$log" ]; then
+    cat "$log"
+  fi
+  code="$(head -n 1 "$result" | tr -cd '0-9' || true)"
+  if [ -z "$code" ]; then
+    echo "invalid CI-OS runner result for request: $request_id" >&2
+    exit 2
+  fi
+  exit "$code"
+}
+
+handoff_to_cios_runner_if_requested
+
 OUT="${CIOS_OUTPUT_DIR:-$APP/out}"
 if [ -z "$OUT" ] || [ "$OUT" = "/" ]; then
   echo "unsafe CIOS output directory: $OUT" >&2
