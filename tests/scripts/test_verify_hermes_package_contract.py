@@ -13,6 +13,7 @@ SCRIPT = ROOT / "scripts" / "verify_hermes_package_contract.py"
 
 REQUIRED_FILES = [
     "deploy/cios-daily.sh",
+    "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
@@ -128,6 +129,21 @@ for request in "$QUEUE"/*.request; do
   CIOS_DISABLE_RUNNER_HANDOFF=1 CIOS_APP_DIR="$APP" CIOS_PUBLIC_DIR="$PUB" "$APP/deploy/cios-daily.sh" > "$log" 2>&1
   printf "%s\\n" "$?" > "$result"
 done
+"""
+
+
+SAFE_HOST_PERMISSIONS = """#!/bin/sh
+APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
+PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
+ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
+APP_USER="${CIOS_APP_USER:-cios}"
+HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
+useradd --system --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
+usermod -aG "$HERMES_GROUP" "$APP_USER"
+chmod 711 /root/.hermes /root/.hermes/apps
+chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
+chmod 2775 "$APP" "$APP/run-queue"
+chmod 640 "$ENV_FILE"
 """
 
 
@@ -301,6 +317,7 @@ def _make_app(
     include_admin_service: bool = True,
     admin_service: str = SAFE_ADMIN_SERVICE,
     host_runner: str = SAFE_HOST_RUNNER,
+    host_permissions: str = SAFE_HOST_PERMISSIONS,
     runner_service: str = SAFE_RUNNER_SERVICE,
     runner_path: str = SAFE_RUNNER_PATH,
     demand_fast_lane: str = SAFE_DEMAND_FAST_LANE,
@@ -393,6 +410,8 @@ def _make_app(
             content = admin_app
         elif rel == "deploy/cios-host-runner.sh":
             content = host_runner
+        elif rel == "deploy/cios-host-permissions.sh":
+            content = host_permissions
         elif rel == "deploy/cios-runner.service":
             content = runner_service
         elif rel == "deploy/cios-runner.path":
@@ -1028,6 +1047,18 @@ def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp
 
     assert result.returncode == 2
     assert "host runner missing handoff bypass" in result.stderr
+
+
+def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace("chmod 711 /root/.hermes /root/.hermes/apps", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must preserve execute-only Hermes traversal" in result.stderr
 
 
 def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):

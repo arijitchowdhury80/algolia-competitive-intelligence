@@ -19,6 +19,7 @@ from pathlib import Path
 REQUIRED_PATHS = [
     "deploy/cios-admin.service",
     "deploy/cios-daily.sh",
+    "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
@@ -111,6 +112,15 @@ HOST_RUNNER_INVARIANTS = {
     "host runner missing result artifact": ".result",
     "host runner missing log artifact": ".log",
     "host runner missing cios daily wrapper call": "deploy/cios-daily.sh",
+}
+
+HOST_PERMISSIONS_INVARIANTS = {
+    "host permissions must create CI-OS app user": "useradd --system",
+    "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
+    "host permissions must preserve execute-only Hermes traversal": "chmod 711 /root/.hermes /root/.hermes/apps",
+    "host permissions must chown app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"',
+    "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
+    "host permissions must protect CI-OS env file": 'chmod 640 "$ENV_FILE"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
@@ -239,6 +249,14 @@ def collect_host_runner_errors(app_dir: Path) -> list[str]:
         app_dir,
         rel_path="deploy/cios-host-runner.sh",
         invariants=HOST_RUNNER_INVARIANTS,
+    )
+
+
+def collect_host_permissions_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-host-permissions.sh",
+        invariants=HOST_PERMISSIONS_INVARIANTS,
     )
 
 
@@ -447,6 +465,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_path_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
+        errors.extend(collect_host_permissions_errors(app_dir))
         errors.extend(collect_runner_service_errors(app_dir))
         errors.extend(collect_runner_path_errors(app_dir))
         errors.extend(collect_admin_service_errors(app_dir))
