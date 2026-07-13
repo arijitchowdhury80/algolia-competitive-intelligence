@@ -4,4 +4,11 @@ __pycache__/
 .env
 .env.*
 .DS_Store
+._*
+.pytest_cache/
 .claude/worktrees/
+
+# Generated local verification/runtime artifacts. Preserve when needed as
+# evidence, but do not mix into source commits.
+out/
+product_market_summary
