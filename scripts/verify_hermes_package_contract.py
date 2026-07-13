@@ -101,8 +101,8 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must bind to 127.0.0.1 only": "--host 127.0.0.1",
     "admin service must load /root/.hermes/cios-env": "--env-file /root/.hermes/cios-env",
     "admin service must use the expected local admin port": "--port 8765",
-    "admin service must run as hermes user": "User=hermes",
-    "admin service must run as hermes group": "Group=hermes",
+    "admin service must run as cios user": "User=cios",
+    "admin service must run as cios group": "Group=cios",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "admin service must read Hermes product-market artifacts": "PrivateTmp=false",
 }

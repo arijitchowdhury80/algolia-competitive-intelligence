@@ -69,8 +69,8 @@ After=network.target
 Type=simple
 WorkingDirectory=/root/.hermes/apps/cios
 Environment=CIOS_APP_DIR=/root/.hermes/apps/cios
-User=hermes
-Group=hermes
+User=cios
+Group=cios
 ExecStart=/root/.hermes/apps/cios/.venv/bin/python /root/.hermes/apps/cios/scripts/run_admin.py --env-file /root/.hermes/cios-env --host 127.0.0.1 --port 8765
 Restart=on-failure
 RestartSec=5
@@ -958,14 +958,14 @@ def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
 def test_preflight_fails_when_admin_service_runs_as_root(tmp_path):
     app = _make_app(
         tmp_path,
-        admin_service=SAFE_ADMIN_SERVICE.replace("User=hermes\nGroup=hermes\n", ""),
+        admin_service=SAFE_ADMIN_SERVICE.replace("User=cios\nGroup=cios\n", ""),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "admin service must run as hermes user" in result.stderr
-    assert "admin service must run as hermes group" in result.stderr
+    assert "admin service must run as cios user" in result.stderr
+    assert "admin service must run as cios group" in result.stderr
 
 
 def test_preflight_can_require_scout_binary_for_product_market_runs(tmp_path):
