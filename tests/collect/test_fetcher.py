@@ -85,3 +85,42 @@ def test_probe_fetcher_adapter_reports_reachable_false_on_error():
     result = probe.fetch("https://example.com/blog")
 
     assert result.reachable is False
+
+
+def test_probe_fetcher_adapter_rejects_empty_success_response_as_not_sweepable():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(202, text="")
+
+    content_fetcher = HttpContentFetcher(transport=transport(handler), retries=0)
+    probe = ProbeFetcherAdapter(content_fetcher)
+
+    result = probe.fetch("https://example.com/docs")
+
+    assert result.reachable is False
+    assert result.http_status == 202
+    assert result.error == "empty"
+
+
+def test_fetch_content_classifies_aws_waf_challenge_as_blocked_not_empty_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        html = """
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <script src="https://token.awswaf.com/challenge.js"></script>
+          </head>
+          <body>
+            <div id="challenge-container"></div>
+            <noscript>In order to continue, we need to verify that you're not a robot.</noscript>
+          </body>
+        </html>
+        """
+        return httpx.Response(202, text=html)
+
+    fetcher = HttpContentFetcher(transport=transport(handler), retries=0)
+    result = fetcher.fetch_content("https://example.com/protected")
+
+    assert result.status == FetchStatus.ERROR
+    assert result.http_status == 202
+    assert result.error == "blocked_by_waf:aws_waf_challenge"
+    assert "token.awswaf.com" in result.raw_html

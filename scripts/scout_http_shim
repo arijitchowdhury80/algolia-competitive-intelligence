@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+app_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+
+exec "$app_dir/.venv/bin/python" "$script_dir/scout_http_shim.py" "$@"

@@ -30,6 +30,7 @@ DEFAULT_TIMEOUT_S = 25.0
 DEFAULT_RETRIES = 2
 MAX_BODY_BYTES = 1_500_000
 MAX_TEXT_CHARS = 120_000
+BLOCKED_BY_WAF_ERROR = "blocked_by_waf:aws_waf_challenge"
 
 
 class _TextExtractor(HTMLParser):
@@ -118,6 +119,16 @@ class HttpContentFetcher:
             raw = response.content[:MAX_BODY_BYTES]
             charset = response.encoding or "utf-8"
             body = raw.decode(charset, errors="replace")
+            if self._is_aws_waf_challenge(body):
+                return ContentFetchResult(
+                    status=FetchStatus.ERROR,
+                    http_status=response.status_code,
+                    text="",
+                    raw_html=body,
+                    error=BLOCKED_BY_WAF_ERROR,
+                    collector="direct_http",
+                    duration_ms=int((time.time() - started) * 1000),
+                )
             text = self._extract_text(body)
             return ContentFetchResult(
                 status=FetchStatus.OK,
@@ -137,6 +148,15 @@ class HttpContentFetcher:
             return parser.text()
         return normalize_text(body)
 
+    @staticmethod
+    def _is_aws_waf_challenge(body: str) -> bool:
+        lowered = body[:10000].lower()
+        return (
+            "token.awswaf.com" in lowered
+            or "awswaf" in lowered and "challenge-container" in lowered
+            or "verify that you're not a robot" in lowered
+        )
+
 
 class ProbeFetcherAdapter:
     """Adapts an HttpContentFetcher to cios.hunter.validator.Fetcher (a
@@ -151,4 +171,6 @@ class ProbeFetcherAdapter:
         result = self._content_fetcher.fetch_content(url)
         if result.status != FetchStatus.OK:
             return ProbeFetchResult(reachable=False, http_status=result.http_status, error=result.error or "fetch_error")
+        if not result.text.strip():
+            return ProbeFetchResult(reachable=False, http_status=result.http_status, error="empty")
         return ProbeFetchResult(reachable=True, http_status=result.http_status)
