@@ -17,6 +17,7 @@ REQUIRED_FILES = [
     "deploy/cios-host-runner.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
     "scripts/run_product_market_intelligence.py",
@@ -139,10 +140,13 @@ PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
+SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"
 HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
 useradd --system --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$APP_USER"
+usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
+setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps
 chmod 711 /root/.hermes /root/.hermes/apps
 chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
 chmod 2775 "$APP" "$APP/run-queue"
@@ -174,6 +178,25 @@ Description=Watch for CI-OS app-user runner requests
 [Path]
 PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request
 Unit=cios-runner.service
+"""
+
+
+SAFE_CLAUDE_SHIM_SERVICE = """[Unit]
+Description=CI-OS Claude CLI shim (localhost-only)
+After=network.target
+
+[Service]
+Type=simple
+User=cios-shim
+Group=cios-shim
+SupplementaryGroups=hermes
+WorkingDirectory=/opt/cios/claude-shim
+EnvironmentFile=/etc/cios-claude-shim.env
+ExecStart=/opt/cios/claude-shim/.venv/bin/uvicorn shim:app --host 127.0.0.1 --port 8663
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
 """
 
 
@@ -326,6 +349,7 @@ def _make_app(
     host_permissions: str = SAFE_HOST_PERMISSIONS,
     runner_service: str = SAFE_RUNNER_SERVICE,
     runner_path: str = SAFE_RUNNER_PATH,
+    claude_shim_service: str = SAFE_CLAUDE_SHIM_SERVICE,
     demand_fast_lane: str = SAFE_DEMAND_FAST_LANE,
     admin_dashboard_refresh: str = SAFE_ADMIN_DASHBOARD_REFRESH,
     operator_handoff_builder: str = SAFE_OPERATOR_HANDOFF_BUILDER,
@@ -422,6 +446,8 @@ def _make_app(
             content = runner_service
         elif rel == "deploy/cios-runner.path":
             content = runner_path
+        elif rel == "deploy/claude-shim/cios-claude-shim.service":
+            content = claude_shim_service
         path.write_text(content, encoding="utf-8")
     for rel in REQUIRED_DIRS:
         if rel == "src/cios/intelligence" and not include_intelligence:
@@ -1067,6 +1093,18 @@ def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_p
     assert "host permissions must prefer ACL traversal for cios" in result.stderr
 
 
+def test_preflight_fails_when_host_permissions_do_not_grant_shim_acl_traversal(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps', ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must grant shim ACL traversal when present" in result.stderr
+
+
 def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal_fallback(tmp_path):
     app = _make_app(
         tmp_path,
@@ -1114,6 +1152,18 @@ def test_preflight_fails_when_runner_path_does_not_watch_requests(tmp_path):
 
     assert result.returncode == 2
     assert "runner path must watch request files" in result.stderr
+
+
+def test_preflight_fails_when_claude_shim_service_lacks_hermes_group(tmp_path):
+    app = _make_app(
+        tmp_path,
+        claude_shim_service=SAFE_CLAUDE_SHIM_SERVICE.replace("SupplementaryGroups=hermes\n", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "claude shim service must include hermes supplementary group" in result.stderr
 
 
 def test_preflight_fails_when_admin_service_runs_as_root(tmp_path):

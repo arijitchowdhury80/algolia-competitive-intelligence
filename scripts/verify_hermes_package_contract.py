@@ -23,6 +23,7 @@ REQUIRED_PATHS = [
     "deploy/cios-host-runner.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
     "scripts/run_product_market_intelligence.py",
@@ -119,7 +120,9 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must create CI-OS app user": "useradd --system",
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
     "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
+    "host permissions must know CI-OS shim user": 'SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"',
     "host permissions must prefer ACL traversal for cios": 'setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps',
+    "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must preserve execute-only Hermes traversal fallback": "chmod 711 /root/.hermes /root/.hermes/apps",
     "host permissions must chown app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"',
     "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
@@ -142,6 +145,15 @@ RUNNER_SERVICE_INVARIANTS = {
 RUNNER_PATH_INVARIANTS = {
     "runner path must watch request files": "PathExistsGlob=/root/.hermes/apps/cios/run-queue/*.request",
     "runner path must trigger runner service": "Unit=cios-runner.service",
+}
+
+CLAUDE_SHIM_SERVICE_INVARIANTS = {
+    "claude shim service must run as cios-shim user": "User=cios-shim",
+    "claude shim service must run as cios-shim group": "Group=cios-shim",
+    "claude shim service must include hermes supplementary group": "SupplementaryGroups=hermes",
+    "claude shim service must bind localhost only": "--host 127.0.0.1",
+    "claude shim service must use expected local port": "--port 8663",
+    "claude shim service must keep no-new-privileges enabled": "NoNewPrivileges=true",
 }
 
 ADMIN_SERVICE_INVARIANTS = {
@@ -279,6 +291,14 @@ def collect_runner_path_errors(app_dir: Path) -> list[str]:
         app_dir,
         rel_path="deploy/cios-runner.path",
         invariants=RUNNER_PATH_INVARIANTS,
+    )
+
+
+def collect_claude_shim_service_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/claude-shim/cios-claude-shim.service",
+        invariants=CLAUDE_SHIM_SERVICE_INVARIANTS,
     )
 
 
@@ -474,6 +494,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_host_permissions_errors(app_dir))
         errors.extend(collect_runner_service_errors(app_dir))
         errors.extend(collect_runner_path_errors(app_dir))
+        errors.extend(collect_claude_shim_service_errors(app_dir))
         errors.extend(collect_admin_service_errors(app_dir))
         errors.extend(collect_manual_demand_fast_lane_errors(app_dir))
         errors.extend(collect_admin_refresh_errors(app_dir))

@@ -8,6 +8,7 @@ ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
 APP_GROUP="${CIOS_APP_GROUP:-cios}"
 HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
+SHIM_USER="${CIOS_SHIM_USER:-cios-shim}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "cios-host-permissions.sh must run as root" >&2
@@ -24,12 +25,18 @@ if ! getent group "$HERMES_GROUP" >/dev/null 2>&1; then
 fi
 
 usermod -aG "$HERMES_GROUP" "$APP_USER"
+if id "$SHIM_USER" >/dev/null 2>&1; then
+  usermod -aG "$HERMES_GROUP" "$SHIM_USER"
+fi
 
 # CI-OS is hosted under the Hermes home as an extension. The app user needs
 # execute-only traversal through the parent directories, not read/list access.
 # Prefer ACLs so Hermes can keep its home directory mode at 700.
 if command -v setfacl >/dev/null 2>&1; then
   setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
+  if id "$SHIM_USER" >/dev/null 2>&1; then
+    setfacl -m "u:$SHIM_USER:--x" /root/.hermes /root/.hermes/apps
+  fi
 else
   chmod 711 /root/.hermes /root/.hermes/apps
 fi

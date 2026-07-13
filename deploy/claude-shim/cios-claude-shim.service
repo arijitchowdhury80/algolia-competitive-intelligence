@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=cios-shim
 Group=cios-shim
+SupplementaryGroups=hermes
 WorkingDirectory=/opt/cios/claude-shim
 EnvironmentFile=/etc/cios-claude-shim.env
 # Bind 127.0.0.1 ONLY. Never 0.0.0.0 / public.
