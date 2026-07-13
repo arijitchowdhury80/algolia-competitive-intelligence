@@ -41,6 +41,7 @@ class ClaudeCliShimProvider(ModelProvider):
         base_url: Optional[str] = None,
         client: Optional[httpx.AsyncClient] = None,
         timeout_s: float = 60.0,
+        max_attempts: Optional[int] = None,
         backoff_base: float = 0.5,
         sleep_fn: Optional[Callable[[float], Any]] = None,
     ) -> None:
@@ -50,6 +51,7 @@ class ClaudeCliShimProvider(ModelProvider):
         )
         self._client = client or httpx.AsyncClient(timeout=timeout_s)
         self.timeout_s = timeout_s
+        self.max_attempts = max_attempts or int(os.environ.get("CIOS_CLAUDE_MAX_ATTEMPTS", MAX_ATTEMPTS))
         self.backoff_base = backoff_base
         self._sleep_fn = sleep_fn or asyncio.sleep
 
@@ -59,7 +61,7 @@ class ClaudeCliShimProvider(ModelProvider):
 
     async def _post_with_retry(self, path: str, payload: dict[str, Any]) -> httpx.Response:
         last_exc: Optional[Exception] = None
-        for attempt in range(1, MAX_ATTEMPTS + 1):
+        for attempt in range(1, self.max_attempts + 1):
             try:
                 resp = await self._client.post(f"{self.base_url}{path}", json=payload)
             except httpx.HTTPError as exc:
@@ -72,7 +74,7 @@ class ClaudeCliShimProvider(ModelProvider):
             last_exc = last_exc or RuntimeError(
                 f"retryable status {resp.status_code if resp is not None else '?'}"
             )
-            if attempt < MAX_ATTEMPTS:
+            if attempt < self.max_attempts:
                 await self._sleep_fn(self.backoff_base * (2 ** (attempt - 1)))
 
         assert last_exc is not None

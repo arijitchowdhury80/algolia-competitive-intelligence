@@ -233,6 +233,23 @@ async def test_claude_cli_exhausts_retries_and_raises():
 
 
 @pytest.mark.asyncio
+async def test_claude_cli_can_disable_retries_for_cron_bounded_runs():
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.post = AsyncMock(return_value=_resp(503, {}))
+
+    async def fake_sleep(seconds: float) -> None:
+        raise AssertionError("bounded runs must not back off and retry")
+
+    provider = ClaudeCliShimProvider(client=mock_client, sleep_fn=fake_sleep, max_attempts=1)
+    req = ModelRequest(task_profile="synth", prompt="hi")
+
+    with pytest.raises(Exception):
+        await provider.generate(req)
+
+    assert mock_client.post.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_claude_cli_health_check_calls_health_endpoint():
     mock_client = AsyncMock(spec=httpx.AsyncClient)
     health_resp = MagicMock()

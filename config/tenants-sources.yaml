@@ -1,9 +1,8 @@
 # Tenant/competitor/source plan for scripts/daily_production_run.py.
 #
-# Same shape and content as scripts/gate7_e2e_rehearsal.py's TENANT_PLAN dict
-# (moved here so the production runner loads it instead of hardcoding it).
-# <= 6 sources per tenant (3 each). Blogs chosen for real reachability and
-# content, matching the Gate 7 rehearsal plan.
+# Seed/default sources only. Runtime source selection comes from the DB
+# competitors/sources registry; this file bootstraps an empty tenant and must
+# not be treated as a cap on the monitored universe.
 
 algolia:
   - name: Elastic
@@ -17,6 +16,42 @@ algolia:
   - name: Coveo
     domain: coveo.com
     url: https://www.coveo.com/blog
+    family: blog
+  - name: Bloomreach
+    domain: bloomreach.com
+    url: https://www.bloomreach.com/en/blog
+    family: blog
+  - name: Athos Commerce
+    domain: athoscommerce.com
+    url: https://athoscommerce.com/blog/
+    family: blog
+  - name: Athos Commerce
+    domain: athoscommerce.com
+    url: https://athoscommerce.com/news/
+    family: newsroom
+  - name: Klevu
+    domain: klevu.com
+    url: https://www.klevu.com/blog
+    family: blog
+  - name: Searchspring
+    domain: searchspring.com
+    url: https://searchspring.com/blog
+    family: blog
+  - name: Nosto
+    domain: nosto.com
+    url: https://www.nosto.com/resources/blog/
+    family: blog
+  - name: Yext
+    domain: yext.com
+    url: https://www.yext.com/blog
+    family: blog
+  - name: Doofinder
+    domain: doofinder.com
+    url: https://www.doofinder.com/en/blog
+    family: blog
+  - name: Luigi's Box
+    domain: luigisbox.com
+    url: https://www.luigisbox.com/blog/
     family: blog
 
 spryker:
@@ -75,3 +110,78 @@ own_brand:
     - name: Amplitude Newsroom
       source_type: newsroom
       url: https://amplitude.com/newsroom
+
+# Product-surface seeds for the product-market "muscle" layer. These are
+# default surfaces only; runtime truth lives in the product_surfaces table, and
+# paused/retired DB rows are not reactivated by daily seed refresh.
+product_surfaces:
+  algolia:
+    - name: Algolia
+      role: own
+      family: docs
+      url: https://www.algolia.com/doc/
+    - name: Algolia
+      role: own
+      family: pricing
+      url: https://www.algolia.com/pricing/
+    - name: Algolia
+      role: own
+      family: product_page
+      url: https://www.algolia.com/products/ai-search/
+    - name: Constructor
+      family: docs
+      url: https://docs.constructor.com/
+    - name: Constructor
+      family: product_page
+      url: https://constructor.com/products
+    - name: Elastic
+      family: docs
+      url: https://www.elastic.co/docs
+    - name: Elastic
+      family: pricing
+      url: https://www.elastic.co/pricing
+    - name: Elastic
+      family: product_page
+      url: https://www.elastic.co/elasticsearch
+    - name: Coveo
+      family: docs
+      url: https://docs.coveo.com/en/
+    - name: Coveo
+      family: pricing
+      url: https://www.coveo.com/en/pricing
+    - name: Coveo
+      family: product_page
+      url: https://www.coveo.com/en/platform
+    - name: Bloomreach
+      family: docs
+      url: https://documentation.bloomreach.com/discovery/
+    - name: Bloomreach
+      family: product_page
+      url: https://www.bloomreach.com/en/products/discovery
+    - name: Klevu
+      family: docs
+      url: https://docs.klevu.com/
+    - name: Nosto
+      family: docs
+      url: https://docs.nosto.com/
+    - name: Nosto
+      family: product_page
+      url: https://www.nosto.com/products/
+    - name: Yext
+      family: docs
+      url: https://hitchhikers.yext.com/docs/
+    - name: Doofinder
+      family: docs
+      url: https://support.doofinder.com/
+    - name: Doofinder
+      family: pricing
+      url: https://www.doofinder.com/en/pricing
+    - name: Luigi's Box
+      family: docs
+      url: https://www.luigisbox.com/documentation/
+    - name: Luigi's Box
+      family: pricing
+      url: https://www.luigisbox.com/pricing/
+    - name: Luigi's Box
+      family: product_page
+      url: https://www.luigisbox.com/features/

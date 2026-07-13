@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import signal
 import time
 from typing import Any, Optional
 
@@ -50,6 +52,7 @@ def _is_auth_failure(text: str) -> bool:
 
 
 async def _run_claude(prompt: str, model_alias: str, timeout_s: int) -> tuple[int, str, str]:
+    prompt = prompt.replace("\x00", "")
     model_id = MODEL_ALIASES.get(model_alias)
     cmd = ["claude", "-p", prompt, "--output-format", "json"]
     if model_id:
@@ -59,15 +62,48 @@ async def _run_claude(prompt: str, model_alias: str, timeout_s: int) -> tuple[in
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
     )
     try:
         stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
+        await _kill_process_group(proc)
         raise HTTPException(status_code=504, detail="claude CLI timed out")
+    except asyncio.CancelledError:
+        await _kill_process_group(proc)
+        raise
 
     return proc.returncode or 0, stdout_b.decode(errors="replace"), stderr_b.decode(errors="replace")
+
+
+async def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
+    pid = getattr(proc, "pid", None)
+    if pid:
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        except Exception:
+            proc.kill()
+    else:
+        proc.kill()
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=5)
+        return
+    except asyncio.TimeoutError:
+        pass
+
+    if pid:
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+        except ProcessLookupError:
+            return
+        except Exception:
+            proc.kill()
+    else:
+        proc.kill()
+    await proc.wait()
 
 
 @app.post("/generate")

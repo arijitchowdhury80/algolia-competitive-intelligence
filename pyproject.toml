@@ -17,9 +17,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ga4 = [
+    "google-analytics-data>=0.18",
+    "google-auth>=2.0",
+]
+e2e = [
+    "playwright>=1.45",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "cios[e2e]",
 ]
 
 [tool.setuptools.packages.find]
