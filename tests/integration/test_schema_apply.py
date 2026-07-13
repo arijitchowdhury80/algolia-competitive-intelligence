@@ -27,7 +27,7 @@ class TestSchemaApply:
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
             )
             (table_count,) = cur.fetchone()
-        assert table_count >= 51, f"expected at least 51 tables, found {table_count}"
+        assert table_count >= 60, f"expected at least 60 tables, found {table_count}"
 
     def test_seed_data_present(self, pg_conn):
         with pg_conn.cursor() as cur:

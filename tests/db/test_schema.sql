@@ -38,8 +38,12 @@ DECLARE
         'source_snapshots','raw_findings','executive_speech_signals','gtm_narrative_signals',
         'social_observations','content_observations','content_traction_signals',
         'content_recommendations','weekly_content_plan','content_plan_reviews','semantic_facts',
+        'product_surfaces','feature_capabilities','product_change_events',
+        'company_feature_positions','feature_evidence_links','conversation_themes',
+        'demand_signals','pattern_observations','argus_recommendations',
         'semantic_deltas','suppressed_diagnostics','claims','claim_observations',
-        'competitor_theses','reports','action_items','quality_reviews','false_negative_audits',
+        'competitor_theses','reports','run_stage_ledgers','run_stage_events',
+        'action_items','quality_reviews','false_negative_audits',
         'learning_events','improvement_queue','bot_deliveries','dashboard_state'
     ];
     missing text[];

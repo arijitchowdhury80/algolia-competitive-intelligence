@@ -40,6 +40,34 @@ _FETCH_RUN_COLUMNS = (
 )
 
 
+def _postgres_safe(value: Any) -> Any:
+    """Remove characters PostgreSQL text/jsonb cannot store.
+
+    HTML extraction occasionally surfaces embedded NUL bytes from binary-ish
+    page payloads. Postgres rejects those in both text and JSON strings, so
+    sanitize at the persistence boundary.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_postgres_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_postgres_safe(item) for item in value)
+    if isinstance(value, dict):
+        return {_postgres_safe(k): _postgres_safe(v) for k, v in value.items()}
+    return value
+
+
+def _safe_fact_evidence_ids(fact: ExtractedFact) -> list[dict[str, Any]]:
+    return _postgres_safe([
+        {
+            "url": fact.evidence_url,
+            "text": fact.evidence_text,
+            "fact_json": fact.fact_json,
+        }
+    ])
+
+
 def _row_to_snapshot(row: dict[str, Any]) -> Snapshot:
     metadata = dict(row["metadata"] or {})
     text = metadata.pop("_text", "")
@@ -93,6 +121,7 @@ class PgSnapshotRepository:
     def save(self, snapshot: Snapshot) -> Snapshot:
         metadata = dict(snapshot.metadata)
         metadata["_text"] = snapshot.text
+        metadata = _postgres_safe(metadata)
         with tenant_context(self._conn, snapshot.tenant_id):
             with self._conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
@@ -112,7 +141,7 @@ class PgSnapshotRepository:
                         "fetch_run_id": snapshot.fetch_run_id,
                         "captured_at": snapshot.captured_at,
                         "content_hash": snapshot.content_hash,
-                        "title": snapshot.title,
+                        "title": _postgres_safe(snapshot.title),
                         "metadata": Json(metadata),
                     },
                 )
@@ -133,13 +162,7 @@ class PgFactRepository:
         self._tenant_id = tenant_id
 
     def save(self, fact: ExtractedFact) -> ExtractedFact:
-        evidence_ids = [
-            {
-                "url": fact.evidence_url,
-                "text": fact.evidence_text,
-                "fact_json": fact.fact_json,
-            }
-        ]
+        evidence_ids = _safe_fact_evidence_ids(fact)
         with tenant_context(self._conn, self._tenant_id):
             with self._conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
@@ -152,8 +175,8 @@ class PgFactRepository:
                     (
                         self._tenant_id,
                         fact.competitor_id,
-                        fact.fact_type,
-                        fact.statement,
+                        _postgres_safe(fact.fact_type),
+                        _postgres_safe(fact.statement),
                         Json(evidence_ids),
                         fact.confidence,
                     ),
@@ -189,14 +212,14 @@ class PgDeltaRepository:
                     (
                         self._tenant_id,
                         delta.competitor_id,
-                        delta.delta_type,
+                        _postgres_safe(delta.delta_type),
                         delta.materiality_score,
-                        delta.what_changed,
-                        delta.why_it_matters,
-                        delta.implication,
-                        delta.recommended_action,
-                        Json(delta.evidence_urls),
-                        delta.quality_status,
+                        _postgres_safe(delta.what_changed),
+                        _postgres_safe(delta.why_it_matters),
+                        _postgres_safe(delta.implication),
+                        _postgres_safe(delta.recommended_action),
+                        Json(_postgres_safe(delta.evidence_urls)),
+                        _postgres_safe(delta.quality_status),
                         delta.confidence,
                     ),
                 )

@@ -4,6 +4,7 @@ How to run:
 
     docker compose -f deploy/docker-compose.yml up -d
     # wait for the healthcheck, then:
+    CIOS_ALLOW_SCHEMA_RESET_FOR_TESTS=1 \
     CIOS_DATABASE_URL=postgresql://cios_dev:dev_local_only_not_secret@127.0.0.1:5433/cios \
         python3 -m pytest -m integration -q
     docker compose -f deploy/docker-compose.yml down -v
@@ -14,6 +15,10 @@ SECURITY, GRANT) requires superuser privileges. Tests that exercise the
 Pg*Repository classes connect as the unprivileged, RLS-bound `cios_app` role
 instead (see the `app_conn` fixture), which is what production code paths
 use.
+
+The schema fixture drops and recreates `public`. It is deliberately guarded by
+`CIOS_ALLOW_SCHEMA_RESET_FOR_TESTS=1` and loopback-host validation so it cannot
+be run accidentally against the production CI-OS database.
 """
 
 from __future__ import annotations
@@ -42,6 +47,16 @@ def _require_dsn() -> str:
         pytest.skip(f"CIOS_DATABASE_URL not set or invalid: {exc}")
 
 
+def _schema_reset_safety_error(dsn: str, env: dict[str, str] | os._Environ[str] = os.environ) -> str | None:
+    if env.get("CIOS_ALLOW_SCHEMA_RESET_FOR_TESTS") != "1":
+        return "integration schema reset requires CIOS_ALLOW_SCHEMA_RESET_FOR_TESTS=1"
+    info = psycopg.conninfo.conninfo_to_dict(dsn)
+    host = info.get("host") or "localhost"
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        return f"integration schema reset requires a loopback database host, got {host!r}"
+    return None
+
+
 @pytest.fixture(scope="session")
 def superuser_dsn() -> str:
     return _require_dsn()
@@ -52,6 +67,9 @@ def _schema_applied(superuser_dsn: str) -> str:
     """Reset the public schema and apply schema.sql + seed.sql once per test
     session, then set a known password on cios_app so tests can connect as
     the RLS-bound app role. Returns the superuser dsn for convenience."""
+    safety_error = _schema_reset_safety_error(superuser_dsn)
+    if safety_error:
+        pytest.skip(safety_error)
     with psycopg.connect(superuser_dsn, autocommit=True) as conn:
         conn.execute("DROP SCHEMA public CASCADE")
         conn.execute("CREATE SCHEMA public")
