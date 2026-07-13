@@ -137,6 +137,7 @@ SAFE_HOST_PERMISSIONS = """#!/bin/sh
 APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
 PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
+ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
 HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
 useradd --system --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
@@ -146,6 +147,7 @@ chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
 chmod 2775 "$APP" "$APP/run-queue"
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
+chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
 """
 
@@ -1062,6 +1064,18 @@ def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal(tmp_p
 
     assert result.returncode == 2
     assert "host permissions must preserve execute-only Hermes traversal" in result.stderr
+
+
+def test_preflight_fails_when_host_permissions_do_not_fix_cron_wrapper_owner(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace('chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"', ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must make Hermes cron wrapper group executable" in result.stderr
 
 
 def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):

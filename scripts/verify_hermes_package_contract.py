@@ -118,11 +118,13 @@ HOST_RUNNER_INVARIANTS = {
 HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must create CI-OS app user": "useradd --system",
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
+    "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
     "host permissions must preserve execute-only Hermes traversal": "chmod 711 /root/.hermes /root/.hermes/apps",
     "host permissions must chown app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"',
     "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
+    "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
     "host permissions must protect CI-OS env file": 'chmod 640 "$ENV_FILE"',
 }
 

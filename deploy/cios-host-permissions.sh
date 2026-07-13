@@ -4,6 +4,7 @@ set -eu
 APP="${CIOS_APP_DIR:-/root/.hermes/apps/cios}"
 PUB="${CIOS_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
+ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
 APP_USER="${CIOS_APP_USER:-cios}"
 APP_GROUP="${CIOS_APP_GROUP:-cios}"
 HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
@@ -45,6 +46,10 @@ fi
 
 if [ -f "$APP/deploy/cios-daily.sh" ]; then
   chmod 750 "$APP/deploy/cios-daily.sh"
+fi
+if [ -f "$ROOT_WRAPPER" ]; then
+  chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
+  chmod 750 "$ROOT_WRAPPER"
 fi
 if [ -f "$APP/deploy/cios-host-runner.sh" ]; then
   chmod 755 "$APP/deploy/cios-host-runner.sh"
