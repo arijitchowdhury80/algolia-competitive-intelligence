@@ -20,9 +20,9 @@ Consequences of that gap, made explicit rather than silently guessed:
   3. ADAPTER POINT (the actual unknown, name it don't hide it): before this
      wires into the live ci.chowmes.com UI, someone with access to
      apps/dashboard/'s data-loading code must either (a) confirm the existing
-     loader can be repointed at this v2 JSON directly, or (b) write a small
+     loader can be repointed at this versioned JSON directly, or (b) write a small
      adapter in the dashboard app itself that maps
-     dashboard-state.v2.json -> whatever internal shape its components
+     dashboard-state.v{DASHBOARD_STATE_SCHEMA_VERSION}.json -> whatever internal shape its components
      already expect. That adapter does not belong in cios (the backend
      should not encode a specific frontend's internal prop names) -- it
      belongs in apps/dashboard/, reading FROM this file's output.
@@ -41,6 +41,36 @@ from typing import Any
 from .types import DASHBOARD_STATE_SCHEMA_VERSION, DashboardState
 
 
+_REDACTED = object()
+_LOCAL_PATH_PREFIXES = ("/root/", "/tmp/", "/Users/", "/app/")
+
+
+def _is_local_artifact_path(value: str) -> bool:
+    return value.startswith(_LOCAL_PATH_PREFIXES)
+
+
+def _redact_local_artifact_paths(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            public_value = _redact_local_artifact_paths(item)
+            if public_value is _REDACTED:
+                continue
+            redacted[key] = public_value
+        return redacted
+    if isinstance(value, list):
+        public_items = []
+        for item in value:
+            public_value = _redact_local_artifact_paths(item)
+            if public_value is _REDACTED:
+                continue
+            public_items.append(public_value)
+        return public_items
+    if isinstance(value, str) and _is_local_artifact_path(value):
+        return _REDACTED
+    return value
+
+
 def to_json_dict(state: DashboardState) -> dict[str, Any]:
     """Stable, versioned JSON-serializable dict for one DashboardState.
 
@@ -49,12 +79,13 @@ def to_json_dict(state: DashboardState) -> dict[str, Any]:
     otherwise reshuffled between calls for the same input.
     """
     payload = state.model_dump(mode="json")
-    return {
+    public_payload = {
         "schema_version": DASHBOARD_STATE_SCHEMA_VERSION,
         "is_quiet": state.is_quiet,
         "top_attention_level": state.top_attention_level.value,
         **payload,
     }
+    return _redact_local_artifact_paths(public_payload)
 
 
 def to_json_str(state: DashboardState, *, indent: int = 2) -> str:

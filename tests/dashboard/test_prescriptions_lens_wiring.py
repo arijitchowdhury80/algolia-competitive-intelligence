@@ -79,11 +79,11 @@ def test_persisted_action_item_reaches_the_matching_lens():
     marketing_start = html_out.index('id="role-marketing"')
     sales_start = html_out.index('id="role-sales"')
     product_start = html_out.index('id="role-product"')
-    eye_start = html_out.index("The eye behind the lenses")
+    evidence_start = html_out.index('id="evidence-coverage"')
 
     marketing_html = html_out[marketing_start:sales_start]
     sales_html = html_out[sales_start:product_start]
-    product_html = html_out[product_start:eye_start]
+    product_html = html_out[product_start:evidence_start]
 
     assert "Publish the pricing rebuttal" in marketing_html
     assert "Prep the objection one-pager" in marketing_html
@@ -95,5 +95,5 @@ def test_persisted_action_item_reaches_the_matching_lens():
     assert "Validate pricing vs packaging" in product_html
     assert "Brief sales on the AWS packaging shift" not in product_html
 
-    # No lens falls back to the honest empty state when a real play exists.
-    assert "No prescribed plays for this lens this cycle." not in html_out
+    # No role card falls back to a no-action state when a real action exists.
+    assert "No action item was generated for this role in this run." not in html_out

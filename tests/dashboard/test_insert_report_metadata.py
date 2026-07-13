@@ -102,3 +102,36 @@ def test_insert_report_defaults_metadata_to_empty_dict(runner) -> None:
     metadata_param = params[-1]
     assert isinstance(metadata_param, Json)
     assert metadata_param.obj == {}
+
+
+def test_update_report_metadata_merges_product_market_summary(runner) -> None:
+    conn = _FakeConn()
+    product_market_summary = {
+        "status": "ran",
+        "product_surface_plan_summary": {
+            "target_count": 2,
+            "learning_prioritized_count": 1,
+            "prioritized_targets": [{"company_name": "Coveo"}],
+        },
+    }
+
+    runner.update_report_metadata(
+        conn,
+        tenant_id=7,
+        report_id=42,
+        metadata={
+            "product_market_summary": product_market_summary,
+            "run_errors": [],
+        },
+    )
+
+    sql, params = conn.cursor_obj.last_call
+    assert "UPDATE reports" in sql
+    assert "metadata = metadata || %s::jsonb" in sql
+    metadata_param = params[0]
+    assert isinstance(metadata_param, Json)
+    assert metadata_param.obj == {
+        "product_market_summary": product_market_summary,
+        "run_errors": [],
+    }
+    assert params[1:] == (7, 42)

@@ -57,11 +57,19 @@ from __future__ import annotations
 import html
 import re
 from dataclasses import dataclass
-from datetime import date as _date
+from datetime import date as _date, timedelta as _timedelta
 from typing import Optional
 
 from . import _cockpit_assets
-from .types import AttentionLevel, CompetitorSignalCard, DashboardState, PrescriptionSummary
+from .types import (
+    AttentionLevel,
+    CompetitorSignalCard,
+    DashboardOperatorHandoff,
+    DashboardState,
+    MonitoredCompetitor,
+    PrescriptionSummary,
+    SourceHealthEntry,
+)
 
 _STYLE = """
     :root {
@@ -442,6 +450,121 @@ _STYLE = """
       align-items: start;
     }
 
+    .monitored-universe {
+      margin-top: 18px;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      padding: 18px 0;
+    }
+
+    .monitored-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 12px;
+    }
+
+    .monitored-head h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .monitored-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+      background: rgba(255,255,255,.48);
+    }
+
+    .monitored-row {
+      min-height: 168px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .monitored-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .monitored-title strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .monitored-title span,
+    .source-line span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin-top: 4px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border: 1px solid var(--line);
+      padding: 0 8px;
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+      white-space: nowrap;
+      background: #fff;
+    }
+
+    .status-pill.signal { color: var(--red); border-color: rgba(159,52,44,.36); }
+    .status-pill.pattern { color: var(--blue); border-color: rgba(49,67,109,.34); }
+    .status-pill.quiet { color: var(--green); border-color: rgba(61,102,80,.38); }
+    .status-pill.pending { color: var(--amber); border-color: rgba(154,101,23,.38); }
+    .status-pill.failed { color: var(--red); border-color: rgba(159,52,44,.36); }
+
+    .monitor-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .monitor-stat {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      min-width: 0;
+    }
+
+    .monitor-stat strong {
+      display: block;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .monitor-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.25;
+      margin-top: 5px;
+      text-transform: uppercase;
+    }
+
+    .registry-link {
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 760;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
     .section {
       background: rgba(255,255,255,.92);
       border: 1px solid rgba(11,16,32,.12);
@@ -580,6 +703,175 @@ _STYLE = """
     .channel:last-child { border-bottom: 0; }
     .channel strong { font-size: 13px; }
     .channel span { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+
+    .source-list {
+      margin-top: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .source-line {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .source-line:last-child { border-bottom: 0; padding-bottom: 0; }
+    .source-line strong { font-size: 13px; line-height: 1.25; }
+
+    .executive-read {
+      margin-top: 18px;
+      border-top: 1px solid var(--ink);
+      border-bottom: 1px solid var(--ink);
+      padding: 22px 0 24px;
+      display: grid;
+      grid-template-columns: minmax(260px, .95fr) minmax(0, 2.05fr);
+      gap: 30px;
+      align-items: start;
+    }
+
+    .read-head h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(32px, 3vw, 48px);
+      line-height: .98;
+      font-weight: 400;
+      letter-spacing: -.02em;
+    }
+
+    .read-head p {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+      max-width: 520px;
+    }
+
+    .read-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+      background: rgba(255,255,255,.35);
+    }
+
+    .read-tile {
+      min-height: 182px;
+      padding: 16px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .read-tile span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+
+    .read-tile strong {
+      display: block;
+      font-size: 15px;
+      line-height: 1.28;
+    }
+
+    .read-tile p,
+    .watch-list li {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .watch-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .watch-list li strong {
+      display: inline;
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    .read-link {
+      align-self: end;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    details.monitored-universe,
+    details.evidence-strip {
+      display: block;
+    }
+
+    details.monitored-universe > summary,
+    details.evidence-strip > summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    details.monitored-universe > summary::-webkit-details-marker,
+    details.evidence-strip > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .appendix-summary {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      padding: 4px 0;
+    }
+
+    .appendix-summary h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 28px;
+      line-height: 1.05;
+      font-weight: 400;
+    }
+
+    .appendix-open {
+      display: inline-flex;
+      min-height: 32px;
+      align-items: center;
+      border: 1px solid var(--ink);
+      padding: 0 10px;
+      color: var(--ink);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    details[open] .appendix-open::before {
+      content: "Close ";
+    }
+
+    .appendix-body {
+      margin-top: 14px;
+    }
+
+    .appendix-content {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 18px;
+    }
 
     /* Maison editorial direction: intelligence as a front page, not a telemetry board. */
     :root {
@@ -1413,8 +1705,17 @@ _STYLE = """
     @media (max-width: 1180px) {
       .hero,
       .sections,
-      .evidence-strip {
+      .appendix-content,
+      .executive-read {
         grid-template-columns: 1fr;
+      }
+
+      .monitored-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .read-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .market-field,
@@ -1453,8 +1754,10 @@ _STYLE = """
       .role-rail { grid-column: 1; justify-self: start; justify-content: flex-start; }
       .brief-spine,
       .evidence-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .monitored-head { display: grid; align-items: start; }
       .hero { gap: 32px; margin-top: 36px; }
       .brief-article { grid-template-columns: 1fr; }
+      .appendix-summary { grid-template-columns: 1fr; align-items: start; }
     }
 
     @media (max-width: 560px) {
@@ -1467,7 +1770,9 @@ _STYLE = """
 
       .argus-read h1 { font-size: 34px; }
       .brief-spine,
-      .evidence-grid { grid-template-columns: 1fr; }
+      .evidence-grid,
+      .read-grid,
+      .monitored-grid { grid-template-columns: 1fr; }
       .evidence { border-right: 0; border-bottom: 1px solid var(--line); }
       .evidence:last-child { border-bottom: 0; }
       .intel { grid-template-columns: 6px 1fr; }
@@ -1595,6 +1900,44 @@ _STYLE = """
       display: none;
     }
 
+    .competitor-context {
+      margin-top: 12px;
+      padding: 12px 0;
+      border-top: 1px solid rgba(26,26,26,.12);
+    }
+
+    .competitor-context:first-child {
+      border-top: 0;
+    }
+
+    .competitor-context h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      line-height: 1.3;
+    }
+
+    .competitor-context p {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .context-action {
+      display: block;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .context-action span {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-right: 6px;
+    }
+
     .filter-chip {
       grid-column: 1 / -1;
       display: inline-flex;
@@ -1627,6 +1970,14 @@ _STYLE = """
       font-size: 10px;
       letter-spacing: .08em;
       text-transform: uppercase;
+    }
+
+    .focus-layout {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1fr;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 18px;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -1718,9 +2069,17 @@ _SCRIPT = """
       const filterLabel = document.getElementById('competitor-filter-label');
       const clearFilterButton = document.getElementById('clear-competitor-filter');
       const playItems = [...document.querySelectorAll('[data-competitor]')];
+      const attentionSummaries = [...document.querySelectorAll('summary.attention-summary')];
 
       const clearCompetitorFilter = () => {
-        playItems.forEach((item) => { item.hidden = false; });
+        playItems.forEach((item) => {
+          if (item.classList.contains('competitor-context')) {
+            item.hidden = item.dataset.defaultVisible !== 'true';
+          } else {
+            item.hidden = false;
+          }
+        });
+        attentionRows.forEach((row) => row.classList.remove('is-selected-focus'));
         if (filterChip) filterChip.hidden = true;
       };
 
@@ -1732,8 +2091,11 @@ _SCRIPT = """
         playItems.forEach((item) => {
           item.hidden = item.dataset.competitor !== competitorId;
         });
+        attentionRows.forEach((row) => {
+          row.classList.toggle('is-selected-focus', row.dataset.competitorId === competitorId);
+        });
         if (filterChip && filterLabel) {
-          filterLabel.textContent = `Filtering: ${competitorName || competitorId}`;
+          filterLabel.textContent = `Focus: ${competitorName || competitorId} · lenses updated`;
           filterChip.hidden = false;
         }
       };
@@ -1767,8 +2129,14 @@ _SCRIPT = """
       }, { rootMargin: '-12% 0px -70% 0px', threshold: [0, .1, .25, .5] });
 
       sections.forEach((section) => observer.observe(section));
+      const hashTarget = () => {
+        if (!location.hash || !location.hash.startsWith('#')) return null;
+        try { return document.querySelector(location.hash); }
+        catch (_) { return null; }
+      };
+
       window.addEventListener('hashchange', () => {
-        const target = document.querySelector(location.hash);
+        const target = hashTarget();
         if (target?.matches('details.inline-brief')) {
           openInlineBrief(target);
           target.scrollIntoView({ block: 'nearest' });
@@ -1783,7 +2151,7 @@ _SCRIPT = """
       });
       window.addEventListener('resize', () => moveUnderline(linkFor(activeRole)));
       setActiveRole(activeRole);
-      const initialTarget = document.querySelector(location.hash);
+      const initialTarget = hashTarget();
       if (initialTarget?.matches('details.inline-brief')) openInlineBrief(initialTarget);
       if (initialTarget?.matches('details.attention-row')) openAttentionRow(initialTarget);
     })();
@@ -1880,8 +2248,8 @@ def _word_cap(text: str, max_words: int) -> str:
 
 
 def _hero_headline(state: DashboardState) -> str:
-    if not state.competitor_cards:
-        return "No material competitive signal this cycle."
+    if not _has_current_promoted_moves(state):
+        return "No new material moves were promoted today."
     top = state.competitor_cards[0]
     source = top.top_signal_headline or top.what_changed or top.action_cue
     if not source:
@@ -1953,6 +2321,137 @@ def _render_visual_story(state: DashboardState) -> str:
     )
 
 
+def _standing_watchlist(state: DashboardState) -> list[MonitoredCompetitor]:
+    patterns = [
+        c
+        for c in state.monitored_competitors
+        if c.material_signal_count > 0 and c.latest_movement_summary
+    ]
+    return sorted(
+        patterns,
+        key=lambda c: (-(c.material_signal_count or 0), c.competitor_name.lower()),
+    )[:3]
+
+
+def _source_counts(state: DashboardState) -> tuple[int, int, int]:
+    if state.monitored_competitors:
+        active = sum(c.active_source_count for c in state.monitored_competitors)
+        failed = sum(c.failed_source_count for c in state.monitored_competitors)
+        total = len(state.monitored_competitors)
+        return total, active, failed
+    failed = sum(1 for s in state.source_health if (s.latest_event_type or "") in _FAILED_SOURCE_EVENTS)
+    return 0, len(state.source_health), failed
+
+
+def _render_watchlist_items(state: DashboardState) -> str:
+    items = _standing_watchlist(state)
+    if not items:
+        return "<li>No standing pattern summary was published with this run.</li>"
+    rendered: list[str] = []
+    for c in items:
+        href = c.brief_href or f"#monitor-{c.competitor_id}"
+        rendered.append(
+            f'<li><strong>{_esc(c.competitor_name)}:</strong> '
+            f'{_esc(_truncate(c.latest_movement_summary or "", 118))} '
+            f'<a class="read-link" href="{_esc(href)}">brief</a></li>'
+        )
+    return "".join(rendered)
+
+
+def _render_next_move(state: DashboardState) -> tuple[str, str]:
+    if _has_current_promoted_moves(state):
+        top = state.competitor_cards[0]
+        action = top.recommended_action or top.action_cue or "Inspect the top signal and brief the owning team."
+        return "Act on the top signal", _truncate(action, 150)
+    if _rolling_material_card_count(state) > 0:
+        return (
+            "Do not chase ghosts",
+            "Treat the recent material cards as standing memory. No current-run move cleared the action gate today.",
+        )
+    if _standing_watchlist(state):
+        return (
+            "Do not chase ghosts",
+            "Treat today as a monitoring day: review standing patterns, check failed sources, and wait for a newly promoted move before acting.",
+        )
+    return (
+        "Improve coverage before strategy",
+        "The system did not publish enough interpreted movement to support a strategic action from this run alone.",
+    )
+
+
+def _render_executive_read(state: DashboardState) -> str:
+    competitor_count, active_sources, failed_sources = _source_counts(state)
+    current_moves = _current_run_move_count(state)
+    recent_cards = _rolling_material_card_count(state)
+    if _has_current_promoted_moves(state):
+        lede = (
+            f"Argus promoted {current_moves} current material move"
+            f"{'s' if current_moves != 1 else ''}. Start with the barometer, then open the brief behind the top competitor."
+        )
+        posture = "Current move promoted"
+        posture_detail = _truncate(
+            state.competitor_cards[0].why_it_matters
+            or state.competitor_cards[0].what_changed
+            or state.competitor_cards[0].action_cue,
+            155,
+        )
+    else:
+        recent_note = (
+            f" {recent_cards} recent material card{'s' if recent_cards != 1 else ''} remain available as memory."
+            if recent_cards
+            else ""
+        )
+        lede = (
+            "No new material moves were promoted today. That does not mean nothing is being watched; "
+            "it means the current sweep did not raise a fresh item above the action threshold."
+            f"{recent_note}"
+        )
+        posture = "Quiet new-signal day"
+        posture_detail = (
+            "Use this page as a watchlist and confidence check. The noisy registry below is now an appendix, not the read."
+        )
+    next_title, next_detail = _render_next_move(state)
+    brief_meta, brief_href = _latest_report_link(state)
+    brief_link = (
+        f'<a class="read-link" href="{_esc(brief_href)}">Open full daily brief</a>'
+        if brief_href
+        else f'<span class="read-link" aria-disabled="true">{_esc(brief_meta)}</span>'
+    )
+    confidence = (
+        f"{competitor_count} competitors watched, {active_sources} active sources checked, "
+        f"{failed_sources} failed source{'s' if failed_sources != 1 else ''}."
+    )
+    return f"""<section class="executive-read" id="today-read" aria-label="Today&apos;s competitive read">
+  <div class="read-head">
+    <h2>Today&rsquo;s competitive read</h2>
+    <p>{_esc(lede)}</p>
+  </div>
+  <div class="read-grid">
+    <article class="read-tile">
+      <span>What to understand</span>
+      <strong>{_esc(posture)}</strong>
+      <p>{_esc(posture_detail)}</p>
+      {brief_link}
+    </article>
+    <article class="read-tile">
+      <span>Standing watchlist</span>
+      <ul class="watch-list">{_render_watchlist_items(state)}</ul>
+    </article>
+    <article class="read-tile">
+      <span>What to do next</span>
+      <strong>{_esc(next_title)}</strong>
+      <p>{_esc(next_detail)}</p>
+    </article>
+    <article class="read-tile">
+      <span>Confidence boundary</span>
+      <strong>{_esc(confidence)}</strong>
+      <p>Failed sources constrain confidence; they do not erase monitoring coverage.</p>
+      <a class="read-link" href="#sources">Audit sources</a>
+    </article>
+  </div>
+</section>"""
+
+
 @dataclass
 class _CompetitorGroup:
     """One Attention Barometer row: a competitor plus its top 1-2 material
@@ -1967,6 +2466,15 @@ class _CompetitorGroup:
     action_cue: str
     top_signals: list[CompetitorSignalCard]  # up to BAROMETER_PROOF_SIGNAL_LIMIT, desc by score
     row_key: object
+    brief_href: Optional[str] = None
+
+
+@dataclass
+class _SemanticPattern:
+    label: str
+    description: str
+    recommendation: str
+    competitor_hits: dict[int, int]
 
 
 def _group_cards_by_competitor(cards: list[CompetitorSignalCard]) -> list[_CompetitorGroup]:
@@ -1999,6 +2507,7 @@ def _group_cards_by_competitor(cards: list[CompetitorSignalCard]) -> list[_Compe
                 action_cue=top.action_cue or "No action cue on file.",
                 top_signals=group_members[:BAROMETER_PROOF_SIGNAL_LIMIT],
                 row_key=top.delta_id if top.delta_id is not None else competitor_id,
+                brief_href=top.brief_href,
             )
         )
     return groups
@@ -2012,6 +2521,8 @@ def _render_barometer_row(state: DashboardState, group: _CompetitorGroup, *, is_
     cue_short = _esc(_truncate(cue_full, CUE_TRUNCATE_LEN))
     score = max(0.0, min(100.0, group.score))
     meta, href = _latest_report_link(state)
+    if group.brief_href:
+        href = group.brief_href
     if href:
         deep_link = f'<a class="deep-link" href="{_esc(href)}">Open full brief</a>'
     else:
@@ -2088,6 +2599,82 @@ def _render_barometer(state: DashboardState) -> str:
         for i, group in enumerate(groups)
     ]
     return f'<div class="attention-board" aria-label="Competitor Attention Barometer ranking competitors by attention needed this week">\n{"".join(rows)}\n</div>'
+
+
+def _format_dt(value) -> str:
+    if value is None:
+        return "not checked yet"
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d %H:%M UTC")
+    return str(value)
+
+
+def _monitor_signal_label(c: MonitoredCompetitor) -> tuple[str, str]:
+    if c.signal_status == "material_signal":
+        return "pattern", "Standing pattern"
+    if c.signal_status == "pending_first_sweep":
+        return "pending", "Pending first sweep"
+    return "quiet", "No material signal"
+
+
+def _render_monitored_competitor(c: MonitoredCompetitor) -> str:
+    pill_class, pill_label = _monitor_signal_label(c)
+    health_label = "checked today" if c.checked_today else "not checked today"
+    summary = c.latest_movement_summary or pill_label
+    brief_link = (
+        f'<a class="registry-link" href="{_esc(c.brief_href)}">Open competitor brief</a>'
+        if c.brief_href
+        else '<span class="registry-link" aria-disabled="true">No brief on file</span>'
+    )
+    failed_label = "failed" if c.failed_source_count == 1 else "failed"
+    return f"""<article class="monitored-row" id="monitor-{_esc(c.competitor_id)}">
+  <div class="monitored-title">
+    <div>
+      <strong>{_esc(c.competitor_name)}</strong>
+      <span>{_esc(c.domain or "domain not on file")} · {_esc(c.category or c.status)}</span>
+    </div>
+    <span class="status-pill {pill_class}">{_esc(pill_label)}</span>
+  </div>
+  <div class="caption">{_esc(_truncate(summary, 110))}</div>
+  <div class="monitor-stats" aria-label="{_esc(c.competitor_name)} source coverage">
+    <div class="monitor-stat"><strong>{_esc(c.active_source_count)}</strong><span>active sources</span></div>
+    <div class="monitor-stat"><strong>{_esc(c.failed_source_count)}</strong><span>{failed_label}</span></div>
+    <div class="monitor-stat"><strong>{_esc(c.material_signal_count)}</strong><span>signals</span></div>
+  </div>
+  <div>
+    <span class="caption">{_esc(health_label)} · {_esc(_format_dt(c.last_checked_at))}</span>
+    {brief_link}
+  </div>
+</article>"""
+
+
+def _render_monitored_competitors(state: DashboardState) -> str:
+    total = len(state.monitored_competitors)
+    active_sources = sum(c.active_source_count for c in state.monitored_competitors)
+    failed_sources = sum(c.failed_source_count for c in state.monitored_competitors)
+    if not state.monitored_competitors:
+        body = '<p class="caption">No monitored competitor registry was published with this run.</p>'
+    else:
+        body = (
+            '<div class="monitored-grid">'
+            + "".join(_render_monitored_competitor(c) for c in state.monitored_competitors)
+            + "</div>"
+        )
+    return f"""<details class="monitored-universe" id="monitored-competitors" aria-label="Monitored competitors">
+  <summary class="appendix-summary">
+    <div>
+      <h2>Monitored competitors</h2>
+      <div class="caption">Audit the full roster only when you need coverage proof. Current intelligence lives above.</div>
+    </div>
+    <div class="lens-proofline" aria-label="Monitored competitor summary">
+      <span>{_esc(total)} competitors</span>
+      <span>{_esc(active_sources)} active sources</span>
+      <span>{_esc(failed_sources)} failed sources</span>
+    </div>
+    <span class="appendix-open">registry</span>
+  </summary>
+  <div class="appendix-body">{body}</div>
+</details>"""
 
 
 def _lens_prescriptions(state: DashboardState, teams: set[str]) -> list[PrescriptionSummary]:
@@ -2259,13 +2846,477 @@ def _render_sections(state: DashboardState) -> str:
     )
 
 
+_FAILED_SOURCE_EVENTS = {"fetch_error", "http_error", "timeout", "empty"}
+
+
+def _source_health_label(source: SourceHealthEntry) -> tuple[str, str]:
+    event = source.latest_event_type or "not_checked"
+    if event in _FAILED_SOURCE_EVENTS:
+        return "failed", event
+    if event == "ok" or event == "recovered":
+        return "quiet", event
+    return "pending", event
+
+
+def _render_source_health_line(source: SourceHealthEntry) -> str:
+    pill_class, label = _source_health_label(source)
+    http = f" · HTTP {source.http_status}" if source.http_status is not None else ""
+    detail = f" · {source.detail}" if source.detail else ""
+    return f"""<div class="source-line">
+  <div>
+    <strong>{_esc(source.competitor_name)} · {_esc(source.source_family)}</strong>
+    <span>{_esc(source.url)}</span>
+    <span>{_esc(_format_dt(source.checked_at))}{_esc(http)}{_esc(detail)}</span>
+  </div>
+  <span class="status-pill {pill_class}">{_esc(label)}</span>
+</div>"""
+
+
+def _render_source_health_ledger(state: DashboardState) -> str:
+    if not state.source_health:
+        return '<p class="caption">No source health events were published with this run.</p>'
+    ranked = sorted(
+        state.source_health,
+        key=lambda s: (
+            0 if (s.latest_event_type or "") in _FAILED_SOURCE_EVENTS else 1,
+            s.competitor_name.lower(),
+            s.source_family,
+            s.source_id,
+        ),
+    )
+    return '<div class="source-list">' + "".join(_render_source_health_line(s) for s in ranked[:8]) + "</div>"
+
+
+def _run_trace_status_class(status: str) -> str:
+    if status == "ran":
+        return "quiet"
+    if status == "failed":
+        return "failed"
+    return "pending"
+
+
+def _render_decision_read_rows(brief: dict) -> str:
+    decision = brief.get("decision_read") if isinstance(brief, dict) else {}
+    if not isinstance(decision, dict) or not decision:
+        return ""
+
+    rows: list[str] = []
+    status = str(decision.get("status") or "not recorded").strip()
+    direction = str(decision.get("market_direction") or "").strip()
+    reason = str(decision.get("priority_reason") or "").strip()
+    decision_bits = [bit for bit in [status, direction] if bit]
+    decision_line = " · ".join(decision_bits)
+    if reason:
+        decision_line = f"{decision_line}. {reason}" if decision_line else reason
+    if decision_line:
+        rows.append(f"\n    <span><strong>Argus decision read:</strong> {_esc(decision_line)}</span>")
+
+    basis = decision.get("confidence_basis") or []
+    if not isinstance(basis, list):
+        basis = []
+    basis_bits: list[str] = []
+    for item in basis[:4]:
+        if not isinstance(item, dict):
+            continue
+        plane = str(item.get("plane") or "").replace("_", " ").strip()
+        plane_status = str(item.get("status") or "").strip()
+        try:
+            evidence_count = int(item.get("evidence_count") or 0)
+        except (TypeError, ValueError):
+            evidence_count = 0
+        if plane and plane_status:
+            basis_bits.append(f"{plane} {plane_status} ({evidence_count})")
+    if basis_bits:
+        rows.append(
+            f"\n    <span><strong>Decision confidence:</strong> {_esc(' · '.join(basis_bits))}</span>"
+        )
+
+    insights = decision.get("strategic_insights") or []
+    if isinstance(insights, list):
+        top_insight = next((item for item in insights if isinstance(item, dict)), None)
+    else:
+        top_insight = None
+    if top_insight:
+        insight_type = str(top_insight.get("insight_type") or "").strip()
+        insight_summary = str(top_insight.get("summary") or "").strip()
+        insight_line = " · ".join(bit for bit in [insight_type, insight_summary] if bit)
+        if insight_line:
+            rows.append(f"\n    <span><strong>Strategic insight:</strong> {_esc(insight_line)}</span>")
+
+    actions = decision.get("tactical_actions") or []
+    if isinstance(actions, list):
+        top_action = next((item for item in actions if isinstance(item, dict)), None)
+    else:
+        top_action = None
+    if top_action:
+        owner = str(top_action.get("owner") or "").strip()
+        action = str(top_action.get("action") or "").strip()
+        score = top_action.get("score")
+        score_label = ""
+        if score not in (None, ""):
+            try:
+                score_label = f"score {int(score)}"
+            except (TypeError, ValueError):
+                score_label = f"score {score}"
+        action_line = " · ".join(bit for bit in [owner, action, score_label] if bit)
+        if action_line:
+            rows.append(f"\n    <span><strong>Decision action:</strong> {_esc(action_line)}</span>")
+
+    blockers = decision.get("blockers") or []
+    if isinstance(blockers, list):
+        blocker = next((str(item).strip() for item in blockers if str(item).strip()), "")
+    else:
+        blocker = str(blockers).strip()
+    if blocker:
+        rows.append(f"\n    <span><strong>Decision blocker:</strong> {_esc(blocker)}</span>")
+
+    return "".join(rows)
+
+
+def _render_product_market_run_trace(state: DashboardState) -> str:
+    run = state.product_market_run
+    if run.status == "not_recorded":
+        return """<div class="source-line">
+  <div>
+    <strong>Hermes / Argus run trace</strong>
+    <span>No product-market run trace was recorded with this dashboard.</span>
+  </div>
+  <span class="status-pill pending">not recorded</span>
+</div>"""
+
+    target = run.prioritized_targets[0] if run.prioritized_targets else {}
+    target_label = "No learning-prioritized target recorded."
+    reason = ""
+    if isinstance(target, dict) and target:
+        reasons = target.get("learning_reasons") or []
+        reason = "; ".join(str(item) for item in reasons) if isinstance(reasons, list) else str(reasons)
+        target_label = (
+            f"{target.get('company_name') or 'Unknown company'} · "
+            f"{target.get('surface_family') or 'surface'}"
+        )
+    target_companies = {str(company).strip() for company in run.target_companies if str(company).strip()}
+    monitored_names = [
+        competitor.competitor_name
+        for competitor in state.monitored_competitors
+        if competitor.competitor_name.strip()
+    ]
+    monitored_count = len(monitored_names)
+    target_company_count = run.target_company_count or len(target_companies)
+    missing_product_muscle = [
+        name for name in monitored_names if name.strip() not in target_companies
+    ]
+    family_counts = run.surface_family_counts if isinstance(run.surface_family_counts, dict) else {}
+    family_label = ", ".join(
+        f"{family}: {count}"
+        for family, count in sorted(family_counts.items())
+        if str(family).strip() and int(count) > 0
+    )
+    verdict = run.runner_verdict or "not recorded"
+    brief = run.intelligence_brief if isinstance(run.intelligence_brief, dict) else {}
+    learned = str(brief.get("top_insight") or "").strip()
+    action = str(brief.get("primary_action") or "").strip()
+    confidence_limits = brief.get("confidence_limits") or []
+    if not isinstance(confidence_limits, list):
+        confidence_limits = [str(confidence_limits)]
+    confidence_line = str(confidence_limits[0]).strip() if confidence_limits else ""
+    movement_map = run.movement_map if isinstance(run.movement_map, dict) else {}
+    movement_summary = str(movement_map.get("direction_summary") or "").strip()
+    hot_capabilities = movement_map.get("hot_capabilities") or []
+    if not isinstance(hot_capabilities, list):
+        hot_capabilities = []
+    hot_label = ", ".join(str(item) for item in hot_capabilities[:3] if str(item).strip())
+    conversion = run.conversion_diagnostics if isinstance(run.conversion_diagnostics, dict) else {}
+    conversion_summary = str(conversion.get("summary") or "").strip()
+    conversion_blockers = conversion.get("blockers") or []
+    if not isinstance(conversion_blockers, list):
+        conversion_blockers = [str(conversion_blockers)]
+    conversion_blocker = str(conversion_blockers[0]).strip() if conversion_blockers else ""
+    brief_rows = ""
+    replay_count_total = (
+        run.product_event_count
+        + run.conversation_theme_count
+        + run.demand_signal_count
+        + run.pattern_count
+        + run.recommendation_count
+    )
+    if replay_count_total:
+        replay_line = (
+            f"{run.product_event_count} product · "
+            f"{run.conversation_theme_count} conversation · "
+            f"{run.demand_signal_count} demand · "
+            f"{run.pattern_count} pattern · "
+            f"{run.recommendation_count} recommendations"
+        )
+        brief_rows += f"\n    <span><strong>Ledger replay read:</strong> {_esc(replay_line)}</span>"
+    if learned:
+        brief_rows += f"\n    <span><strong>What Argus learned:</strong> {_esc(learned)}</span>"
+    brief_rows += _render_decision_read_rows(brief)
+    if action:
+        brief_rows += f"\n    <span><strong>Promoted action:</strong> {_esc(action)}</span>"
+    if movement_summary:
+        movement_line = movement_summary
+        if hot_label:
+            movement_line = f"{movement_line} Hot: {hot_label}."
+        brief_rows += f"\n    <span><strong>Market movement:</strong> {_esc(movement_line)}</span>"
+    window_comparison = run.window_comparison if isinstance(run.window_comparison, dict) else {}
+    window_summary = str(window_comparison.get("summary") or "").strip()
+    window_rows = window_comparison.get("windows") or []
+    if not isinstance(window_rows, list):
+        window_rows = []
+    window_hot_labels: list[str] = []
+    for window in window_rows:
+        if not isinstance(window, dict):
+            continue
+        days = window.get("days")
+        capabilities = window.get("hot_capabilities") or []
+        if not isinstance(capabilities, list):
+            capabilities = [str(capabilities)]
+        capability_label = ", ".join(str(item) for item in capabilities[:3] if str(item).strip())
+        if days and capability_label:
+            window_hot_labels.append(f"{days}d: {capability_label}")
+    if window_summary:
+        window_line = window_summary
+        if window_hot_labels:
+            window_line = f"{window_line} {'; '.join(window_hot_labels)}"
+        brief_rows += f"\n    <span><strong>Evidence window:</strong> {_esc(window_line)}</span>"
+    demand_read = brief.get("demand_read") if isinstance(brief, dict) else {}
+    if not isinstance(demand_read, dict):
+        demand_read = {}
+    demand_summary = str(demand_read.get("summary") or "").strip()
+    demand_topics = demand_read.get("top_topics") or []
+    if not isinstance(demand_topics, list):
+        demand_topics = []
+    demand_gap = ""
+    for topic in demand_topics:
+        if not isinstance(topic, dict):
+            continue
+        missing_planes = topic.get("missing_planes") or []
+        if not isinstance(missing_planes, list) or not missing_planes:
+            continue
+        labels = {
+            "product_proof": "product proof",
+            "market_conversation": "market conversation",
+        }
+        missing_label = ", ".join(labels.get(str(item), str(item).replace("_", " ")) for item in missing_planes)
+        topic_label = str(topic.get("topic") or topic.get("capability_key") or "Demand topic").strip()
+        demand_gap = f"{topic_label} needs {missing_label}"
+        break
+    if demand_summary:
+        demand_read_line = demand_summary
+        if demand_gap:
+            demand_read_line = f"{demand_read_line} {demand_gap}."
+        brief_rows += f"\n    <span><strong>Demand read:</strong> {_esc(demand_read_line)}</span>"
+    monitoring_actions = run.next_monitoring_actions
+    if not monitoring_actions and isinstance(brief, dict):
+        raw_actions = brief.get("next_monitoring_actions")
+        if isinstance(raw_actions, list):
+            monitoring_actions = [dict(action) for action in raw_actions if isinstance(action, dict)]
+    top_monitor = next((action for action in monitoring_actions if isinstance(action, dict)), {})
+    if top_monitor:
+        plane = str(top_monitor.get("plane") or "").replace("_", " ").strip()
+        priority = str(top_monitor.get("priority") or "").strip()
+        instruction = str(top_monitor.get("instruction") or "").strip()
+        reason = str(top_monitor.get("reason") or "").strip()
+        monitor_bits = [bit for bit in [plane, priority, instruction] if bit]
+        monitor_line = " · ".join(monitor_bits)
+        if reason:
+            monitor_line = f"{monitor_line}. {reason}"
+        brief_rows += f"\n    <span><strong>Hermes next monitor:</strong> {_esc(monitor_line)}</span>"
+    product_comparison = run.product_feature_comparison_read if isinstance(run.product_feature_comparison_read, dict) else {}
+    if not product_comparison and isinstance(brief, dict):
+        fallback_comparison = brief.get("product_feature_comparison")
+        if isinstance(fallback_comparison, dict):
+            product_comparison = fallback_comparison
+    comparison_summary = str(product_comparison.get("summary") or "").strip()
+    comparison_rows = product_comparison.get("rows") or []
+    if not isinstance(comparison_rows, list):
+        comparison_rows = []
+    top_comparison = next((row for row in comparison_rows if isinstance(row, dict)), {})
+    if comparison_summary:
+        comparison_line = comparison_summary
+        if top_comparison:
+            capability = str(top_comparison.get("capability") or top_comparison.get("capability_key") or "").strip()
+            assessment = str(top_comparison.get("assessment") or "").strip()
+            action_text = str(top_comparison.get("recommended_action") or "").strip()
+            top_bits = [bit for bit in [capability, assessment, action_text] if bit]
+            if top_bits:
+                comparison_line = f"{comparison_line} {' · '.join(top_bits)}"
+        brief_rows += f"\n    <span><strong>Product comparison read:</strong> {_esc(comparison_line)}</span>"
+    if confidence_line:
+        brief_rows += f"\n    <span><strong>Confidence limit:</strong> {_esc(confidence_line)}</span>"
+    if conversion_summary:
+        conversion_line = conversion_summary
+        if conversion_blocker:
+            conversion_line = f"{conversion_line} Blocker: {conversion_blocker}"
+        brief_rows += f"\n    <span><strong>Conversion diagnostics:</strong> {_esc(conversion_line)}</span>"
+    if monitored_count:
+        coverage_line = (
+            f"{target_company_count} of {monitored_count} monitored entities have product muscle targets"
+        )
+        if missing_product_muscle:
+            missing_label = ", ".join(missing_product_muscle[:5])
+            if len(missing_product_muscle) > 5:
+                missing_label = f"{missing_label}, +{len(missing_product_muscle) - 5} more"
+            coverage_line = f"{coverage_line}. {missing_label} need product-surface coverage"
+        if family_label:
+            coverage_line = f"{coverage_line}. Families: {family_label}"
+        brief_rows += f"\n    <span><strong>Product muscle coverage:</strong> {_esc(coverage_line)}</span>"
+    gap_plan = run.product_muscle_gap_plan if isinstance(run.product_muscle_gap_plan, dict) else {}
+    try:
+        missing_plan_count = int(gap_plan.get("missing_company_count") or 0)
+    except (TypeError, ValueError):
+        missing_plan_count = 0
+    try:
+        candidate_url_count = int(gap_plan.get("candidate_url_count") or 0)
+    except (TypeError, ValueError):
+        candidate_url_count = 0
+    if missing_plan_count:
+        missing_rows = gap_plan.get("missing_companies") or []
+        if not isinstance(missing_rows, list):
+            missing_rows = []
+        missing_names = [
+            str(item.get("company_name") or "").strip()
+            for item in missing_rows
+            if isinstance(item, dict) and str(item.get("company_name") or "").strip()
+        ]
+        missing_label = ", ".join(missing_names[:5])
+        if len(missing_names) > 5:
+            missing_label = f"{missing_label}, +{len(missing_names) - 5} more"
+        discovery_line = (
+            f"{missing_plan_count} companies queued · {candidate_url_count} candidate URLs"
+        )
+        if missing_label:
+            discovery_line = f"{discovery_line} · {missing_label}"
+        brief_rows += f"\n    <span><strong>Product surface discovery plan:</strong> {_esc(discovery_line)}</span>"
+    post_run_status = str(run.post_run_next_sweep_status or "").strip()
+    gap_summary = (
+        run.post_run_product_muscle_gap_discovery
+        if isinstance(run.post_run_product_muscle_gap_discovery, dict)
+        else {}
+    )
+    promotion_summary = (
+        run.post_run_product_surface_promotion
+        if isinstance(run.post_run_product_surface_promotion, dict)
+        else {}
+    )
+    if post_run_status or gap_summary or promotion_summary:
+        post_run_line = post_run_status
+        if not post_run_line:
+            try:
+                stored_candidates = int(gap_summary.get("stored_candidate_count") or 0)
+            except (TypeError, ValueError):
+                stored_candidates = 0
+            try:
+                promoted_sources = int(promotion_summary.get("promoted_count") or 0)
+            except (TypeError, ValueError):
+                promoted_sources = 0
+            post_run_line = (
+                f"{stored_candidates} candidate product surfaces queued; "
+                f"{promoted_sources} validated sources activated for the next sweep."
+            )
+        brief_rows += f"\n    <span><strong>Post-run learning loop:</strong> {_esc(post_run_line)}</span>"
+    apply_summary = run.learning_apply_plan_summary if isinstance(run.learning_apply_plan_summary, dict) else {}
+    try:
+        apply_action_count = int(apply_summary.get("action_count") or 0)
+    except (TypeError, ValueError):
+        apply_action_count = 0
+    apply_targets = apply_summary.get("targets") or []
+    if not isinstance(apply_targets, list):
+        apply_targets = [str(apply_targets)]
+    apply_paths = apply_summary.get("package_paths") or []
+    if not isinstance(apply_paths, list):
+        apply_paths = [str(apply_paths)]
+    if apply_action_count or run.learning_apply_plan_path:
+        apply_target_label = ", ".join(str(item) for item in apply_targets[:3] if str(item).strip())
+        path_label = ", ".join(str(item) for item in apply_paths[:2] if str(item).strip())
+        apply_line = f"{apply_action_count} package action{'s' if apply_action_count != 1 else ''} proposed"
+        if apply_target_label:
+            apply_line = f"{apply_line}: {apply_target_label}"
+        if path_label:
+            apply_line = f"{apply_line} · {path_label}"
+        brief_rows += f"\n    <span><strong>Learning apply plan:</strong> {_esc(apply_line)}</span>"
+    demand_readiness = run.demand_readiness if isinstance(run.demand_readiness, dict) else {}
+    if demand_readiness:
+        readiness_status = str(demand_readiness.get("status") or "not_recorded").strip()
+        readiness_action = str(demand_readiness.get("next_hermes_action") or "").strip()
+        readiness_summary = str(demand_readiness.get("summary") or "").strip()
+        manual_import = demand_readiness.get("manual_import")
+        if not isinstance(manual_import, dict):
+            manual_import = {}
+        ga4_connector = demand_readiness.get("ga4_connector")
+        if not isinstance(ga4_connector, dict):
+            ga4_connector = {}
+        readiness_bits = [readiness_status]
+        if readiness_action:
+            readiness_bits.append(f"next: {readiness_action}")
+        if manual_import:
+            readiness_bits.append(
+                f"{int(manual_import.get('inbox_file_count') or 0)} queued demand files"
+            )
+            readiness_bits.append(
+                f"{int(manual_import.get('ready_preview_count') or 0)} ready previews"
+            )
+        if ga4_connector:
+            ga4_label = "GA4 ready" if ga4_connector.get("ready") else "GA4 not ready"
+            if not ga4_connector.get("enabled"):
+                ga4_label = "GA4 disabled"
+            readiness_bits.append(ga4_label)
+        readiness_line = " · ".join(bit for bit in readiness_bits if bit)
+        if readiness_summary:
+            readiness_line = f"{readiness_line}. {readiness_summary}"
+        brief_rows += f"\n    <span><strong>Demand readiness:</strong> {_esc(readiness_line)}</span>"
+    demand_line = (
+        f"Inward demand: {run.demand_plane_status} · "
+        f"{run.looker_normalized_row_count} demand rows · "
+        f"{run.looker_discovered_count} export file"
+        f"{'' if run.looker_discovered_count == 1 else 's'} discovered"
+    )
+    if run.looker_error_count:
+        demand_line = f"{demand_line} · {run.looker_error_count} file error{'' if run.looker_error_count == 1 else 's'}"
+    if run.demand_plane_status == "missing":
+        demand_line = f"{demand_line}. Upload GA / Looker export before promoting recommendations."
+    elif run.demand_plane_status == "empty":
+        demand_line = f"{demand_line}. Export was found but no usable demand rows normalized."
+    elif run.demand_plane_status == "error":
+        demand_line = f"{demand_line}. Fix the demand export parse error before trusting action recommendations."
+    elif run.demand_plane_status == "degraded":
+        demand_line = f"{demand_line}. Some demand rows processed, but at least one export failed."
+    brief_rows += f"\n    <span><strong>{_esc(demand_line)}</strong></span>"
+    return f"""<div class="source-line">
+  <div>
+    <strong>Hermes / Argus run trace</strong>
+    <span>Product-market chain: {_esc(run.status)} · {_esc(run.target_count)} product surfaces planned · {_esc(run.learning_prioritized_count)} learning-prioritized · {_esc(run.scout_artifact_count)} Scout artifacts</span>
+    <span>Runner verdict: {_esc(verdict)} · learning instructions consumed: {_esc(run.learning_instruction_count)}</span>
+    {brief_rows}
+    <span>{_esc(target_label)}{(' · ' + _esc(reason)) if reason else ''}</span>
+  </div>
+  <span class="status-pill {_run_trace_status_class(run.status)}">{_esc(run.status)}</span>
+</div>"""
+
+
 def _render_eye_behind_the_lenses(state: DashboardState) -> str:
     coverage = state.coverage
     active_lanes = len(coverage.lanes)
     health_pct = f"{coverage.coverage_score * 100:.0f}%" if coverage.coverage_score is not None else "unknown"
     degraded = coverage.failed_lanes
     degraded_label = f"degraded sightlines: {_esc(', '.join(degraded))}" if degraded else "no degraded sightlines"
-    return f"""<section class="evidence-strip" id="sources">
+    source_ledger = _render_source_health_ledger(state)
+    run_trace = _render_product_market_run_trace(state)
+    failed_sources = sum(1 for s in state.source_health if (s.latest_event_type or "") in _FAILED_SOURCE_EVENTS)
+    return f"""<details class="evidence-strip appendix-section" id="sources">
+  <summary class="appendix-summary">
+    <div>
+      <h2>Source coverage and failures</h2>
+      <div class="caption">Diagnostics for trust, not the main intelligence read.</div>
+    </div>
+    <div class="lens-proofline" aria-label="Source coverage summary">
+      <span>{_esc(len(state.source_health))} source rows</span>
+      <span>{_esc(failed_sources)} failed</span>
+      <span>{_esc(health_pct)} health</span>
+    </div>
+    <span class="appendix-open">sources</span>
+  </summary>
+  <div class="appendix-content">
   <article class="section" id="trust-state">
     <h2>The eye behind the lenses</h2>
     <div class="caption">This is the quantified sightline behind Marketing, Sales, and Product: how much Argus saw, how healthy the source base is, and where confidence is constrained.</div>
@@ -2275,34 +3326,1893 @@ def _render_eye_behind_the_lenses(state: DashboardState) -> str:
       <div class="evidence"><strong>{len(degraded)}</strong><span>{degraded_label}</span></div>
       <div class="evidence"><strong>0</strong><span>private connectors claimed or implied</span></div>
     </div>
+    {run_trace}
   </article>
+  <article class="section" id="source-health-ledger">
+    <h2>Source health ledger</h2>
+    <div class="caption">Latest check status for monitored source URLs. Failed rows are shown first.</div>
+    {source_ledger}
+  </article>
+  </div>
+</details>"""
+
+
+_BRIEF_UI_STYLE = """
+    :root {
+      --ink: #171717;
+      --ink-soft: #2d2a24;
+      --muted: #5f6368;
+      --paper: #f7f3ea;
+      --paper-deep: #ebe3d2;
+      --panel: #fffdf7;
+      --line: #d8cfbd;
+      --gold: #b58a35;
+      --gold-soft: #ead8ac;
+      --blue: #003dff;
+      --green: #116149;
+      --amber: #8f5f00;
+      --red: #a9352b;
+      --wash: #f2ead9;
+    }
+    * { box-sizing: border-box; }
+    html { color: var(--ink); background: var(--paper); font-family: Inter, system-ui, sans-serif; scroll-behavior: auto; }
+    body {
+      margin: 0; min-height: 100vh;
+      background:
+        linear-gradient(90deg, rgba(23,23,23,.035) 1px, transparent 1px) 0 0 / 84px 84px,
+        linear-gradient(180deg, rgba(23,23,23,.025) 1px, transparent 1px) 0 0 / 84px 84px,
+        var(--paper);
+    }
+    [id] { scroll-margin-top: 112px; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    button { font: inherit; }
+    .brief-app { width: min(1320px, calc(100vw - 40px)); margin: 0 auto 64px; }
+    .brief-topbar {
+      min-height: 76px; display: flex; justify-content: space-between; gap: 18px; align-items: center;
+      border-bottom: 1px solid var(--ink); padding: 14px 0 12px; position: sticky; top: 0; z-index: 10;
+      background: rgba(247, 243, 234, .96); backdrop-filter: blur(14px);
+    }
+    .brief-brand { color: var(--ink); text-decoration: none; display: flex; gap: 11px; align-items: center; min-width: 210px; }
+    .argus-mark {
+      width: 44px; height: 44px; object-fit: contain; border: 1px solid var(--line);
+      background: rgba(255,255,255,.56); padding: 4px;
+    }
+    .brand-copy { display: grid; gap: 1px; }
+    .brief-brand strong {
+      font-family: "Playfair Display", Georgia, serif; font-size: 31px; line-height: .9; letter-spacing: 0; font-weight: 600;
+    }
+    .brief-brand span, .brief-meta { color: var(--muted); font-size: 12px; }
+    .brief-nav {
+      display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); background: rgba(255,253,247,.72);
+    }
+    .brief-nav a {
+      color: var(--ink); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center;
+      border-right: 1px solid var(--line); background: transparent; padding: 0 14px; font-size: 12px; font-weight: 650;
+      position: relative;
+    }
+    .brief-nav a:last-child { border-right: 0; }
+    .brief-nav a[aria-current="page"] { color: var(--paper); background: var(--ink); }
+    .brief-nav a[aria-current="page"]::after {
+      content: ""; position: absolute; left: 10px; right: 10px; bottom: 7px; height: 2px; background: var(--gold);
+    }
+    .read-hero {
+      margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
+      gap: 24px; align-items: stretch; border-bottom: 1px solid var(--ink); padding-bottom: 22px;
+    }
+    .read-main { display: grid; align-content: space-between; gap: 20px; min-height: 330px; }
+    .eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3 { margin: 0; letter-spacing: 0; }
+    h1 { font-family: "Playfair Display", Georgia, serif; font-size: clamp(42px, 6vw, 88px); line-height: .92; max-width: 900px; font-weight: 600; }
+    h2 { font-family: "Playfair Display", Georgia, serif; font-size: 27px; line-height: 1.05; font-weight: 600; }
+    h3 { font-size: 15px; line-height: 1.25; }
+    .read-main p, .selected-copy p, .role-card p, .coverage-card p {
+      margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55;
+    }
+    .visual-story {
+      border: 1px solid var(--line); background: var(--panel); min-height: 330px; display: grid; align-content: stretch;
+      box-shadow: 0 20px 60px rgba(23,23,23,.08);
+    }
+    .editorial-image { width: 100%; height: 100%; min-height: 330px; max-height: 430px; object-fit: cover; display: block; }
+    .decision-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); }
+    .decision {
+      min-height: 116px; padding: 14px; border-right: 1px solid var(--line); background: rgba(255,255,255,.64);
+      display: grid; align-content: start; gap: 8px;
+    }
+    .decision:last-child { border-right: 0; }
+    .decision span, .move-meta, .metric-label, .role-kicker {
+      color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+    }
+    .decision strong { font-size: 15px; line-height: 1.3; }
+    .coverage-card {
+      border: 1px solid var(--line); background: var(--panel); padding: 16px; display: grid; gap: 14px;
+      box-shadow: inset 4px 0 0 var(--gold);
+    }
+	    .coverage-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+	    .metric { border-top: 1px solid var(--line); padding-top: 10px; }
+	    .metric strong { display: block; font-size: 24px; line-height: 1; }
+	    .market-timeline {
+	      margin-top: 24px; border-top: 2px solid var(--ink); padding-top: 16px; display: grid; gap: 16px;
+	    }
+	    .timeline-head {
+	      display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 420px); gap: 18px; align-items: end;
+	    }
+	    .timeline-head p, .timeline-card p, .coverage-row span {
+	      margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5;
+	    }
+	    .history-controls { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 8px; }
+	    .history-controls label {
+	      display: grid; gap: 6px; color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 650;
+	    }
+	    .history-controls input, .history-controls select {
+	      min-height: 46px; width: 100%; border: 1px solid var(--ink); background: var(--panel);
+	      color: var(--ink); padding: 0 11px; font: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 400;
+	    }
+	    .history-controls input:focus-visible, .history-controls select:focus-visible {
+	      outline: 2px solid var(--gold); outline-offset: 2px;
+	    }
+	    .timeline-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--panel); }
+	    .timeline-card { min-height: 106px; padding: 12px; border-right: 1px solid var(--line); display: grid; align-content: start; gap: 7px; }
+	    .timeline-card:last-child { border-right: 0; }
+	    .timeline-card span, .coverage-row strong, .reason-row span {
+	      color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+	    }
+	    .timeline-card strong { font-size: 15px; line-height: 1.3; }
+	    .history-board { border: 1px solid var(--line); background: var(--panel); padding: 12px; display: grid; gap: 10px; }
+	    .history-row { border-top: 1px solid var(--line); padding-top: 10px; display: grid; grid-template-columns: 132px 1fr auto; gap: 12px; align-items: start; }
+	    .history-row:first-of-type { border-top: 0; padding-top: 0; }
+	    .history-date { color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+	    .history-main { display: grid; gap: 4px; }
+	    .history-main strong { font-size: 13px; line-height: 1.25; }
+	    .history-main p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+	    .history-link { color: var(--blue); font-size: 11px; font-weight: 650; white-space: nowrap; }
+	    .coverage-board { border: 1px solid var(--line); background: rgba(255,253,247,.72); padding: 12px; display: grid; gap: 10px; }
+	    .coverage-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+	    .coverage-row { border-top: 1px solid var(--line); padding-top: 9px; min-height: 72px; }
+	    .coverage-row b { display: block; margin-top: 3px; font-size: 13px; }
+	    .reason-board { border: 1px solid var(--line); background: var(--panel); padding: 12px; display: grid; gap: 9px; box-shadow: inset 4px 0 0 var(--gold); }
+	    .reason-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+	    .reason-row:first-of-type { border-top: 0; padding-top: 0; }
+	    .reason-row strong { font-size: 13px; text-align: right; }
+	    .intelligence-spine {
+	      margin-top: 24px; border-top: 2px solid var(--ink); padding-top: 16px; display: grid; gap: 14px;
+	    }
+	    .spine-head {
+	      display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 360px); gap: 18px; align-items: end;
+	    }
+	    .spine-head p, .spine-plane p, .spine-action p {
+	      margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55;
+	    }
+	    .spine-grid {
+	      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--panel);
+	    }
+	    .spine-plane {
+	      min-height: 150px; padding: 13px; border-right: 1px solid var(--line); display: grid; align-content: start; gap: 8px;
+	    }
+	    .spine-plane:last-child { border-right: 0; }
+	    .spine-plane h3 { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+	    .spine-meta { color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+	    .spine-action {
+	      border: 1px solid var(--line); background: rgba(255,253,247,.72); padding: 13px; display: grid; gap: 8px;
+	      box-shadow: inset 4px 0 0 var(--gold);
+	    }
+	    .operator-handoff {
+	      border: 1px solid var(--line); background: var(--panel); padding: 13px; display: grid; gap: 10px;
+	      box-shadow: inset 4px 0 0 var(--blue);
+	    }
+	    .operator-handoff-head {
+	      display: flex; justify-content: space-between; gap: 10px; align-items: start; flex-wrap: wrap;
+	    }
+	    .operator-handoff-head h3 { margin: 0; font-size: 18px; line-height: 1.2; }
+	    .operator-handoff p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+	    .operator-handoff-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+	    .operator-handoff-cell { border-top: 1px solid var(--line); padding-top: 8px; min-height: 64px; }
+	    .operator-handoff-cell b { display: block; margin-top: 4px; font-size: 13px; line-height: 1.35; }
+	    .operator-command { color: var(--blue); font-weight: 650; }
+	    .operator-command-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+	    .operator-command-list li { display: grid; gap: 2px; padding: 7px 8px; border: 1px solid var(--line); background: var(--surface-soft); }
+	    .operator-command-list span { color: var(--muted); font-size: 11px; line-height: 1.3; text-transform: uppercase; letter-spacing: 0; }
+	    .spine-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+	    .spine-tags span {
+	      border: 1px solid var(--line); background: var(--panel); min-height: 28px; display: inline-flex; align-items: center;
+	      padding: 0 8px; color: var(--muted); font-size: 11px;
+	    }
+	    .semantic-layer {
+	      margin-top: 24px; border-top: 2px solid var(--ink); padding-top: 16px;
+	      display: grid; gap: 18px;
+	    }
+	    .semantic-head {
+	      display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 380px); gap: 18px; align-items: end;
+	    }
+	    .semantic-head p, .semantic-panel p, .rubric-note {
+	      margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55;
+	    }
+	    .partner-control { display: grid; gap: 7px; }
+	    .partner-control label {
+	      color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; font-weight: 650;
+	    }
+	    .partner-control select {
+	      min-height: 46px; width: 100%; border: 1px solid var(--ink); background: var(--panel);
+	      color: var(--ink); padding: 0 12px; font: inherit; font-size: 14px;
+	    }
+	    .partner-control select:focus-visible {
+	      outline: 2px solid var(--gold); outline-offset: 2px;
+	    }
+	    .semantic-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 18px; align-items: start; }
+	    .semantic-panel {
+	      border: 1px solid var(--line); background: rgba(255,253,247,.72); padding: 14px; display: grid; gap: 12px;
+	    }
+	    .semantic-panel.accent { box-shadow: inset 4px 0 0 var(--gold); }
+	    .pattern-list { display: grid; gap: 8px; }
+	    .pattern-item {
+	      display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 10px;
+	    }
+	    .pattern-item:first-child { border-top: 0; padding-top: 0; }
+	    .pattern-meta {
+	      color: var(--muted); font-size: 11px; line-height: 1.4;
+	    }
+	    .alignment-stats {
+	      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+	    }
+	    .alignment-stat {
+	      border: 1px solid var(--line); background: var(--panel); padding: 8px; display: grid; gap: 3px;
+	    }
+	    .alignment-stat strong { font-size: 18px; line-height: 1; }
+	    .alignment-stat span {
+	      color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+	    }
+	    .alignment-companies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+	    .alignment-companies a, .alignment-companies span {
+	      min-height: 24px; display: inline-flex; align-items: center; border: 1px solid var(--line);
+	      background: var(--panel); padding: 0 7px; color: var(--ink); font-size: 11px; text-decoration: none;
+	    }
+	    .alignment-companies a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+	    .heat-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--panel); }
+	    .heat-map {
+	      min-width: max-content; display: grid; gap: 0;
+	      grid-template-columns: 180px repeat(var(--partner-count), minmax(68px, 1fr));
+	    }
+	    .heat-label, .heat-partner, .heat-cell {
+	      min-height: 42px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+	      display: flex; align-items: center; padding: 8px; font-size: 11px;
+	    }
+	    .heat-label { font-weight: 650; background: var(--wash); color: var(--ink); }
+	    .heat-partner {
+	      color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: 9px; justify-content: center;
+	      writing-mode: horizontal-tb; text-align: center;
+	    }
+	    .heat-cell { justify-content: center; color: transparent; position: relative; }
+	    .heat-cell::after {
+	      content: ""; width: 18px; height: 18px; border: 1px solid var(--line); background: rgba(23,23,23,.05);
+	    }
+	    .heat-level-1::after { background: rgba(181,138,53,.32); border-color: rgba(181,138,53,.45); }
+	    .heat-level-2::after { background: rgba(181,138,53,.62); border-color: rgba(181,138,53,.72); }
+	    .heat-level-3::after { background: var(--gold); border-color: var(--ink); }
+	    .rubric-score {
+	      display: flex; align-items: baseline; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+	    }
+	    .rubric-score strong { font-family: "Playfair Display", Georgia, serif; font-size: 42px; line-height: .9; font-weight: 600; }
+	    .rubric-score strong.not-scored { font-family: inherit; font-size: 20px; line-height: 1.1; }
+	    .rubric-list { display: grid; gap: 8px; }
+	    .rubric-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+	    .rubric-row:first-child { border-top: 0; padding-top: 0; }
+	    .rubric-row span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+	    .rubric-row strong { font-size: 13px; text-align: right; }
+	    .priority-layout {
+	      margin-top: 24px; display: grid; grid-template-columns: minmax(280px, .82fr) minmax(0, 1.18fr);
+	      gap: 22px; align-items: start;
+	    }
+    .panel { border-top: 2px solid var(--ink); padding-top: 14px; }
+    .panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: end; margin-bottom: 12px; }
+    .move-list { display: grid; gap: 8px; }
+    .move-card {
+      width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel); padding: 12px;
+      min-height: 94px; cursor: pointer; display: grid; gap: 8px;
+    }
+    .move-card.is-active { border-color: var(--gold); background: var(--wash); box-shadow: inset 4px 0 0 var(--gold); }
+    .move-card:focus-visible, .brief-nav a:focus-visible, .open-brief:focus-visible {
+      outline: 2px solid var(--gold); outline-offset: 2px;
+    }
+    .move-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .score-pill { border: 1px solid var(--line); padding: 3px 7px; font-size: 11px; white-space: nowrap; }
+    .selected-card { border: 1px solid var(--line); background: var(--panel); padding: 16px; display: grid; gap: 14px; }
+    .selected-card[hidden], .role-set[hidden], .source-row[hidden] { display: none; }
+    .selected-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .selected-copy { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 7px; }
+    .open-brief {
+      min-height: 38px; width: fit-content; display: inline-flex; align-items: center; padding: 0 11px;
+      border: 1px solid var(--ink); color: var(--ink); text-decoration: none; font-size: 12px; font-weight: 650;
+    }
+    .role-section { margin-top: 24px; border-top: 2px solid var(--ink); padding-top: 14px; }
+    .role-set { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .role-card { background: var(--panel); border: 1px solid var(--line); padding: 14px; min-height: 180px; display: grid; gap: 10px; }
+    .role-card.marketing { box-shadow: inset 4px 0 0 var(--gold); }
+    .role-card.sales { box-shadow: inset 4px 0 0 var(--red); }
+    .role-card.product { box-shadow: inset 4px 0 0 var(--green); }
+    .appendix-grid { margin-top: 24px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; padding-bottom: 52vh; }
+    details.appendix { border-top: 2px solid var(--ink); padding-top: 12px; }
+    details.appendix > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    details.appendix > summary::-webkit-details-marker { display: none; }
+    .appendix-body { margin-top: 12px; display: grid; gap: 8px; }
+	    .source-row, .registry-row { border: 1px solid var(--line); background: var(--panel); padding: 10px; display: grid; gap: 5px; }
+	    .status-badge { color: var(--muted); font-size: 11px; }
+	    @media (max-width: 900px) {
+	      .read-hero, .spine-head, .timeline-head, .history-controls, .semantic-head, .semantic-grid, .priority-layout, .appendix-grid, .role-set, .selected-grid { grid-template-columns: 1fr; }
+	      .decision-strip, .spine-grid, .timeline-grid, .coverage-list, .operator-handoff-grid { grid-template-columns: 1fr; }
+	      .history-row { grid-template-columns: 1fr; }
+	      .decision { border-right: 0; border-bottom: 1px solid var(--line); }
+	      .spine-plane { border-right: 0; border-bottom: 1px solid var(--line); }
+	      .timeline-card { border-right: 0; border-bottom: 1px solid var(--line); }
+	      .decision:last-child { border-bottom: 0; }
+	      .spine-plane:last-child { border-bottom: 0; }
+	      .timeline-card:last-child { border-bottom: 0; }
+	    }
+    @media (max-width: 560px) {
+      .brief-app { width: min(100vw - 24px, 1320px); }
+      .brief-topbar { align-items: start; flex-direction: column; }
+      .brief-nav { width: 100%; }
+      .brief-nav a { flex: 1 1 50%; justify-content: center; }
+      h1 { font-size: 34px; }
+      .coverage-metrics { grid-template-columns: 1fr; }
+    }
+"""
+
+_BRIEF_UI_SCRIPT = """
+    (() => {
+      const navLinks = [...document.querySelectorAll('[data-nav-link]')];
+	      const moveButtons = [...document.querySelectorAll('[data-select-competitor]')];
+	      const panels = [...document.querySelectorAll('[data-competitor-panel]')];
+	      const roleSets = [...document.querySelectorAll('[data-role-set]')];
+	      const focusLabel = document.getElementById('active-focus-label');
+	      const partnerSelector = document.getElementById('partner-selector');
+	      const historySelector = document.getElementById('history-selector');
+	      const historyCalendar = document.getElementById('history-calendar');
+
+      const setActiveNav = (id) => {
+        navLinks.forEach((link) => {
+          const active = link.dataset.navLink === id;
+          if (active) link.setAttribute('aria-current', 'page');
+          else link.removeAttribute('aria-current');
+        });
+      };
+
+      const openEvidence = () => {
+        if (location.hash === '#evidence-coverage') {
+          document.querySelectorAll('#evidence-coverage details').forEach((detail) => { detail.open = true; });
+        }
+      };
+
+      const goToSection = (id, updateHash = true) => {
+        if (id === 'evidence-coverage') {
+          document.querySelectorAll('#evidence-coverage details').forEach((detail) => { detail.open = true; });
+        }
+        setActiveNav(id);
+        const target = document.getElementById(id);
+        if (target) {
+          const offset = document.querySelector('.brief-topbar')?.getBoundingClientRect().height || 0;
+          const top = target.getBoundingClientRect().top + window.scrollY - offset - 28;
+          window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        }
+        if (updateHash) history.pushState(null, '', `#${id}`);
+      };
+
+      navLinks.forEach((link) => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+          goToSection(link.dataset.navLink);
+        });
+      });
+
+	      const selectCompetitor = (id, name, updateHash = true) => {
+		moveButtons.forEach((button) => {
+	          const active = button.dataset.selectCompetitor === id;
+	          button.classList.toggle('is-active', active);
+	          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+		});
+		panels.forEach((panel) => { panel.hidden = panel.dataset.competitorPanel !== id; });
+		roleSets.forEach((set) => { set.hidden = set.dataset.roleSet !== id; });
+	        if (partnerSelector && partnerSelector.value !== id) partnerSelector.value = id;
+		if (focusLabel) focusLabel.textContent = name ? `Focused on ${name}` : 'Focused on top move';
+		if (updateHash) history.replaceState(null, '', `#competitor-${id}`);
+	      };
+
+	      moveButtons.forEach((button) => {
+		button.addEventListener('click', () => selectCompetitor(
+	          button.dataset.selectCompetitor,
+	          button.dataset.competitorName || button.textContent.trim(),
+		));
+	      });
+
+	      if (partnerSelector) {
+		partnerSelector.addEventListener('change', () => {
+	          const option = partnerSelector.selectedOptions[0];
+	          if (option) selectCompetitor(partnerSelector.value, option.textContent.trim());
+		});
+	      }
+
+	      if (historySelector) {
+		historySelector.addEventListener('change', () => {
+	          const selected = historySelector.selectedOptions[0];
+	          const href = selected?.dataset.href;
+	          if (href) window.location.href = href;
+		});
+	      }
+
+	      if (historyCalendar && historySelector) {
+		historyCalendar.addEventListener('change', () => {
+	          const option = [...historySelector.options].find((item) => item.dataset.date === historyCalendar.value);
+	          if (option) {
+		    historySelector.value = option.value;
+		    historySelector.dispatchEvent(new Event('change'));
+		  }
+		});
+	      }
+
+	      const initialHash = location.hash.match(/^#competitor-(\\d+)/);
+	      const initial = initialHash
+		? moveButtons.find((button) => button.dataset.selectCompetitor === initialHash[1])
+		  || panels.find((panel) => panel.dataset.competitorPanel === initialHash[1])
+		: moveButtons.find((button) => button.classList.contains('is-active')) || moveButtons[0] || panels[0];
+	      if (initial) {
+	        selectCompetitor(
+	          initial.dataset.selectCompetitor || initial.dataset.competitorPanel,
+	          initial.dataset.competitorName || initial.textContent.trim(),
+	          false,
+	        );
+	      }
+
+	      const sectionHash = location.hash.match(/^#(today-read|intelligence-spine|market-timeline|semantic-layer|priority-moves|role-implications|evidence-coverage)$/);
+      if (sectionHash) {
+        openEvidence();
+        requestAnimationFrame(() => goToSection(sectionHash[1], false));
+      } else {
+        setActiveNav('today-read');
+      }
+
+	      window.addEventListener('hashchange', () => {
+		const match = location.hash.match(/^#(today-read|intelligence-spine|market-timeline|semantic-layer|priority-moves|role-implications|evidence-coverage)$/);
+		if (match) goToSection(match[1], false);
+	      });
+    })();
+"""
+
+
+def _dashboard_groups(state: DashboardState) -> list[_CompetitorGroup]:
+    if state.competitor_cards:
+        return _group_cards_by_competitor(state.competitor_cards)
+    groups: list[_CompetitorGroup] = []
+    for competitor in _standing_watchlist(state):
+        groups.append(
+            _CompetitorGroup(
+                competitor_id=competitor.competitor_id,
+                competitor_name=competitor.competitor_name,
+                attention_level=AttentionLevel.MONITOR,
+                score=float(min(100, competitor.material_signal_count * 8)),
+                action_cue=competitor.latest_movement_summary or "Monitor standing pattern.",
+                top_signals=[],
+                row_key=competitor.competitor_id,
+                brief_href=competitor.brief_href,
+            )
+        )
+    return groups
+
+
+def _run_health_fields_set(state: DashboardState) -> set[str]:
+    run_health = state.run_health
+    fields = getattr(run_health, "model_fields_set", None)
+    if fields is None:
+        fields = getattr(run_health, "__fields_set__", set())
+    return set(fields or set())
+
+
+def _current_run_move_count(state: DashboardState) -> int:
+    """How many moves the current Hermes/Argus run actually promoted.
+
+    Older state objects only had `material_delta_count`, so preserve that
+    legacy meaning when the explicit current-run field is absent. New state
+    objects set `current_material_delta_count` explicitly, including zero.
+    """
+    fields_set = _run_health_fields_set(state)
+    if "current_material_delta_count" in fields_set:
+        return int(state.run_health.current_material_delta_count or 0)
+    if "material_delta_count" in fields_set:
+        return int(state.run_health.material_delta_count or 0)
+    if state.competitor_cards:
+        return len(state.competitor_cards)
+    return int(state.run_health.material_delta_count or 0)
+
+
+def _rolling_material_card_count(state: DashboardState) -> int:
+    fields_set = _run_health_fields_set(state)
+    if "rolling_material_delta_count" in fields_set:
+        return int(state.run_health.rolling_material_delta_count or 0)
+    return len(state.competitor_cards)
+
+
+def _has_current_promoted_moves(state: DashboardState) -> bool:
+    return _current_run_move_count(state) > 0 and bool(state.competitor_cards)
+
+
+def _selection_groups(state: DashboardState, priority_groups: Optional[list[_CompetitorGroup]] = None) -> list[_CompetitorGroup]:
+    """Full partner selector population.
+
+    Priority moves stay limited to promoted material signals. This list is the
+    broader inspected universe: every priority group plus every monitored
+    competitor, including quiet and degraded-source partners.
+    """
+    groups = list(priority_groups if priority_groups is not None else _dashboard_groups(state))
+    seen = {group.competitor_id for group in groups}
+    quiet = sorted(
+        [c for c in state.monitored_competitors if c.competitor_id not in seen],
+        key=lambda c: c.competitor_name.lower(),
+    )
+    for competitor in quiet:
+        if competitor.material_signal_count:
+            action = competitor.latest_movement_summary or "Standing material signal on file for this partner."
+            level = AttentionLevel.MONITOR
+            score = float(min(100, competitor.material_signal_count * 8))
+        elif competitor.checked_today:
+            action = "No material move crossed the action threshold for this partner."
+            level = AttentionLevel.NORMAL
+            score = 0.0
+        else:
+            action = "This partner has not completed today's sweep."
+            level = AttentionLevel.MONITOR
+            score = 0.0
+        groups.append(
+            _CompetitorGroup(
+                competitor_id=competitor.competitor_id,
+                competitor_name=competitor.competitor_name,
+                attention_level=level,
+                score=score,
+                action_cue=action,
+                top_signals=[],
+                row_key=competitor.competitor_id,
+                brief_href=competitor.brief_href,
+            )
+        )
+    return groups
+
+
+_PATTERN_RULES: list[tuple[str, tuple[str, ...], str, str]] = [
+    (
+        "Agentic commerce",
+        ("agentic", "ai shopping", "shopping agent", "conversational", "guided shopping", "commerce agent"),
+        "Competitors are trying to own the assisted-shopping journey, not only the search box.",
+        "Make Algolia's AI shopping journey proof concrete across discovery, conversion, and merchant control.",
+    ),
+    (
+        "Agent infrastructure",
+        ("context engineering", "retrieval", "mcp", "a2a", "agent infrastructure", "enterprise search", "vertex"),
+        "Search is being reframed as agent infrastructure and context supply.",
+        "Tighten technical battlecards around retrieval quality, context control, and enterprise readiness.",
+    ),
+    (
+        "Vertical product discovery",
+        ("fashion", "grocery", "furniture", "retail", "marketplace", "b2b", "product discovery"),
+        "Vendors are moving from generic search claims into vertical discovery proof.",
+        "Prioritize vertical proof packs where Algolia can show outcomes by category and journey.",
+    ),
+    (
+        "Customer proof race",
+        ("case study", "customer", "conversion", "roi", "proof", "benchmark", "success story"),
+        "The market is using customer evidence to make AI search less speculative.",
+        "Ship tighter customer-proof narratives before competitors define the evidence standard.",
+    ),
+    (
+        "Platform velocity",
+        ("release", "changelog", "docs", "platform", "integration", "api", "connector"),
+        "Competitors are signaling velocity through product, docs, and integration surfaces.",
+        "Separate real roadmap pressure from routine release noise before escalating to Product.",
+    ),
+]
+
+
+def _texts_by_competitor(state: DashboardState, groups: list[_CompetitorGroup]) -> dict[int, str]:
+    texts: dict[int, list[str]] = {group.competitor_id: [group.competitor_name, group.action_cue] for group in groups}
+    for group in groups:
+        for signal in group.top_signals:
+            texts.setdefault(group.competitor_id, []).extend(
+                [
+                    signal.top_signal_headline or "",
+                    signal.what_changed or "",
+                    signal.why_it_matters or "",
+                    signal.recommended_action or "",
+                    signal.action_cue or "",
+                ]
+            )
+    for competitor in state.monitored_competitors:
+        texts.setdefault(competitor.competitor_id, []).extend(
+            [
+                competitor.competitor_name,
+                competitor.domain or "",
+                competitor.category or "",
+                competitor.latest_movement_summary or "",
+            ]
+        )
+    for play in state.prescriptions:
+        if play.competitor_id is not None:
+            texts.setdefault(play.competitor_id, []).extend(
+                [play.title, play.team, play.expected_effect or "", " ".join(play.play), " ".join(play.evidence_urls)]
+            )
+    for thesis in state.theses:
+        texts.setdefault(thesis.competitor_id, []).append(thesis.thesis)
+    for source in state.source_health:
+        texts.setdefault(source.competitor_id, []).extend([source.source_family, source.url, source.detail or ""])
+    return {competitor_id: " ".join(part for part in parts if part).lower() for competitor_id, parts in texts.items()}
+
+
+def _competitor_ids_by_name(state: DashboardState, groups: list[_CompetitorGroup]) -> dict[str, int]:
+    names = {group.competitor_name.lower(): group.competitor_id for group in groups}
+    for competitor in state.monitored_competitors:
+        names.setdefault(competitor.competitor_name.lower(), competitor.competitor_id)
+    for card in state.competitor_cards:
+        names.setdefault(card.competitor_name.lower(), card.competitor_id)
+    return names
+
+
+def _recommendation_for_pattern(state: DashboardState, pattern_id: int) -> str | None:
+    for recommendation in state.argus_recommendations:
+        if recommendation.pattern_observation_id == pattern_id:
+            return recommendation.action
+    if state.argus_recommendations:
+        return state.argus_recommendations[0].action
+    return None
+
+
+def _product_market_semantic_patterns(
+    state: DashboardState,
+    groups: list[_CompetitorGroup],
+) -> list[_SemanticPattern]:
+    if not state.product_market_patterns:
+        return []
+    competitor_ids = _competitor_ids_by_name(state, groups)
+    patterns: list[_SemanticPattern] = []
+    for pattern in state.product_market_patterns:
+        level = max(1, min(3, round((pattern.confidence or 0.34) * 3)))
+        hits: dict[int, int] = {}
+        for company in pattern.involved_companies:
+            competitor_id = competitor_ids.get(company.lower())
+            if competitor_id is not None:
+                hits[competitor_id] = level
+        patterns.append(
+            _SemanticPattern(
+                label=pattern.capability_text,
+                description=pattern.summary,
+                recommendation=(
+                    _recommendation_for_pattern(state, pattern.pattern_id)
+                    or "Inspect the evidence behind this product-market pattern before acting."
+                ),
+                competitor_hits=hits,
+            )
+        )
+    patterns.sort(key=lambda pattern: (-sum(pattern.competitor_hits.values()), pattern.label))
+    return patterns[:4]
+
+
+def _semantic_patterns(state: DashboardState, groups: list[_CompetitorGroup]) -> list[_SemanticPattern]:
+    product_market_patterns = _product_market_semantic_patterns(state, groups)
+    if product_market_patterns:
+        return product_market_patterns
+
+    texts = _texts_by_competitor(state, groups)
+    patterns: list[_SemanticPattern] = []
+    for label, keywords, description, recommendation in _PATTERN_RULES:
+        hits: dict[int, int] = {}
+        for competitor_id, text in texts.items():
+            score = sum(1 for keyword in keywords if keyword in text)
+            if score:
+                hits[competitor_id] = min(3, score)
+        if hits:
+            patterns.append(
+                _SemanticPattern(
+                    label=label,
+                    description=description,
+                    recommendation=recommendation,
+                    competitor_hits=hits,
+                )
+            )
+    patterns.sort(key=lambda pattern: (-sum(pattern.competitor_hits.values()), pattern.label))
+    if not patterns and groups:
+        top = groups[0]
+        patterns.append(
+            _SemanticPattern(
+                label="Current material movement",
+                description="Argus has promoted material movement, but not enough shared vocabulary exists to call a cross-partner pattern.",
+                recommendation=top.action_cue or "Inspect the top move and evidence before acting.",
+                competitor_hits={top.competitor_id: 1},
+            )
+        )
+    return patterns[:4]
+
+
+def _evidence_url_count(state: DashboardState) -> int:
+    seen: set[str] = set()
+    for card in state.competitor_cards:
+        for evidence in card.evidence_ids or []:
+            if evidence:
+                seen.add(str(evidence))
+    for play in state.prescriptions:
+        for evidence in play.evidence_urls or []:
+            if evidence:
+                seen.add(str(evidence))
+    return len(seen)
+
+
+def _rubric_dimension_label(value: str) -> str:
+    return value.replace("_", " ").capitalize()
+
+
+def _confidence_rubric(state: DashboardState, groups: list[_CompetitorGroup]) -> tuple[str, str, list[tuple[str, str, str]], str]:
+    for recommendation in state.argus_recommendations:
+        if recommendation.scorecard and recommendation.scorecard.dimension_scores:
+            rows = [
+                (
+                    _rubric_dimension_label(dimension.dimension),
+                    dimension.rationale,
+                    f"{dimension.score}/{dimension.max_score}",
+                )
+                for dimension in recommendation.scorecard.dimension_scores
+            ]
+            return str(recommendation.scorecard.total_score), "/ 100", rows, recommendation.scorecard.summary
+
+    blocker = _first_confidence_limit(state)
+    rows = [
+        (
+            "Action gate",
+            "No backend recommendation scorecard exists because no current-run recommendation cleared the action gate.",
+            "not scored",
+        ),
+        (
+            "Blocking evidence",
+            blocker,
+            "blocked",
+        ),
+    ]
+    note = (
+        "A numeric confidence score appears only when Argus has a backend recommendation scorecard "
+        "with product, conversation, demand, own-response, and evidence-breadth dimensions."
+    )
+    return "Not scored", "", rows, note
+
+
+def _first_confidence_limit(state: DashboardState) -> str:
+    for item in state.intelligence_spine.confidence_limits:
+        text = str(item).strip()
+        if text:
+            return text
+    brief = state.product_market_run.intelligence_brief
+    if isinstance(brief, dict):
+        for item in brief.get("confidence_limits") or []:
+            text = str(item).strip()
+            if text:
+                return text
+    if state.product_market_run.demand_plane_status in {"missing", "not_recorded"} and state.product_market_run.demand_signal_count == 0:
+        return "No tenant-side demand evidence was captured in this run."
+    if state.argus_evidence_needs:
+        return state.argus_evidence_needs[0].why_needed
+    return "Argus withheld action because the required evidence planes did not clear the backend scoring gate."
+
+
+def _render_heat_map(patterns: list[_SemanticPattern], groups: list[_CompetitorGroup]) -> str:
+    if not patterns or not groups:
+        return '<p class="brief-meta">No cross-partner heat map can be scored from this run.</p>'
+    partners = groups
+    cells: list[str] = ['<div class="heat-label">Theme</div>']
+    for group in partners:
+        cells.append(f'<div class="heat-partner">{_esc(_truncate(group.competitor_name, 28))}</div>')
+    for pattern in patterns:
+        cells.append(f'<div class="heat-label">{_esc(pattern.label)}</div>')
+        for group in partners:
+            level = pattern.competitor_hits.get(group.competitor_id, 0)
+            title = f"{pattern.label}: {group.competitor_name} intensity {level}"
+            cells.append(
+                f'<div class="heat-cell heat-level-{_esc(level)}" data-heat-cell="{_esc(pattern.label)}:{_esc(group.competitor_id)}" title="{_esc(title)}">{_esc(level)}</div>'
+            )
+    return (
+        f'<div class="heat-wrap"><div class="heat-map" data-heat-map style="--partner-count:{len(partners)}">'
+        + "".join(cells)
+        + "</div></div>"
+    )
+
+
+def _render_pattern_list(patterns: list[_SemanticPattern], groups: list[_CompetitorGroup]) -> str:
+    if not patterns:
+        return '<p class="brief-meta">Insufficient cross-partner pattern evidence in this run.</p>'
+    names = {group.competitor_id: group.competitor_name for group in groups}
+    rows: list[str] = []
+    for pattern in patterns:
+        partners = [names.get(competitor_id, f"Competitor {competitor_id}") for competitor_id in pattern.competitor_hits]
+        rows.append(
+            f"""<div class="pattern-item">
+  <strong>{_esc(pattern.label)}</strong>
+  <span class="pattern-meta">{_esc(_truncate(pattern.description, 150))}</span>
+  <span class="pattern-meta">{_esc(len(partners))} partner{'s' if len(partners) != 1 else ''}: {_esc(', '.join(partners[:6]))}</span>
+</div>"""
+        )
+    return '<div class="pattern-list">' + "".join(rows) + "</div>"
+
+
+def _render_demand_summary(state: DashboardState) -> str:
+    if not state.demand_signals:
+        return '<p class="brief-meta">No tenant-side demand signal was published with this run.</p>'
+    rows: list[str] = []
+    for signal in state.demand_signals[:3]:
+        change = "" if signal.change_pct is None else f" · {signal.change_pct * 100:+.0f}%"
+        context = signal.argus_plan_context if isinstance(signal.argus_plan_context, dict) else {}
+        context_bits: list[str] = []
+        assessment = str(context.get("assessment") or "").strip()
+        if assessment:
+            context_bits.append(f"answers {assessment}")
+        related = context.get("related_competitors")
+        if isinstance(related, list):
+            related_names = [str(item).strip() for item in related if str(item).strip()]
+            if related_names:
+                context_bits.append("related: " + ", ".join(related_names[:4]))
+        why_collect = str(context.get("why_collect") or "").strip()
+        if why_collect:
+            context_bits.append(why_collect)
+        context_line = (
+            f'\n  <span class="pattern-meta">{_esc(" · ".join(context_bits))}</span>'
+            if context_bits
+            else ""
+        )
+        rows.append(
+            f"""<div class="pattern-item">
+  <strong>{_esc(signal.topic)}</strong>
+  <span class="pattern-meta">{_esc(signal.metric)}: {_esc(signal.value)}{_esc(change)}</span>
+  <span class="pattern-meta">{_esc(signal.source_label)}</span>{context_line}
+</div>"""
+        )
+    return '<div class="pattern-list">' + "".join(rows) + "</div>"
+
+
+def _render_demand_feature_alignment(state: DashboardState) -> str:
+    alignment = state.demand_feature_alignment
+    if not alignment.rows:
+        return '<p class="brief-meta">No demand-to-product alignment was published with this run.</p>'
+
+    stats = f"""<div class="alignment-stats" aria-label="Demand alignment totals">
+  <div class="alignment-stat"><strong>{_esc(alignment.signal_count_total)}</strong><span>demand signals</span></div>
+  <div class="alignment-stat"><strong>{_esc(alignment.matched_signal_count)}</strong><span>matched</span></div>
+  <div class="alignment-stat"><strong>{_esc(alignment.unmatched_signal_count)}</strong><span>unmatched</span></div>
+</div>"""
+    rows: list[str] = []
+    for row in alignment.rows[:4]:
+        change = "" if row.change_pct is None else f" · {row.change_pct * 100:+.0f}%"
+        capability = row.matched_capability or "No mapped capability"
+        demand_link = (
+            f'<a href="{_esc(row.demand_evidence_url)}" target="_blank" rel="noopener">demand proof</a>'
+            if row.demand_evidence_url
+            else '<span class="pattern-meta">no demand proof URL</span>'
+        )
+        company_links: list[str] = []
+        for company in row.related_companies:
+            label = f"{company.company_name} · {company.position_status}"
+            if company.first_evidence_url:
+                company_links.append(
+                    f'<a href="{_esc(company.first_evidence_url)}" target="_blank" rel="noopener">{_esc(label)}</a>'
+                )
+            else:
+                company_links.append(f"<span>{_esc(label)}</span>")
+        companies = (
+            f"""<div class="alignment-companies">{''.join(company_links)}</div>"""
+            if company_links
+            else '<span class="pattern-meta">no product proof mapped</span>'
+        )
+        rows.append(
+            f"""<div class="pattern-item">
+  <strong>{_esc(row.topic)}</strong>
+  <span class="pattern-meta">{_esc(row.metric)}: {_esc(row.value)}{_esc(change)} · {_esc(row.match_status)} · {_esc(capability)}</span>
+  <p>{_esc(row.summary)}</p>
+  {companies}
+  <span class="pattern-meta">{demand_link}</span>
+</div>"""
+        )
+    capped = (
+        f'<p class="brief-meta">Showing {_esc(min(4, len(alignment.rows)))} of {_esc(len(alignment.rows))} aligned demand topics.</p>'
+        if len(alignment.rows) > 4
+        else ""
+    )
+    return stats + '<div class="pattern-list">' + "".join(rows) + "</div>" + capped
+
+
+def _render_feature_matrix_summary(state: DashboardState) -> str:
+    comparison = state.product_feature_comparison
+    if comparison.rows and comparison.companies:
+        header_cells = "".join(
+            f"""<th scope="col">
+  <span>{_esc(company.company_name)}</span>
+  <small>{_esc(company.company_role)} · {_esc(company.active_source_count)} active source{'' if company.active_source_count == 1 else 's'}</small>
+</th>"""
+            for company in comparison.companies
+        )
+        body_rows: list[str] = []
+        for row in comparison.rows:
+            cells: list[str] = []
+            for cell in row.cells:
+                evidence = (
+                    f'<a href="{_esc(cell.first_evidence_url)}" target="_blank" rel="noopener">proof</a>'
+                    if cell.first_evidence_url
+                    else '<span class="pattern-meta">no proof captured</span>'
+                )
+                confidence = "" if cell.confidence is None else f" · {cell.confidence:.0%}"
+                cells.append(
+                    f"""<td>
+  <strong>{_esc(cell.position_status)}</strong>
+  <span class="pattern-meta">{_esc(cell.evidence_count)} ref{'' if cell.evidence_count == 1 else 's'}{_esc(confidence)}</span>
+  <p>{_esc(cell.summary)}</p>
+  {evidence}
+</td>"""
+                )
+            body_rows.append(
+                f"""<tr>
+  <th scope="row">
+    <strong>{_esc(row.capability_text)}</strong>
+    <small>{_esc(row.proven_count)} proven · {_esc(row.claimed_count)} claimed · {_esc(row.unknown_count)} unknown</small>
+  </th>
+  {''.join(cells)}
+</tr>"""
+            )
+        capped_note = (
+            f'<p class="brief-meta">Showing {_esc(len(comparison.rows))} of {_esc(comparison.row_count_total)} capabilities and {_esc(len(comparison.companies))} of {_esc(comparison.company_count_total)} companies.</p>'
+            if comparison.capped
+            else ""
+        )
+        return f"""<div class="feature-comparison-wrap">
+  <table class="feature-comparison">
+    <thead><tr><th scope="col">Capability</th>{header_cells}</tr></thead>
+    <tbody>{''.join(body_rows)}</tbody>
+  </table>
+  {capped_note}
+</div>"""
+    if not state.feature_matrix:
+        return '<p class="brief-meta">No product muscle matrix rows were published with this run.</p>'
+    rows: list[str] = []
+    for row in state.feature_matrix[:4]:
+        rows.append(
+            f"""<div class="pattern-item">
+  <strong>{_esc(row.company_name)} · {_esc(row.capability_text)}</strong>
+  <span class="pattern-meta">{_esc(row.position_status)} · {_esc(row.company_role)}</span>
+  <span class="pattern-meta">{_esc(row.summary or "No summary on file.")}</span>
+</div>"""
+        )
+    return '<div class="pattern-list">' + "".join(rows) + "</div>"
+
+
+def _render_semantic_layer(
+    state: DashboardState,
+    priority_groups: list[_CompetitorGroup],
+    selection_groups: list[_CompetitorGroup],
+) -> str:
+    options = "".join(
+        f'<option value="{_esc(group.competitor_id)}">{_esc(group.competitor_name)}</option>'
+        for group in selection_groups
+    )
+    patterns = _semantic_patterns(state, selection_groups)
+    top_pattern = patterns[0] if patterns else None
+    top_group = priority_groups[0] if priority_groups else (selection_groups[0] if selection_groups else None)
+    direction = top_pattern.description if top_pattern else "Argus does not have enough shared movement to call a market direction from this run."
+    if (priority_groups and _has_current_promoted_moves(state)) or state.argus_recommendations:
+        recommendation = (
+            top_pattern.recommendation
+            if top_pattern
+            else (
+                top_group.top_signals[0].recommended_action
+                if top_group and top_group.top_signals and top_group.top_signals[0].recommended_action
+                else "Improve coverage and inspect source failures before acting."
+            )
+        )
+    else:
+        recommendation = (
+            "No current-run recommendation cleared the action gate. Use the patterns as recent memory, "
+            "then challenge coverage or inspect source health before changing strategy."
+        )
+    score, score_scale, rubric_rows, rubric_note = _confidence_rubric(state, priority_groups)
+    score_attr = "not-scored" if score == "Not scored" else score
+    score_class = ' class="not-scored"' if score == "Not scored" else ""
+    rubric_html = "".join(
+        f'<div class="rubric-row"><span>{_esc(label)}<br>{_esc(detail)}</span><strong>{_esc(points)}</strong></div>'
+        for label, detail, points in rubric_rows
+    )
+    selector = (
+        f"""<div class="partner-control">
+  <label for="partner-selector">Partner selector</label>
+  <select id="partner-selector" aria-label="Select monitored partner">{options}</select>
+</div>"""
+        if selection_groups
+        else '<p class="brief-meta">No monitored partner list was published with this run.</p>'
+    )
+    return f"""<section class="semantic-layer" id="semantic-layer" aria-label="Semantic market layer">
+  <div class="semantic-head">
+    <div>
+      <div class="eyebrow">Semantic layer</div>
+      <h2>Pattern across partners</h2>
+      <p>Use this before trusting a priority. It compares the watched universe, not only the loudest promoted card.</p>
+    </div>
+    {selector}
+  </div>
+  <div class="semantic-grid">
+    <article class="semantic-panel accent">
+      <h2>Pattern across partners</h2>
+      {_render_pattern_list(patterns, selection_groups)}
+      {_render_heat_map(patterns, selection_groups)}
+      <h2>Product feature comparison</h2>
+      {_render_feature_matrix_summary(state)}
+    </article>
+    <aside class="semantic-panel">
+      <div>
+        <h2>Where the market is heading</h2>
+        <p>{_esc(direction)}</p>
+      </div>
+      <div>
+        <h2>Argus recommendation</h2>
+        <p>{_esc(recommendation)}</p>
+      </div>
+      <div>
+        <h2>Demand response</h2>
+        {_render_demand_summary(state)}
+      </div>
+      <div>
+        <h2>Audience demand alignment</h2>
+        {_render_demand_feature_alignment(state)}
+      </div>
+      <div class="confidence-rubric" data-confidence-score="{_esc(score_attr)}">
+        <h2>Confidence rubric</h2>
+        <div class="rubric-score"><strong{score_class}>{_esc(score)}</strong><span>{_esc(score_scale)}</span></div>
+        <div class="rubric-list">{rubric_html}</div>
+        <p class="rubric-note">{_esc(rubric_note)}</p>
+      </div>
+    </aside>
+  </div>
 </section>"""
 
 
-def render_cockpit_html(state: DashboardState) -> str:
-    """Renders one DashboardState into the full Argus cockpit page. Returns
-    a complete, self-contained HTML document (inline CSS/JS, no build step,
-    no server dependency beyond the same Google Fonts CDN links the mockup
-    itself uses)."""
-    hero = _render_hero(state)
-    visual = _render_visual_story(state)
-    barometer = _render_barometer(state)
-    sections = _render_sections(state)
-    eye = _render_eye_behind_the_lenses(state)
-    # The logo must never render as a broken image icon: if the inlined
-    # asset is missing (build/generation problem) fall back to the design's
-    # own text-mark treatment rather than an <img> with a dead src.
-    if _cockpit_assets.LOGO_DATA_URI:
-        logo_markup = f'<img class="sigil" src="{_cockpit_assets.LOGO_DATA_URI}" alt="" aria-hidden="true" />'
-    else:
-        logo_markup = '<span class="sigil sigil-fallback" aria-hidden="true">A</span>'
+def _spine_status_class(status: str) -> str:
+    normalized = status.strip().lower()
+    if normalized == "present":
+        return "quiet"
+    if normalized in {"missing", "failed", "error"}:
+        return "failed"
+    if normalized in {"degraded", "partial", "not_recorded"}:
+        return "pending"
+    return "pattern"
 
-    # Cache-busting fix (Arijit personally saw stale scores after a fix
-    # shipped, on a static-HTML-behind-Caddy setup that has no natural
-    # invalidation): no-cache directive in the head, this run's generated_at
-    # visible on the page itself (not just an HTML comment), and internal
-    # links stamped with the same epoch (see _latest_report_link).
+
+def _handoff_status_class(status: str, readiness: str = "") -> str:
+    normalized = f"{status} {readiness}".strip().lower()
+    if any(token in normalized for token in ("blocked", "artifact_error", "not_actionable", "failed")):
+        return "failed"
+    if any(token in normalized for token in ("limited", "needs_operator_review", "unknown", "not_recorded")):
+        return "pending"
+    if any(token in normalized for token in ("ready", "actionable")):
+        return "quiet"
+    return "pattern"
+
+
+def _render_spine_plane(plane) -> str:
+    status = str(plane.status or "unknown")
+    counts = (
+        f"{plane.signal_count} signal{'s' if plane.signal_count != 1 else ''} · "
+        f"{plane.evidence_count} evidence ref{'s' if plane.evidence_count != 1 else ''}"
+    )
+    return f"""<article class="spine-plane">
+  <h3>{_esc(plane.label)} <span class="status-pill {_spine_status_class(status)}">{_esc(status)}</span></h3>
+  <div class="spine-meta">{_esc(counts)}</div>
+  <p>{_esc(plane.summary)}</p>
+</article>"""
+
+
+def _has_operator_handoff(handoff: DashboardOperatorHandoff) -> bool:
+    return handoff.artifact_found or handoff.status != "not_recorded" or handoff.argus_readiness != "unknown"
+
+
+def _render_demand_work_order(handoff: DashboardOperatorHandoff) -> str:
+    plan = handoff.demand_collection_plan or {}
+    template = handoff.demand_plan_template or {}
+    topics = [topic for topic in (plan.get("topics") or []) if isinstance(topic, dict)]
+    try:
+        topic_count = int(plan.get("topic_count") or len(topics))
+    except (TypeError, ValueError):
+        topic_count = len(topics)
+    template_name = str(template.get("filename") or "").strip()
+    if not topics and not template_name and topic_count <= 0:
+        return ""
+
+    topic_rows: list[str] = []
+    for topic in topics[:4]:
+        title = str(topic.get("topic") or topic.get("capability_key") or "Untitled demand topic").strip()
+        competitors = [
+            str(item).strip()
+            for item in (topic.get("related_competitors") or [])
+            if str(item).strip()
+        ]
+        competitor_line = ", ".join(competitors[:3]) if competitors else "No competitor attached"
+        try:
+            evidence_count = int(topic.get("evidence_url_count") or len(topic.get("evidence_urls") or []))
+        except (TypeError, ValueError):
+            evidence_count = 0
+        evidence_label = f"{evidence_count} evidence ref{'s' if evidence_count != 1 else ''}"
+        topic_rows.append(
+            f"""<li><b>{_esc(title)}</b><span>{_esc(competitor_line)} · {_esc(evidence_label)}</span></li>"""
+        )
+
+    topic_html = (
+        f"""<ul class="operator-command-list" aria-label="Demand work-order topics">{''.join(topic_rows)}</ul>"""
+        if topic_rows
+        else ""
+    )
+    template_html = (
+        f"""<p>Template: <b>{_esc(template_name)}</b></p>"""
+        if template_name
+        else ""
+    )
+    return f"""<div class="operator-handoff-cell operator-demand-work-order">
+      <div class="spine-meta">Demand work order</div>
+      <b>{_esc(str(topic_count))} topics to collect</b>
+      {template_html}
+      {topic_html}
+    </div>"""
+
+
+def _render_operator_handoff(handoff: DashboardOperatorHandoff) -> str:
+    status_class = _handoff_status_class(handoff.status, handoff.argus_readiness)
+    top_blocker = handoff.top_blocker or {}
+    blocker_title = str(top_blocker.get("title") or "No top blocker recorded.")
+    blocker_plane = str(top_blocker.get("evidence_plane") or "unknown")
+    blocks = [str(item) for item in (top_blocker.get("blocks") or []) if str(item).strip()]
+    blocks_line = ", ".join(blocks[:3]) if blocks else "No blocked action listed."
+    work_queue = handoff.work_queue or {}
+    queue_line = (
+        f"{int(work_queue.get('work_item_count') or 0)} open · "
+        f"{int(work_queue.get('blocking_count') or 0)} blocking · "
+        f"{int(work_queue.get('limiting_count') or 0)} limiting"
+    )
+    command = handoff.primary_command
+    command_rows = [
+        (command.label, command.method, command.surface, command.route_kind)
+        for command in handoff.operator_commands
+    ]
+    if not command_rows and command:
+        command_rows = [(command.label, command.method, command.surface or "Argus command", "internal")]
+    if command_rows:
+        command_line = "".join(
+            f"""<li><b>{_esc(label)}</b><span>{_esc(surface)} · {_esc(method.upper())} · {_esc(route_kind)}</span></li>"""
+            for label, method, surface, route_kind in command_rows[:4]
+        )
+        command_html = f"""<ul class="operator-command-list" aria-label="Argus operator commands">{command_line}</ul>"""
+    else:
+        command_html = '<p class="operator-command">No command was attached to this handoff.</p>'
+    brief_line = handoff.operator_brief[0] if handoff.operator_brief else handoff.summary
+    demand_work_order_html = _render_demand_work_order(handoff)
+    return f"""<article class="operator-handoff" aria-label="Argus operator handoff">
+  <div class="operator-handoff-head">
+    <div>
+      <div class="eyebrow">Argus operator handoff</div>
+      <h3>{_esc(handoff.summary)}</h3>
+    </div>
+    <span class="status-pill {status_class}">{_esc(handoff.status)}</span>
+    <span class="status-pill {status_class}">{_esc(handoff.argus_readiness)}</span>
+  </div>
+  <p>{_esc(brief_line)}</p>
+  <div class="operator-handoff-grid">
+    <div class="operator-handoff-cell">
+      <div class="spine-meta">Next operator action</div>
+      <b>{_esc(handoff.next_operator_action)}</b>
+    </div>
+    <div class="operator-handoff-cell">
+      <div class="spine-meta">Top blocker</div>
+      <b>{_esc(blocker_title)} · {_esc(blocker_plane)}</b>
+      <p>{_esc(blocks_line)}</p>
+    </div>
+    <div class="operator-handoff-cell">
+      <div class="spine-meta">Queue and command</div>
+      <b>{_esc(queue_line)}</b>
+      {command_html}
+    </div>
+    {demand_work_order_html}
+  </div>
+</article>"""
+
+
+def _render_intelligence_spine(state: DashboardState) -> str:
+    spine = state.intelligence_spine
+    has_handoff = _has_operator_handoff(state.operator_handoff)
+    if spine.verdict == "not_recorded" and not spine.planes and not has_handoff:
+        return """<section class="intelligence-spine" id="intelligence-spine" aria-label="Argus intelligence proof chain">
+  <div class="spine-head">
+    <div>
+      <div class="eyebrow">Argus proof chain</div>
+      <h2>How Argus earned this read</h2>
+      <p>Argus has not published a product, conversation, and demand proof chain for this run yet.</p>
+    </div>
+  </div>
+</section>"""
+
+    plane_html = "".join(_render_spine_plane(plane) for plane in spine.planes)
+    if not plane_html:
+        plane_html = """<article class="spine-plane">
+  <h3>Evidence planes <span class="status-pill pending">not recorded</span></h3>
+  <p>No product, conversation, or demand plane summary was published.</p>
+</article>"""
+    action_state = "Actionable" if spine.can_recommend else "Watch / blocked"
+    action_class = "quiet" if spine.can_recommend else "pending"
+    next_action = spine.primary_action or spine.next_operator_action or "No operator action was published for this run."
+    blocked = [item for item in spine.blocked_actions if str(item).strip()]
+    blocked_line = f"Blocked action: {', '.join(blocked)}" if blocked else "No blocked action recorded."
+    confidence_limit = spine.confidence_limits[0] if spine.confidence_limits else ""
+    entity_tags = [*spine.leading_entities[:3], *spine.leading_capabilities[:3]]
+    tag_html = "".join(f"<span>{_esc(item)}</span>" for item in entity_tags if str(item).strip())
+    if not tag_html:
+        tag_html = "<span>No leading entity or capability recorded</span>"
+    handoff_html = _render_operator_handoff(state.operator_handoff) if has_handoff else ""
+    return f"""<section class="intelligence-spine" id="intelligence-spine" aria-label="Argus intelligence proof chain">
+  <div class="spine-head">
+    <div>
+      <div class="eyebrow">Argus proof chain</div>
+      <h2>How Argus earned this read</h2>
+      <p>{_esc(spine.top_insight)}</p>
+    </div>
+    <div class="spine-action">
+      <div class="spine-meta">Next operator action</div>
+      <h3>{_esc(next_action)}</h3>
+      <p>{_esc(blocked_line)}{(' ' + _esc(confidence_limit)) if confidence_limit else ''}</p>
+    </div>
+  </div>
+  {handoff_html}
+  <div class="spine-grid">
+    {plane_html}
+    <article class="spine-plane">
+      <h3>Actionability <span class="status-pill {action_class}">{_esc(action_state)}</span></h3>
+      <div class="spine-meta">{_esc(spine.pattern_count)} patterns · {_esc(spine.recommendation_count)} recommendations · {_esc(spine.evidence_need_count)} evidence needs</div>
+      <p>{_esc(blocked_line)}</p>
+    </article>
+  </div>
+  <div class="spine-tags" aria-label="Leading entities and capabilities">{tag_html}</div>
+</section>"""
+
+
+def _monitored_by_id(state: DashboardState) -> dict[int, MonitoredCompetitor]:
+    return {competitor.competitor_id: competitor for competitor in state.monitored_competitors}
+
+
+def _priority_reason_rows(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
+    if not _has_current_promoted_moves(state) or not groups:
+        return '<p class="brief-meta">No priority was promoted because no material move crossed the action threshold.</p>'
+    top = groups[0]
+    monitored = _monitored_by_id(state).get(top.competitor_id)
+    source_count = monitored.active_source_count if monitored else 0
+    failed_count = monitored.failed_source_count if monitored else 0
+    evidence_count = len({str(e) for signal in top.top_signals for e in (signal.evidence_ids or []) if e})
+    signal_count = monitored.material_signal_count if monitored else len(top.top_signals)
+    return f"""<div class="reason-row"><span>Score rank</span><strong>{_esc(round(top.score))}/100</strong></div>
+<div class="reason-row"><span>Material signals for { _esc(top.competitor_name) }</span><strong>{_esc(signal_count)}</strong></div>
+<div class="reason-row"><span>Evidence URLs behind promoted card</span><strong>{_esc(evidence_count)}</strong></div>
+<div class="reason-row"><span>Source health for selected partner</span><strong>{_esc(source_count)} active / {_esc(failed_count)} failed</strong></div>"""
+
+
+def _history_entries(state: DashboardState):
+    return sorted(state.report_history, key=lambda row: row.report_date, reverse=True)
+
+
+def _history_label(report_date: _date, today: _date) -> str:
+    if report_date == today:
+        return "Today"
+    if report_date == today - _timedelta(days=1):
+        return "Yesterday"
+    age = (today - report_date).days
+    if 0 < age < 7:
+        return f"{age} days ago"
+    return report_date.isoformat()
+
+
+def _render_history_controls(state: DashboardState) -> str:
+    entries = _history_entries(state)
+    if not entries:
+        return """<div class="history-controls">
+  <label>History calendar<input id="history-calendar" type="date" aria-label="History calendar" disabled></label>
+  <label>Report history<select id="history-selector" aria-label="Historical competitive briefs" disabled><option>No report history published</option></select></label>
+</div>"""
+    dates = [entry.report_date for entry in entries]
+    min_date = min(dates).isoformat()
+    max_date = max(dates).isoformat()
+    latest_date = max_date
+    options: list[str] = []
+    today = state.generated_at.date()
+    for entry in entries:
+        href = entry.html_path or ""
+        label = f"{_history_label(entry.report_date, today)} · {entry.cadence}"
+        if entry.title:
+            label = f"{label} · {entry.title}"
+        data_href = f' data-href="{_esc(href)}"' if href else ""
+        options.append(
+            f'<option value="{_esc(entry.report_id)}" data-date="{_esc(entry.report_date.isoformat())}"{data_href}>{_esc(label)}</option>'
+        )
+    return f"""<div class="history-controls">
+  <label>History calendar<input id="history-calendar" type="date" aria-label="History calendar" min="{_esc(min_date)}" max="{_esc(max_date)}" value="{_esc(latest_date)}"></label>
+  <label>Report history<select id="history-selector" aria-label="Historical competitive briefs">{"".join(options)}</select></label>
+</div>"""
+
+
+def _render_coverage_rows(state: DashboardState) -> str:
+    if not state.monitored_competitors:
+        return '<p class="brief-meta">No monitored competitor coverage was published with this run.</p>'
+    rows: list[str] = []
+    for competitor in state.monitored_competitors:
+        if competitor.material_signal_count:
+            status = f"{competitor.material_signal_count} material signal{'s' if competitor.material_signal_count != 1 else ''}"
+        elif competitor.failed_source_count:
+            status = f"{competitor.failed_source_count} failed source{'s' if competitor.failed_source_count != 1 else ''}"
+        elif competitor.checked_today:
+            status = "checked, no material signal"
+        else:
+            status = "not checked today"
+        rows.append(
+            f"""<div class="coverage-row">
+  <strong>{_esc(status)}</strong>
+  <b>{_esc(competitor.competitor_name)}</b>
+  <span>{_esc(competitor.active_source_count)} active sources · {_esc(competitor.failed_source_count)} failed</span>
+</div>"""
+        )
+    return '<div class="coverage-list">' + "".join(rows) + "</div>"
+
+
+def _render_report_history_rows(state: DashboardState) -> str:
+    entries = _history_entries(state)
+    if not entries:
+        return '<p class="brief-meta">No historical report summaries were published with this state.</p>'
+    today = state.generated_at.date()
+    rows: list[str] = []
+    for entry in entries[:10]:
+        title = entry.title or f"{entry.cadence.capitalize()} brief"
+        summary = entry.summary or "No summary was stored for this report."
+        href = entry.html_path
+        link = (
+            f'<a class="history-link" href="{_esc(href)}">Open</a>'
+            if href
+            else '<span class="history-link">No public archive route</span>'
+        )
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(_history_label(entry.report_date, today))}<br>{_esc(entry.report_date.isoformat())}</div>
+  <div class="history-main"><strong>{_esc(entry.cadence)} · {_esc(title)}</strong><p>{_esc(_truncate(summary, 220))}</p></div>
+  {link}
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _product_market_history_entries(state: DashboardState):
+    return sorted(state.product_market_history, key=lambda row: row.observed_at, reverse=True)
+
+
+def _product_market_run_history_entries(state: DashboardState):
+    return sorted(state.product_market_run_history, key=lambda row: row.observed_at, reverse=True)
+
+
+def _render_product_market_run_history_rows(state: DashboardState) -> str:
+    entries = _product_market_run_history_entries(state)
+    if not entries:
+        return '<p class="brief-meta">No stored Argus run reads were published with this state.</p>'
+    today = state.generated_at.date()
+    rows: list[str] = []
+    for entry in entries[:8]:
+        observed_date = entry.observed_at.date()
+        action = entry.primary_action or "No action promoted"
+        counts = (
+            f"{entry.product_event_count} product · {entry.conversation_theme_count} conversation · "
+            f"{entry.demand_signal_count} demand · {entry.pattern_count} patterns"
+        )
+        learning = (
+            f" · {entry.learning_instruction_count} learning gates"
+            if entry.learning_instruction_count
+            else ""
+        )
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(_history_label(observed_date, today))}<br>{_esc(entry.verdict)}</div>
+  <div class="history-main"><strong>{_esc(_truncate(entry.top_insight, 160))}</strong><p>{_esc(_truncate(action, 180))}</p><p>{_esc(counts)}{_esc(learning)} · {_esc(len(entry.evidence_urls))} proof links</p></div>
+  <span class="history-link">Argus read</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_argus_evidence_need_rows(state: DashboardState) -> str:
+    if not state.argus_evidence_needs:
+        return '<p class="brief-meta">No current evidence blocker is preventing Argus from explaining or promoting the next move.</p>'
+    rows: list[str] = []
+    for need in state.argus_evidence_needs[:6]:
+        blockers = ", ".join(need.blocks) if need.blocks else "No blocker list on file"
+        formats = ", ".join(value.upper() for value in need.accepted_input_formats)
+        fields = ", ".join(need.required_fields[:7])
+        schema_line = ""
+        if formats or fields or need.operator_surface:
+            schema_parts = []
+            if formats:
+                schema_parts.append(f"Formats: {formats}")
+            if fields:
+                schema_parts.append(f"Fields: {fields}")
+            if need.operator_surface:
+                schema_parts.append(f"Surface: {need.operator_surface}")
+            schema_line = f"<p>{_esc(' · '.join(schema_parts))}</p>"
+        observed_line = _render_argus_evidence_observed_state(need.observed_state)
+        run_label = (
+            f"run #{need.related_run_intelligence_id}"
+            if need.related_run_intelligence_id is not None
+            else "latest run"
+        )
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(need.severity)}<br>{_esc(need.evidence_plane)}</div>
+  <div class="history-main"><strong>{_esc(need.title)}</strong><p>{_esc(_truncate(need.why_needed, 190))}</p><p>Blocks {_esc(blockers)} · {_esc(run_label)} · {_esc(need.observed_pattern_count)} remembered pattern{'s' if need.observed_pattern_count != 1 else ''}</p>{observed_line}<p>{_esc(need.next_step)}</p>{schema_line}</div>
+  <span class="history-link">{_esc(need.status)}</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_argus_evidence_observed_state(observed_state: dict[str, object]) -> str:
+    if not observed_state:
+        return ""
+    status = str(observed_state.get("demand_plane_status") or "").strip()
+    discovered = observed_state.get("looker_discovered_count")
+    ready = observed_state.get("looker_ready_count")
+    errors = observed_state.get("looker_error_count")
+    accepted_rows = observed_state.get("looker_normalized_row_count")
+    parts: list[str] = []
+    if status:
+        parts.append(f"Demand checked: {status}")
+    if discovered is not None:
+        parts.append(f"{discovered} file{'s' if discovered != 1 else ''} discovered")
+    if ready is not None:
+        parts.append(f"{ready} ready")
+    if errors is not None:
+        parts.append(f"{errors} error{'s' if errors != 1 else ''}")
+    if accepted_rows is not None:
+        parts.append(f"{accepted_rows} accepted row{'s' if accepted_rows != 1 else ''}")
+    manifest_path = observed_state.get("looker_manifest_path")
+    if manifest_path:
+        parts.append(f"Manifest: {str(manifest_path).rsplit('/', 1)[-1]}")
+    if not parts:
+        return ""
+    return f"<p>{_esc(' · '.join(parts))}</p>"
+
+
+def _render_product_market_history_rows(state: DashboardState) -> str:
+    entries = _product_market_history_entries(state)
+    if not entries:
+        return '<p class="brief-meta">No product-market pattern memory was published with this state.</p>'
+    today = state.generated_at.date()
+    rows: list[str] = []
+    for entry in entries[:10]:
+        observed_date = entry.observed_at.date()
+        companies = ", ".join(entry.involved_companies) if entry.involved_companies else "No involved companies on file"
+        confidence = "" if entry.confidence is None else f" · confidence {entry.confidence:.2f}"
+        evidence_count = len(entry.evidence_refs)
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(_history_label(observed_date, today))}<br>{_esc(observed_date.isoformat())}</div>
+  <div class="history-main"><strong>{_esc(entry.pattern_type)} · {_esc(entry.capability_text)}</strong><p>{_esc(_truncate(entry.summary, 220))}</p><p>{_esc(companies)}{_esc(confidence)} · {_esc(evidence_count)} evidence links</p></div>
+  <span class="history-link">Argus memory</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_product_market_trend_rows(state: DashboardState) -> str:
+    if not state.product_market_trends:
+        return '<p class="brief-meta">No product-market trend summary was derived from this state.</p>'
+    rows: list[str] = []
+    for trend in state.product_market_trends[:6]:
+        companies = ", ".join(trend.involved_companies) if trend.involved_companies else "No involved companies on file"
+        confidence = "" if trend.confidence is None else f" · confidence {trend.confidence:.2f}"
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">Trend direction<br>{_esc(trend.direction)}</div>
+  <div class="history-main"><strong>{_esc(trend.capability_text)}</strong><p>{_esc(_truncate(trend.latest_summary, 220))}</p><p>{_esc(trend.pattern_count_7d)} patterns in 7D · {_esc(trend.pattern_count_30d)} in 30D · {_esc(companies)}{_esc(confidence)}</p></div>
+  <span class="history-link">{_esc(len(trend.evidence_refs))} proof</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_product_market_entity_velocity_rows(state: DashboardState) -> str:
+    if not state.product_market_entity_velocity:
+        return '<p class="brief-meta">No entity velocity summary was derived from this state.</p>'
+    rows: list[str] = []
+    for entity in state.product_market_entity_velocity[:8]:
+        confidence = "" if entity.confidence is None else f" · confidence {entity.confidence:.2f}"
+        capabilities = ", ".join(entity.top_capabilities) if entity.top_capabilities else "No top capabilities on file"
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">Entity velocity<br>{_esc(entity.direction)}</div>
+  <div class="history-main"><strong>{_esc(entity.entity_name)}</strong><p>{_esc(_truncate(entity.latest_summary, 180))}</p><p>{_esc(entity.total_patterns_7d)} patterns in 7D · {_esc(entity.total_patterns_30d)} in 30D · {_esc(entity.hot_capability_count)} hot · {_esc(entity.warm_capability_count)} warm · {_esc(capabilities)}{_esc(confidence)}</p></div>
+  <span class="history-link">{_esc(len(entity.evidence_refs))} proof</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_product_market_theme_heatmap_rows(state: DashboardState) -> str:
+    if not state.product_market_theme_heatmap:
+        return '<p class="brief-meta">No theme heat map was derived from this state.</p>'
+    rows: list[str] = []
+    for theme in state.product_market_theme_heatmap[:8]:
+        confidence = "" if theme.confidence is None else f" · confidence {theme.confidence:.2f}"
+        entities = ", ".join(theme.leading_entities) if theme.leading_entities else "No leading entities on file"
+        pattern_types = ", ".join(theme.pattern_types) if theme.pattern_types else "No pattern types on file"
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(theme.heat_level)} · {_esc(theme.direction)}<br>{_esc(theme.intensity_score)}</div>
+  <div class="history-main"><strong>{_esc(theme.theme_text)}</strong><p>{_esc(_truncate(theme.latest_summary, 180))}</p><p>{_esc(theme.pattern_count_7d)} patterns in 7D · {_esc(theme.pattern_count_30d)} in 30D · {_esc(theme.entity_count)} entities · {_esc(entities)} · {_esc(pattern_types)}{_esc(confidence)}</p></div>
+  <span class="history-link">{_esc(len(theme.evidence_refs))} proof</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_product_market_window_delta_rows(state: DashboardState) -> str:
+    if not state.product_market_window_deltas:
+        return '<p class="brief-meta">No current-window versus prior-window deltas were derived from this state.</p>'
+    rows: list[str] = []
+    for delta in state.product_market_window_deltas[:8]:
+        confidence = "" if delta.confidence is None else f" · confidence {delta.confidence:.2f}"
+        entities = ", ".join(delta.related_entities) if delta.related_entities else "No related entities on file"
+        capabilities = (
+            ", ".join(delta.related_capabilities)
+            if delta.related_capabilities
+            else "No related capabilities on file"
+        )
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">Window deltas<br>{_esc(delta.current_window_label)} vs {_esc(delta.previous_window_label)}</div>
+  <div class="history-main"><strong>{_esc(delta.subject_type)} · {_esc(delta.subject_name)} · {_esc(delta.direction)}</strong><p>{_esc(_truncate(delta.latest_summary, 180))}</p><p>{_esc(delta.current_pattern_count)} current · {_esc(delta.previous_pattern_count)} prior · delta {_esc(delta.delta)} · {_esc(entities)} · {_esc(capabilities)}{_esc(confidence)}</p></div>
+  <span class="history-link">{_esc(len(delta.evidence_refs))} proof</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_product_market_heatmap_rows(state: DashboardState) -> str:
+    if not state.product_market_heatmap:
+        return '<p class="brief-meta">No product-market heat map was derived from this state.</p>'
+    rows: list[str] = []
+    for cell in state.product_market_heatmap[:12]:
+        confidence = "" if cell.confidence is None else f" · confidence {cell.confidence:.2f}"
+        rows.append(
+            f"""<div class="history-row">
+  <div class="history-date">{_esc(cell.heat_level)}<br>{_esc(cell.intensity_score)}</div>
+  <div class="history-main"><strong>{_esc(cell.entity_name)} · {_esc(cell.capability_text)}</strong><p>{_esc(_truncate(cell.latest_summary, 180))}</p><p>{_esc(cell.pattern_count_7d)} patterns in 7D · {_esc(cell.pattern_count_30d)} in 30D{_esc(confidence)}</p></div>
+  <span class="history-link">{_esc(len(cell.evidence_refs))} proof</span>
+</div>"""
+        )
+    return "".join(rows)
+
+
+def _render_market_timeline(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
+    entries = _history_entries(state)
+    pattern_history = _product_market_history_entries(state)
+    run_history = _product_market_run_history_entries(state)
+    current_moves = _current_run_move_count(state)
+    recent_cards = _rolling_material_card_count(state)
+    today = state.generated_at.date()
+    yesterday = today - _timedelta(days=1)
+    reports_7 = [entry for entry in entries if 0 <= (today - entry.report_date).days <= 7]
+    reports_30 = [entry for entry in entries if 0 <= (today - entry.report_date).days <= 30]
+    patterns_7 = [entry for entry in pattern_history if 0 <= (today - entry.observed_at.date()).days <= 7]
+    patterns_30 = [entry for entry in pattern_history if 0 <= (today - entry.observed_at.date()).days <= 30]
+    run_reads_7 = [entry for entry in run_history if 0 <= (today - entry.observed_at.date()).days <= 7]
+    yesterday_entry = next((entry for entry in entries if entry.report_date == yesterday), None)
+    top = groups[0] if _has_current_promoted_moves(state) and groups else None
+    priority_text = (
+        f"{top.competitor_name} is first because it has the highest promoted attention score in this run."
+        if top
+        else "No competitor is first today because no material move crossed the action threshold."
+    )
+    if recent_cards and recent_cards != current_moves:
+        today_detail = (
+            f"{len(state.monitored_competitors)} monitored competitors; "
+            f"{recent_cards} recent material card{'s' if recent_cards != 1 else ''} remain in memory."
+        )
+    else:
+        today_detail = f"{len(state.monitored_competitors)} monitored competitors in the current state."
+    return f"""<section class="market-timeline" id="market-timeline" aria-label="Market timeline and holistic coverage">
+  <div class="timeline-head">
+    <div>
+      <div class="eyebrow">Market timeline</div>
+      <h2>What happened before today</h2>
+      <p>Today's read is only one frame. Use the archive and coverage board to check whether the priority is justified against the broader watched market.</p>
+    </div>
+    {_render_history_controls(state)}
+  </div>
+  <div class="timeline-grid" aria-label="Historical windows">
+    <article class="timeline-card"><span>Today</span><strong>{_esc(current_moves)} promoted moves</strong><p>{_esc(today_detail)}</p></article>
+    <article class="timeline-card"><span>Yesterday</span><strong>{_esc(yesterday_entry.title if yesterday_entry and yesterday_entry.title else ('report available' if yesterday_entry else 'no report in state'))}</strong><p>{_esc(yesterday.isoformat())}</p></article>
+    <article class="timeline-card"><span>Last 7 days</span><strong>{_esc(len(patterns_7))} remembered patterns</strong><p>{_esc(len(run_reads_7))} Argus run reads and {_esc(len(reports_7))} archived reports.</p></article>
+    <article class="timeline-card"><span>Last 30 days</span><strong>{_esc(len(patterns_30))} remembered patterns</strong><p>Monthly trend depth depends on retained pattern memory.</p></article>
+  </div>
+  <div class="history-board">
+    <div><h2>Product-market memory</h2><p>Historical Argus pattern observations from the product, conversation, and demand ledger. This is the basis for trends beyond today's brief.</p></div>
+    <div><h2>Argus run reads</h2><p>Stored run-level conclusions from product-market synthesis. This is what Argus believed, promoted, or withheld over time.</p></div>
+    {_render_product_market_run_history_rows(state)}
+    <div><h2>What Argus needs next</h2><p>Evidence gaps that explain why Argus withheld action or why a priority cannot be trusted yet.</p></div>
+    {_render_argus_evidence_need_rows(state)}
+    <div><h2>Theme heat map</h2><p>Which strategic themes are heating up across the market before you inspect individual companies.</p></div>
+    {_render_product_market_theme_heatmap_rows(state)}
+    <div><h2>Window deltas</h2><p>Whether each theme or entity is hotter, quieter, new, or flat versus the prior seven-day window.</p></div>
+    {_render_product_market_window_delta_rows(state)}
+    <div><h2>Entity velocity</h2><p>Who is accelerating, sustaining, emerging, or dormant across remembered product-market capabilities.</p></div>
+    {_render_product_market_entity_velocity_rows(state)}
+    <div><h2>Market heat map</h2><p>Entity by capability heat derived from remembered patterns, not from decorative scoring.</p></div>
+    {_render_product_market_heatmap_rows(state)}
+    {_render_product_market_trend_rows(state)}
+    {_render_product_market_history_rows(state)}
+  </div>
+  <div class="history-board">
+    <div><h2>Report history</h2><p>Stored summaries from prior daily and weekly reports. Missing public archive routes are shown honestly instead of linking to server files.</p></div>
+    {_render_report_history_rows(state)}
+  </div>
+  <div class="coverage-board">
+    <div><h2>Holistic daily coverage</h2><p>Every monitored partner should appear here, whether they produced a material move or stayed quiet.</p></div>
+    {_render_coverage_rows(state)}
+  </div>
+  <div class="reason-board">
+    <div><h2>Why this priority</h2><p>{_esc(priority_text)}</p></div>
+    {_priority_reason_rows(state, groups)}
+  </div>
+</section>"""
+
+
+def _group_summary(group: _CompetitorGroup) -> tuple[str, str, str]:
+    signal = group.top_signals[0] if group.top_signals else None
+    changed = signal.what_changed if signal else group.action_cue
+    matters = signal.why_it_matters if signal else group.action_cue
+    action = signal.recommended_action if signal and signal.recommended_action else group.action_cue
+    return (
+        _truncate(changed or "No change summary on file.", 180),
+        _truncate(matters or "No materiality note on file.", 180),
+        _truncate(action or "Review the brief and evidence before acting.", 180),
+    )
+
+
+def _render_decision_strip(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
+    competitor_count, active_sources, failed_sources = _source_counts(state)
+    if _has_current_promoted_moves(state) and groups:
+        top = groups[0]
+        changed, matters, action = _group_summary(top)
+        what = f"{top.competitor_name}: {changed}"
+        why = matters
+        do = action
+    else:
+        recent_cards = _rolling_material_card_count(state)
+        what = "No new material moves were promoted today."
+        if recent_cards:
+            what = f"{what} {recent_cards} recent material card{'s' if recent_cards != 1 else ''} remain as memory."
+        why = "Quiet new-signal day: monitoring still ran; this is not proof that the market is inactive."
+        do = "Audit failed sources, then wait for a promoted move before changing strategy."
+    return f"""<div class="decision-strip" aria-label="Today&apos;s intelligence decision">
+  <div class="decision"><span>What happened</span><strong>{_esc(what)}</strong></div>
+  <div class="decision"><span>Why it matters</span><strong>{_esc(why)}</strong></div>
+  <div class="decision"><span>Recommended action</span><strong>{_esc(do)}</strong></div>
+</div>
+<aside class="coverage-card" aria-label="Confidence boundary">
+  <div>
+    <div class="eyebrow">Confidence boundary</div>
+    <p>{_esc(competitor_count)} competitors watched. Failed sources constrain confidence; they do not erase the read.</p>
+  </div>
+  <div class="coverage-metrics">
+    <div class="metric"><strong>{_esc(competitor_count)}</strong><span class="metric-label">competitors</span></div>
+    <div class="metric"><strong>{_esc(active_sources)}</strong><span class="metric-label">active sources</span></div>
+    <div class="metric"><strong>{_esc(failed_sources)}</strong><span class="metric-label">failed sources</span></div>
+  </div>
+</aside>"""
+
+
+def _render_priority_moves(groups: list[_CompetitorGroup]) -> str:
+    if not groups:
+        return '<p class="status-badge">No priority moves were promoted in this run.</p>'
+    buttons: list[str] = []
+    for i, group in enumerate(groups[:12]):
+        changed, _, action = _group_summary(group)
+        active = " is-active" if i == 0 else ""
+        pressed = "true" if i == 0 else "false"
+        buttons.append(
+            f"""<button type="button" class="move-card{active}" data-select-competitor="{_esc(group.competitor_id)}" data-competitor-name="{_esc(group.competitor_name)}" aria-pressed="{pressed}">
+  <span class="move-top"><strong>{_esc(group.competitor_name)}</strong><span class="score-pill">{_esc(round(group.score))}</span></span>
+  <span class="move-meta">{_esc(_ATTENTION_ROW[group.attention_level][2])}</span>
+  <span>{_esc(_truncate(action or changed, 120))}</span>
+</button>"""
+        )
+    return "".join(buttons)
+
+
+def _evidence_links_for_group(group: _CompetitorGroup) -> str:
+    urls: list[object] = []
+    seen: set[object] = set()
+    for signal in group.top_signals:
+        for url in signal.evidence_ids or []:
+            if url in seen:
+                continue
+            seen.add(url)
+            urls.append(url)
+    if not urls:
+        return '<span class="status-badge">No evidence URL on this selected move.</span>'
+    return "".join(f'<a href="{_esc(url)}">{_esc(_truncate(str(url), 72))}</a>' for url in urls[:3])
+
+
+def _render_selected_competitor(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
+    if not groups:
+        return """<article class="selected-card">
+  <div class="eyebrow">Selected competitor</div>
+  <h2>No selected competitor</h2>
+  <p>No current competitor move crossed the action threshold.</p>
+</article>"""
+    cards: list[str] = []
+    for i, group in enumerate(groups):
+        changed, matters, action = _group_summary(group)
+        _, fallback_href = _latest_report_link(state)
+        href = group.brief_href or fallback_href
+        brief = (
+            f'<a class="open-brief" href="{_esc(href)}">Open competitor brief</a>'
+            if href
+            else '<span class="status-badge">No competitor brief on file</span>'
+        )
+        hidden = "" if i == 0 else " hidden"
+        cards.append(
+            f"""<article class="selected-card" data-competitor-panel="{_esc(group.competitor_id)}" data-competitor-name="{_esc(group.competitor_name)}"{hidden}>
+  <div><div class="eyebrow">Selected competitor</div><h2>{_esc(group.competitor_name)}</h2></div>
+  <div class="selected-grid">
+    <div class="selected-copy"><h3>What changed</h3><p>{_esc(changed)}</p></div>
+    <div class="selected-copy"><h3>Why it matters</h3><p>{_esc(matters)}</p></div>
+    <div class="selected-copy"><h3>What to do</h3><p>{_esc(action)}</p></div>
+  </div>
+  <div class="selected-copy"><h3>Evidence</h3><p>{_evidence_links_for_group(group)}</p></div>
+  {brief}
+</article>"""
+        )
+    return "".join(cards)
+
+
+def _role_text(group: _CompetitorGroup, role: str) -> tuple[str, str, str]:
+    changed, matters, action = _group_summary(group)
+    if role == "marketing":
+        return (
+            f"Marketing read for {group.competitor_name}",
+            changed,
+            f"Message against the claim: {action}",
+        )
+    if role == "sales":
+        return (
+            f"Sales read for {group.competitor_name}",
+            matters,
+            f"Turn into field guidance: {action}",
+        )
+    return (
+        f"Product read for {group.competitor_name}",
+        changed,
+        f"Inspect roadmap/docs implication: {action}",
+    )
+
+
+def _role_action_card(role: str, title: str, items: list[PrescriptionSummary]) -> str:
+    if not items:
+        return (
+            f'<article class="role-card {role}">'
+            f'<span class="role-kicker">{_esc(role)}</span>'
+            f"<h3>{_esc(title)}</h3>"
+            "<p>No action item was generated for this role in this run.</p>"
+            "</article>"
+        )
+    ranked = _rank_prescriptions(items)
+    top = ranked[0]
+    steps = "; ".join(top.play[:2]) if top.play else (top.expected_effect or "Review the brief before acting.")
+    more_titles = "; ".join(p.title for p in ranked[1:3])
+    more = f" Also: {more_titles}" if more_titles else ""
+    return (
+        f'<article class="role-card {role}" id="role-{role}">'
+        f'<span class="role-kicker">{_esc(role)}</span>'
+        f"<h3>{_esc(top.title)}</h3>"
+        f"<p>{_esc(steps)}{_esc(more)}</p>"
+        f'<strong class="context-action"><span>Urgency</span>{_esc(top.urgency_window)}</strong>'
+        "</article>"
+    )
+
+
+def _render_role_implications(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
+    if not groups:
+        if state.prescriptions:
+            marketing = _role_action_card("marketing", "Marketing action", _lens_prescriptions(state, _MARKETING_TEAMS))
+            sales = _role_action_card("sales", "Sales action", _lens_prescriptions(state, _SALES_TEAMS))
+            product = _role_action_card("product", "Product action", _lens_prescriptions(state, _PRODUCT_TEAMS))
+            return f'<div class="role-set">{marketing}{sales}{product}</div>'
+        return """<div class="role-set">
+  <article class="role-card marketing" id="role-marketing"><span class="role-kicker">Marketing</span><h3>No action</h3><p>No current move crossed the action threshold.</p></article>
+  <article class="role-card sales" id="role-sales"><span class="role-kicker">Sales</span><h3>No action</h3><p>No deal-facing movement was promoted.</p></article>
+  <article class="role-card product" id="role-product"><span class="role-kicker">Product</span><h3>No action</h3><p>No technical movement was promoted.</p></article>
+</div>"""
+    sets: list[str] = []
+    for i, group in enumerate(groups):
+        hidden = "" if i == 0 else " hidden"
+        cards: list[str] = []
+        for role in ("marketing", "sales", "product"):
+            title, body, action = _role_text(group, role)
+            cards.append(
+                f"""<article class="role-card {role}">
+  <span class="role-kicker">{_esc(role)}</span>
+  <h3>{_esc(title)}</h3>
+  <p>{_esc(body)}</p>
+  <strong class="context-action"><span>Action</span>{_esc(action)}</strong>
+</article>"""
+            )
+        sets.append(f'<div class="role-set" data-role-set="{_esc(group.competitor_id)}"{hidden}>{"".join(cards)}</div>')
+    return "".join(sets)
+
+
+def _render_registry_rows(state: DashboardState) -> str:
+    rows: list[str] = []
+    for competitor in state.monitored_competitors[:32]:
+        status = "standing pattern" if competitor.material_signal_count else "quiet"
+        brief = (
+            f'<a href="{_esc(competitor.brief_href)}">brief</a>'
+            if competitor.brief_href
+            else ""
+        )
+        rows.append(
+            f"""<div class="registry-row">
+  <strong>{_esc(competitor.competitor_name)}</strong>
+  <span class="status-badge">{_esc(status)} · {_esc(competitor.active_source_count)} active sources · {_esc(competitor.failed_source_count)} failed</span>
+  {brief}
+</div>"""
+        )
+    return "".join(rows) or '<p class="status-badge">No monitored competitor registry published.</p>'
+
+
+def _render_source_rows(state: DashboardState) -> str:
+    ranked = sorted(
+        state.source_health,
+        key=lambda s: (
+            0 if (s.latest_event_type or "") in _FAILED_SOURCE_EVENTS else 1,
+            s.competitor_name.lower(),
+            s.source_family,
+            s.source_id,
+        ),
+    )
+    rows: list[str] = []
+    for source in ranked[:12]:
+        label = source.latest_event_type or "not_checked"
+        rows.append(
+            f"""<div class="source-row">
+  <strong>{_esc(source.competitor_name)} · {_esc(source.source_family)}</strong>
+  <span class="status-badge">{_esc(label)} · HTTP {_esc(source.http_status or '')} · {_esc(source.detail or '')}</span>
+  <a href="{_esc(source.url)}">{_esc(_truncate(source.url, 92))}</a>
+</div>"""
+        )
+    return "".join(rows) or '<p class="status-badge">No source health rows published.</p>'
+
+
+def render_cockpit_html(state: DashboardState) -> str:
+    """Render the rebuilt CI-OS intelligence brief UI.
+
+    The producer/state contract remains the same; this presentation layer is
+    intentionally rebuilt around the operator sequence: read, decide, inspect
+    competitor, understand role implications, then audit evidence.
+    """
+    all_groups = _dashboard_groups(state)
+    priority_groups = all_groups if _has_current_promoted_moves(state) else []
+    selection_groups = _selection_groups(state, all_groups)
     generated_label = _esc(state.generated_at.strftime("%Y-%m-%d %H:%M UTC"))
+    headline = "Today’s competitive brief"
+    if priority_groups:
+        changed, matters, _ = _group_summary(priority_groups[0])
+        deck = f"{priority_groups[0].competitor_name} is the top move to inspect: {changed}"
+    else:
+        recent_cards = _rolling_material_card_count(state)
+        deck = "No new material moves were promoted today."
+        if recent_cards:
+            deck = f"{deck} {recent_cards} recent material card{'s' if recent_cards != 1 else ''} remain available as memory."
+        else:
+            deck = f"{deck} No new competitor move crossed the action threshold in this run."
+    active_focus_label = "Focused on top move" if priority_groups else "No current priority"
 
     return f"""<!doctype html>
 <html lang="en">
@@ -2314,45 +5224,90 @@ def render_cockpit_html(state: DashboardState) -> str:
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;650;780&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
-  <style>{_STYLE}</style>
+  <style>{_BRIEF_UI_STYLE}</style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <a class="brand" href="#command" aria-label="Argus Command Center">
-        {logo_markup}
-        <span>
+  <div class="brief-app">
+    <header class="brief-topbar">
+      <a class="brief-brand" href="#today-read" aria-label="Argus daily competitive brief">
+        <img class="argus-mark" src="{_esc(_cockpit_assets.LOGO_DATA_URI)}" alt="Argus" />
+        <span class="brand-copy">
           <strong>Argus</strong>
-          <span class="generated-stamp">Generated {generated_label}</span>
+          <span>Generated {generated_label}</span>
         </span>
       </a>
-      <nav class="role-rail" aria-label="Role-aware command rail">
-        <a class="active" href="#role-marketing" data-role="marketing" aria-current="true">Marketing</a>
-        <a href="#role-sales" data-role="sales">Sales</a>
-        <a href="#role-product" data-role="product">Product</a>
+	      <nav class="brief-nav" aria-label="Dashboard sections">
+	        <a href="#today-read" data-nav-link="today-read" aria-current="page">Today</a>
+	        <a href="#intelligence-spine" data-nav-link="intelligence-spine">Proof</a>
+	        <a href="#market-timeline" data-nav-link="market-timeline">Timeline</a>
+	        <a href="#semantic-layer" data-nav-link="semantic-layer">Patterns</a>
+	        <a href="#priority-moves" data-nav-link="priority-moves">Priority moves</a>
+	        <a href="#role-implications" data-nav-link="role-implications">Role implications</a>
+	        <a href="#evidence-coverage" data-nav-link="evidence-coverage">Evidence</a>
       </nav>
     </header>
 
     <main>
-      <section class="hero" id="command">
-        {hero}
-        {visual}
-        <section class="market-field role-section" id="role-marketing-command" data-role-section="marketing" aria-labelledby="field-title">
-          <div class="field-head">
-            <div>
-              <h2 id="field-title">Competitor Attention Barometer</h2>
-            </div>
+      <section class="read-hero" id="today-read" aria-label="Today&apos;s competitive brief">
+        <div class="read-main">
+          <div>
+            <div class="eyebrow">Today&apos;s read</div>
+            <h1>{_esc(headline)}</h1>
+            <p>{_esc(deck)}</p>
           </div>
-          {barometer}
-        </section>
+          {_render_decision_strip(state, priority_groups)}
+        </div>
+        <figure class="visual-story" aria-label="Argus editorial intelligence visual">
+          <img class="editorial-image" src="{_esc(_cockpit_assets.HERO_IMAGE_DATA_URI)}" alt="Argus search intelligence desk" />
+        </figure>
+	      </section>
+
+	      {_render_intelligence_spine(state)}
+
+	      {_render_market_timeline(state, priority_groups)}
+
+	      {_render_semantic_layer(state, priority_groups, selection_groups)}
+
+	      <section class="priority-layout" id="priority-moves">
+        <aside class="panel" id="competitor-focus">
+          <div class="panel-head">
+            <div>
+              <h2>Priority moves</h2>
+              <p class="brief-meta">Click a competitor to update the selected brief and role implications.</p>
+            </div>
+            <span class="brief-meta" id="active-focus-label">{_esc(active_focus_label)}</span>
+          </div>
+          <div class="move-list">{_render_priority_moves(priority_groups)}</div>
+        </aside>
+        <section class="panel" id="selected-competitor">
+          <div class="panel-head"><h2>Selected competitor</h2></div>
+	          {_render_selected_competitor(state, selection_groups)}
+	        </section>
+	      </section>
+
+      <section class="role-section" id="role-implications">
+        <div class="panel-head">
+          <div>
+            <h2>Role implications</h2>
+            <p class="brief-meta">Marketing, Sales, and Product update with the selected competitor.</p>
+          </div>
+        </div>
+	        {_render_role_implications(state, selection_groups)}
+	      </section>
+
+      <section class="appendix-grid" id="evidence-coverage">
+        <details class="appendix" open>
+          <summary><h2>Market coverage</h2><span class="brief-meta">Open roster</span></summary>
+          <div class="appendix-body">{_render_registry_rows(state)}</div>
+        </details>
+        <details class="appendix" open>
+          <summary><h2>Evidence and source health</h2><span class="brief-meta">Open evidence</span></summary>
+          <div class="appendix-body">{_render_product_market_run_trace(state)}{_render_source_rows(state)}</div>
+        </details>
       </section>
-
-      {sections}
-
-      {eye}
     </main>
   </div>
-  <script>{_SCRIPT}</script>
+  <script>{_BRIEF_UI_SCRIPT}</script>
 </body>
 </html>
 """
@@ -2679,6 +5634,76 @@ def _brief_page_shell(body_html: str, date_label: str) -> str:
 
 _URGENCY_LABELS = {"act_now": "Act now", "this_week": "This week", "this_month": "This month"}
 _URGENCY_RANK = {"act_now": 0, "this_week": 1, "this_month": 2}
+
+
+def _slugify_path_part(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (value or "").lower()).strip("-") or "unknown"
+
+
+def competitor_brief_href(*, tenant_slug: str, competitor_name: str, report_date: str) -> str:
+    tenant_part = _slugify_path_part(tenant_slug)
+    competitor_part = _slugify_path_part(competitor_name)
+    return f"./briefs/{tenant_part}/{competitor_part}-{report_date}.html"
+
+
+def attach_competitor_brief_hrefs(state: DashboardState, *, tenant_slug: str, report_date: str) -> DashboardState:
+    cards = [
+        card.model_copy(update={
+            "brief_href": competitor_brief_href(
+                tenant_slug=tenant_slug,
+                competitor_name=card.competitor_name,
+                report_date=report_date,
+            )
+        })
+        for card in state.competitor_cards
+    ]
+    monitored = [
+        competitor.model_copy(update={
+            "brief_href": competitor_brief_href(
+                tenant_slug=tenant_slug,
+                competitor_name=competitor.competitor_name,
+                report_date=report_date,
+            )
+        })
+        for competitor in state.monitored_competitors
+    ]
+    return state.model_copy(update={"competitor_cards": cards, "monitored_competitors": monitored})
+
+
+def _competitor_name_for_state(state: DashboardState, competitor_id: int) -> str:
+    for competitor in state.monitored_competitors:
+        if competitor.competitor_id == competitor_id:
+            return competitor.competitor_name
+    for card in state.competitor_cards:
+        if card.competitor_id == competitor_id:
+            return card.competitor_name
+    for thesis in state.theses:
+        if thesis.competitor_id == competitor_id and thesis.competitor_name:
+            return thesis.competitor_name
+    for play in state.prescriptions:
+        if play.competitor_id == competitor_id and play.competitor_name:
+            return play.competitor_name
+    return f"Competitor {competitor_id}"
+
+
+def _filter_state_for_competitor(state: DashboardState, competitor_id: int) -> DashboardState:
+    return state.model_copy(update={
+        "competitor_cards": [c for c in state.competitor_cards if c.competitor_id == competitor_id],
+        "theses": [t for t in state.theses if t.competitor_id == competitor_id],
+        "prescriptions": [p for p in state.prescriptions if p.competitor_id == competitor_id],
+        "monitored_competitors": [
+            c for c in state.monitored_competitors if c.competitor_id == competitor_id
+        ],
+        "source_health": [s for s in state.source_health if s.competitor_id == competitor_id],
+    })
+
+
+def render_competitor_brief_page_from_state(
+    state: DashboardState, *, competitor_id: int, report_date: str
+) -> str:
+    competitor_name = _competitor_name_for_state(state, competitor_id)
+    filtered = _filter_state_for_competitor(state, competitor_id)
+    return render_brief_page_from_state(filtered, f"{report_date} · {competitor_name}")
 
 
 def render_brief_page_from_state(state, report_date: str) -> str:

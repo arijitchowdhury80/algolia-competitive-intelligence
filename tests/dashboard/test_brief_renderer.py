@@ -86,7 +86,11 @@ def test_date_label_present() -> None:
 # back-navigation link to the cockpit.
 # ---------------------------------------------------------------------------
 
-from cios.dashboard.cockpit_renderer import render_brief_page_from_state
+from cios.dashboard.cockpit_renderer import (
+    attach_competitor_brief_hrefs,
+    render_brief_page_from_state,
+    render_competitor_brief_page_from_state,
+)
 from cios.dashboard.types import (
     AttentionLevel,
     CompetitorSignalCard,
@@ -128,6 +132,65 @@ def test_from_state_caps_cards_at_five_ranked() -> None:
         assert f"Headline {i}" in html_out
     for i in range(5, 8):
         assert f"Headline {i}" not in html_out
+
+
+def test_competitor_brief_filters_cards_theses_and_plays_to_one_competitor() -> None:
+    constructor = _card(5, name="Constructor")
+    elastic = _card(6, name="Elastic")
+    theses = [
+        LivingThesis(thesis_id=5, competitor_id=5, competitor_name="Constructor",
+                     thesis="Constructor is pushing agentic commerce.",
+                     status="active"),
+        LivingThesis(thesis_id=6, competitor_id=6, competitor_name="Elastic",
+                     thesis="Elastic is pushing context engineering.",
+                     status="active"),
+    ]
+    plays = [
+        PrescriptionSummary(title="Constructor play", team="Marketing",
+                            play=["Brief the field"], urgency_window="act_now",
+                            competitor_id=5, competitor_name="Constructor"),
+        PrescriptionSummary(title="Elastic play", team="Product",
+                            play=["Review the docs"], urgency_window="this_week",
+                            competitor_id=6, competitor_name="Elastic"),
+    ]
+
+    html_out = render_competitor_brief_page_from_state(
+        _state([constructor, elastic], theses=theses, plays=plays),
+        competitor_id=5,
+        report_date="2026-07-10",
+    )
+
+    assert "Constructor" in html_out
+    assert "Constructor play" in html_out
+    assert "Constructor is pushing agentic commerce." in html_out
+    assert "Elastic play" not in html_out
+    assert "Elastic is pushing context engineering." not in html_out
+    assert "Headline 6" not in html_out
+
+
+def test_attach_competitor_brief_hrefs_stamps_each_card_with_deterministic_path() -> None:
+    from cios.dashboard.types import MonitoredCompetitor
+
+    state = _state([
+        _card(5, name="Constructor"),
+        _card(6, name="Elastic"),
+    ])
+    state = state.model_copy(update={
+        "monitored_competitors": [
+            MonitoredCompetitor(
+                competitor_id=7,
+                competitor_name="Algonomy",
+                domain="algonomy.com",
+                checked_today=True,
+            )
+        ]
+    })
+
+    stamped = attach_competitor_brief_hrefs(state, tenant_slug="Algolia", report_date="2026-07-10")
+
+    assert stamped.competitor_cards[0].brief_href == "./briefs/algolia/constructor-2026-07-10.html"
+    assert stamped.competitor_cards[1].brief_href == "./briefs/algolia/elastic-2026-07-10.html"
+    assert stamped.monitored_competitors[0].brief_href == "./briefs/algolia/algonomy-2026-07-10.html"
 
 
 def test_from_state_shows_merge_badge_for_deduped_card() -> None:
