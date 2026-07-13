@@ -27,7 +27,12 @@ usermod -aG "$HERMES_GROUP" "$APP_USER"
 
 # CI-OS is hosted under the Hermes home as an extension. The app user needs
 # execute-only traversal through the parent directories, not read/list access.
-chmod 711 /root/.hermes /root/.hermes/apps
+# Prefer ACLs so Hermes can keep its home directory mode at 700.
+if command -v setfacl >/dev/null 2>&1; then
+  setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
+else
+  chmod 711 /root/.hermes /root/.hermes/apps
+fi
 
 mkdir -p "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB/data" "$PUB/v2/data"
 chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"

@@ -142,6 +142,7 @@ APP_USER="${CIOS_APP_USER:-cios}"
 HERMES_GROUP="${CIOS_HERMES_GROUP:-hermes}"
 useradd --system --home-dir "/var/lib/$APP_USER" --shell /usr/sbin/nologin "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$APP_USER"
+setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps
 chmod 711 /root/.hermes /root/.hermes/apps
 chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
 chmod 2775 "$APP" "$APP/run-queue"
@@ -1054,7 +1055,19 @@ def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp
     assert "host runner missing handoff bypass" in result.stderr
 
 
-def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal(tmp_path):
+def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace('setfacl -m "u:$APP_USER:--x" /root/.hermes /root/.hermes/apps', ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must prefer ACL traversal for cios" in result.stderr
+
+
+def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal_fallback(tmp_path):
     app = _make_app(
         tmp_path,
         host_permissions=SAFE_HOST_PERMISSIONS.replace("chmod 711 /root/.hermes /root/.hermes/apps", ""),
@@ -1063,7 +1076,7 @@ def test_preflight_fails_when_host_permissions_do_not_allow_cios_traversal(tmp_p
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "host permissions must preserve execute-only Hermes traversal" in result.stderr
+    assert "host permissions must preserve execute-only Hermes traversal fallback" in result.stderr
 
 
 def test_preflight_fails_when_host_permissions_do_not_fix_cron_wrapper_owner(tmp_path):
