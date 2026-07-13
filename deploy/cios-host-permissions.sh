@@ -32,6 +32,17 @@ mkdir -p "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB/data" "$PUB/v2/data"
 chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
 chmod 2775 "$APP" "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
 
+PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
+mkdir -p "$PRODUCT_MARKET_WORKDIR"
+chown -R "$APP_USER:$HERMES_GROUP" "$PRODUCT_MARKET_WORKDIR"
+chmod 2775 "$PRODUCT_MARKET_WORKDIR"
+
+LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
+if [ -e "$LEGACY_PRODUCT_MARKET_TMP" ]; then
+  chown -R "$APP_USER:$HERMES_GROUP" "$LEGACY_PRODUCT_MARKET_TMP"
+  chmod -R u+rwX,g+rwX,o-rwx "$LEGACY_PRODUCT_MARKET_TMP"
+fi
+
 if [ -f "$APP/deploy/cios-daily.sh" ]; then
   chmod 750 "$APP/deploy/cios-daily.sh"
 fi

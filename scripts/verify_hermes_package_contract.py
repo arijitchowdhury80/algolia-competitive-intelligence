@@ -94,6 +94,7 @@ WRAPPER_INVARIANTS = {
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
     "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
+    "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
     "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
     "wrapper missing app-user runner request queue": ".request",
     "wrapper missing app-user runner result wait": ".result",
@@ -120,6 +121,8 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must preserve execute-only Hermes traversal": "chmod 711 /root/.hermes /root/.hermes/apps",
     "host permissions must chown app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"',
     "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
+    "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
+    "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
     "host permissions must protect CI-OS env file": 'chmod 640 "$ENV_FILE"',
 }
 

@@ -91,6 +91,7 @@ export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
 case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
+export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP"
@@ -143,6 +144,8 @@ usermod -aG "$HERMES_GROUP" "$APP_USER"
 chmod 711 /root/.hermes /root/.hermes/apps
 chown -R "$APP_USER:$HERMES_GROUP" "$APP" "$PUB"
 chmod 2775 "$APP" "$APP/run-queue"
+PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
+LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
 chmod 640 "$ENV_FILE"
 """
 

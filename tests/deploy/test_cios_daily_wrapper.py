@@ -1154,7 +1154,7 @@ esac
     assert (app / "out" / "demand-readiness-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
     assert (app / "out" / "demand-readiness-app-dir-arg.txt").read_text(encoding="utf-8") == str(app)
     assert (app / "out" / "demand-readiness-work-root-arg.txt").read_text(encoding="utf-8") == (
-        "/tmp/cios-product-market"
+        str(app / "tmp" / "product-market")
     )
     assert (app / "out" / "demand-readiness-dashboard-arg.txt").read_text(encoding="utf-8") == str(
         app / "out" / "argus-dashboard.json"
@@ -1171,7 +1171,7 @@ esac
     assert (app / "out" / "demand-intake-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
     assert (app / "out" / "demand-intake-app-dir-arg.txt").read_text(encoding="utf-8") == str(app)
     assert (app / "out" / "demand-intake-work-root-arg.txt").read_text(encoding="utf-8") == (
-        "/tmp/cios-product-market"
+        str(app / "tmp" / "product-market")
     )
     assert (app / "out" / "demand-intake-out-dir-arg.txt").read_text(encoding="utf-8") == str(app / "out")
     assert (app / "out" / "demand-intake-dashboard-arg.txt").read_text(encoding="utf-8") == str(

@@ -138,6 +138,7 @@ export CIOS_ENABLE_LLM_THESIS_UPDATE="${CIOS_ENABLE_LLM_THESIS_UPDATE:-0}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_PRODUCT_MARKET_PROVIDER="${CIOS_PRODUCT_MARKET_PROVIDER:-gemini/gemini-2.5-flash}"
 export CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS="${CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS:-3}"
+export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 export CIOS_SCOUT_BIN="${CIOS_SCOUT_BIN:-$APP/scripts/scout_http_shim}"
 export CIOS_ENABLE_PRODUCT_MUSCLE_GAP_DISCOVERY="${CIOS_ENABLE_PRODUCT_MUSCLE_GAP_DISCOVERY:-1}"
 export CIOS_PRODUCT_MUSCLE_GAP_TENANT="${CIOS_PRODUCT_MUSCLE_GAP_TENANT:-${CIOS_DELIVER_TENANT:-algolia}}"
@@ -163,6 +164,8 @@ fi
 mkdir -p "$OUT" "$PUB"
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
+mkdir -p "$CIOS_PRODUCT_MARKET_WORKDIR"
+chmod 2775 "$CIOS_PRODUCT_MARKET_WORKDIR" 2>/dev/null || true
 
 cd "$APP"
 preflight_args="--app-dir $APP"
@@ -180,7 +183,7 @@ run_argus_demand_intake_sidecar() {
   .venv/bin/python scripts/run_argus_demand_intake.py \
     --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
     --app-dir "$APP" \
-    --work-root "${CIOS_PRODUCT_MARKET_WORKDIR:-/tmp/cios-product-market}" \
+    --work-root "$CIOS_PRODUCT_MARKET_WORKDIR" \
     --out-dir "$OUT" \
     --dashboard "$OUT/argus-dashboard.json" \
     --python-bin ".venv/bin/python" \
@@ -325,7 +328,7 @@ if [ "$DAILY_CODE" -ne 0 ]; then
   .venv/bin/python scripts/check_argus_demand_source_gate.py \
     --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
     --app-dir "$APP" \
-    --work-root "${CIOS_PRODUCT_MARKET_WORKDIR:-/tmp/cios-product-market}" \
+    --work-root "$CIOS_PRODUCT_MARKET_WORKDIR" \
     --dashboard "$OUT/argus-dashboard.json" \
     --output "$OUT/argus-demand-source-gate.json"
   DEMAND_SOURCE_GATE_CODE=$?
@@ -364,7 +367,7 @@ if [ "$DAILY_CODE" -ne 0 ]; then
     .venv/bin/python scripts/export_argus_demand_readiness.py \
       --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
       --app-dir "$APP" \
-      --work-root "${CIOS_PRODUCT_MARKET_WORKDIR:-/tmp/cios-product-market}" \
+      --work-root "$CIOS_PRODUCT_MARKET_WORKDIR" \
       --dashboard "$OUT/argus-dashboard.json" \
       --output "$OUT/argus-demand-readiness.json"
 
@@ -477,7 +480,7 @@ fi
 .venv/bin/python scripts/export_argus_demand_readiness.py \
   --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
   --app-dir "$APP" \
-  --work-root "${CIOS_PRODUCT_MARKET_WORKDIR:-/tmp/cios-product-market}" \
+  --work-root "$CIOS_PRODUCT_MARKET_WORKDIR" \
   --dashboard "$OUT/argus-dashboard.json" \
   --output "$OUT/argus-demand-readiness.json"
 
