@@ -251,6 +251,16 @@ class QualityReviewer:
                 required_fixes=[{"fix": f} for f in deterministic_fixes],
             )
 
+        if review_input.quiet_verdict and not review_input.claims and review_input.coverage_ran_clean:
+            return QualityReview(
+                tenant_id=review_input.tenant_id,
+                run_id=review_input.run_id,
+                review_type="pre-delivery",
+                status=QualityReviewStatus.PASSED,
+                findings=[{"source": "deterministic", "note": "quiet verdict with clean coverage and no claims"}],
+                required_fixes=[],
+            )
+
         verdict: Optional[dict] = None
         unparseable_error: Optional[UnparseableVerdict] = None
         for attempt in (1, 2):

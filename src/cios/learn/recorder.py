@@ -38,6 +38,7 @@ _IMPROVEMENT_PRIORITY: dict[LearningEventType, ImprovementPriority] = {
     LearningEventType.EXTRACTION_MISS: ImprovementPriority.MEDIUM,
     LearningEventType.FALSE_NEGATIVE: ImprovementPriority.CRITICAL,
     LearningEventType.USER_FEEDBACK: ImprovementPriority.LOW,
+    LearningEventType.RECOMMENDATION_CHALLENGE: ImprovementPriority.HIGH,
 }
 
 

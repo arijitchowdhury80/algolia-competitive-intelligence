@@ -151,7 +151,7 @@ def test_quiet_verdict_without_coverage_proof_fails():
 
 
 def test_quiet_verdict_with_clean_coverage_passes_deterministic_gate():
-    reviewer, fake = make_reviewer({"pass": True, "required_fixes": [], "notes": ""})
+    reviewer, fake = make_reviewer({"pass": False, "required_fixes": ["model should not decide quiet"], "notes": ""})
     review_input = FakeReviewInput(
         tenant_id=1,
         run_id="run-1",
@@ -164,7 +164,7 @@ def test_quiet_verdict_with_clean_coverage_passes_deterministic_gate():
     result = reviewer.review(review_input)
 
     assert result.status == QualityReviewStatus.PASSED
-    assert len(fake.calls) == 1
+    assert fake.calls == []
 
 
 def test_llm_fail_verdict_surfaces_required_fixes():

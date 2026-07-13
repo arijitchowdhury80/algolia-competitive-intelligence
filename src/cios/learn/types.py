@@ -24,6 +24,7 @@ class LearningEventType(str, Enum):
     USER_FEEDBACK = "user_feedback"
     FALSE_NEGATIVE = "false_negative"
     DELIVERY_OUTCOME = "delivery_outcome"
+    RECOMMENDATION_CHALLENGE = "recommendation_challenge"
 
 
 class LearningEventStatus(str, Enum):

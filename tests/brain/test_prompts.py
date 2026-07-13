@@ -41,3 +41,10 @@ def test_no_algolia_literal_in_any_prompt_template() -> None:
         assert "algolia" not in template.lower(), f"{name} contains an Algolia literal"
 
 
+def test_daily_synthesis_prompt_bans_uncited_intent_and_category_shift_claims() -> None:
+    system_prompt = prompts_module.SYNTHESIS_SYSTEM.lower()
+
+    assert "do not infer competitor intent" in system_prompt
+    assert "do not say a company is trying to shift" in system_prompt
+    assert "appears to position" in system_prompt
+
