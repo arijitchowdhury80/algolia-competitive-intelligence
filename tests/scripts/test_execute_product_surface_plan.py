@@ -403,6 +403,8 @@ def test_execute_plan_item_timeout_kills_descendant_process_group(tmp_path) -> N
 
 def test_execute_plan_item_timeout_kills_detached_descendant(tmp_path) -> None:
     module = _load_module()
+    if not module.executor_module.PROCESS_GROUPS.cgroup_enabled:
+        pytest.skip("requires delegated cgroup v2 containment")
     orphan_marker = tmp_path / "detached-orphan-wrote-after-timeout.txt"
     child_code = (
         "import pathlib, signal, sys, time; "

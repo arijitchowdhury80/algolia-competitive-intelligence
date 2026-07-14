@@ -6,6 +6,7 @@ set -eu
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 QUEUE="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
+ACTIVE="$QUEUE/.active-run"
 
 mkdir -p "$QUEUE"
 chmod 2775 "$QUEUE" 2>/dev/null || true
@@ -18,7 +19,11 @@ for request in "$QUEUE"/*.request; do
   running="$base.running"
   log="$base.log"
   result="$base.result"
+  request_id="$(basename "$base")"
+  printf '%s\n' "$request_id" > "$ACTIVE.tmp"
+  mv "$ACTIVE.tmp" "$ACTIVE"
   if ! mv "$request" "$running" 2>/dev/null; then
+    rm -f "$ACTIVE"
     continue
   fi
 
@@ -33,6 +38,8 @@ for request in "$QUEUE"/*.request; do
   printf '%s\n' "$code" > "$result.tmp"
   mv "$result.tmp" "$result"
   mv "$running" "$base.done" 2>/dev/null || true
+  rm -f "$ACTIVE"
+  break
 done
 
 if [ "$found" -eq 0 ]; then

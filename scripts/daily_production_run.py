@@ -153,7 +153,7 @@ from cios.platform.channels.types import (
     ResponseEnvelope,
     VerificationResult,
 )
-from cios.platform.process_supervisor import PROCESS_GROUPS
+from cios.platform.process_supervisor import PROCESS_GROUPS, install_shutdown_handlers
 from cios.platform.redaction import redact_sensitive_text
 from cios.platform.models.providers.claude_cli import ClaudeCliShimProvider
 from cios.platform.models.types import ModelRequest
@@ -1395,14 +1395,13 @@ def _run_process_group(
     check: bool,
 ) -> subprocess.CompletedProcess:
     del capture_output, text, check
-    process = subprocess.Popen(
+    process = PROCESS_GROUPS.spawn(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
     )
-    PROCESS_GROUPS.register(process)
     try:
         try:
             stdout, stderr = process.communicate(timeout=timeout)
@@ -4889,4 +4888,5 @@ def run_main() -> int:
 
 
 if __name__ == "__main__":
+    install_shutdown_handlers()
     sys.exit(run_main())

@@ -82,6 +82,9 @@ fi
 if [ -f "$APP/deploy/cios-host-runner.sh" ]; then
   chmod 755 "$APP/deploy/cios-host-runner.sh"
 fi
+if [ -f "$APP/deploy/cios-run-finalize.sh" ]; then
+  chmod 755 "$APP/deploy/cios-run-finalize.sh"
+fi
 if [ -f "$ENV_FILE" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ENV_FILE"
   chmod 640 "$ENV_FILE"

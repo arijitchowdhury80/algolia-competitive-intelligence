@@ -16,6 +16,7 @@ REQUIRED_FILES = [
     "deploy/cios-daily.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
     "deploy/claude-shim/cios-claude-shim.service",
@@ -62,6 +63,7 @@ REQUIRED_FILES = [
     "src/cios/db/repos/product_market.py",
     "src/cios/intelligence/product_surface_executor.py",
     "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/cgroup_launcher.py",
     "src/cios/platform/redaction.py",
 ]
 
@@ -94,7 +96,6 @@ WantedBy=multi-user.target
 SAFE_WRAPPER = """#!/bin/sh
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
-export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
 export CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS:-600}"
 export CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS:-630}"
 case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
@@ -130,13 +131,23 @@ SAFE_HOST_RUNNER = """#!/bin/sh
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 QUEUE="$APP/run-queue"
+ACTIVE="$QUEUE/.active-run"
 for request in "$QUEUE"/*.request; do
   base="${request%.request}"
   log="$base.log"
   result="$base.result"
   CIOS_DISABLE_RUNNER_HANDOFF=1 CIOS_APP_DIR="$APP" CIOS_PUBLIC_DIR="$PUB" "$APP/deploy/cios-daily.sh" > "$log" 2>&1
   printf "%s\\n" "$?" > "$result"
+  break
 done
+"""
+
+SAFE_RUN_FINALIZER = """#!/bin/sh
+ACTIVE="$QUEUE/.active-run"
+service_result="${SERVICE_RESULT:-unknown}"
+code=124
+status=blocked_runtime_timeout
+printf "%s\\n" "$code" > "$result.tmp"
 """
 
 
@@ -168,6 +179,7 @@ LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-m
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
 install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
+chmod 755 "$APP/deploy/cios-run-finalize.sh"
 """
 
 
@@ -175,7 +187,7 @@ SAFE_RUNNER_SERVICE = """[Unit]
 Description=CI-OS app-user daily runner
 
 [Service]
-Type=oneshot
+Type=exec
 User=cios
 Group=cios
 SupplementaryGroups=hermes
@@ -183,7 +195,15 @@ WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 Environment=CIOS_PUBLIC_DIR=/opt/cios/public
 Environment=CIOS_ENV_FILE=/etc/cios-env
+Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1
+Environment=CIOS_CGROUP_SUPERVISOR_SUBGROUP=supervisor
 ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
+ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh
+Delegate=yes
+DelegateSubgroup=supervisor
+KillMode=control-group
+RuntimeMaxSec=25min
+TimeoutStopSec=15s
 NoNewPrivileges=true
 UMask=0007
 """
@@ -271,9 +291,10 @@ control.run("algolia", demand_plan=demand_plan)
 
 SAFE_DAILY_RUNTIME = """
 from cios.platform.redaction import redact_sensitive_text
-from cios.platform.process_supervisor import PROCESS_GROUPS
-process = subprocess.Popen(command, start_new_session=True)
+from cios.platform.process_supervisor import PROCESS_GROUPS, install_shutdown_handlers
+process = PROCESS_GROUPS.spawn(command, start_new_session=True)
 PROCESS_GROUPS.terminate(process)
+install_shutdown_handlers()
 safe_error = redact_sensitive_text(stderr)
 """
 
@@ -281,7 +302,7 @@ safe_error = redact_sensitive_text(stderr)
 SAFE_PRODUCT_SURFACE_EXECUTOR = """
 from cios.platform.redaction import redact_sensitive_text
 MAX_PRODUCT_SURFACE_WORKERS = 8
-process = subprocess.Popen(command, start_new_session=True)
+process = PROCESS_GROUPS.spawn(command, start_new_session=True)
 batch_timeout_seconds = 600
 safe_error = redact_sensitive_text(stderr)
 summary = {
@@ -300,7 +321,10 @@ install_shutdown_handlers()
 
 
 SAFE_PROCESS_SUPERVISOR = """
-descendants = self._snapshot_descendants(process.pid)
+class CgroupV2Backend:
+    pass
+cgroup_kill = "cgroup.kill"
+cgroup_launcher = "cios.platform.cgroup_launcher"
 os.killpg(process.pid, signal.SIGTERM)
 PROCESS_GROUPS.terminate_all()
 """
@@ -500,6 +524,8 @@ def _make_app(
             content = admin_app
         elif rel == "deploy/cios-host-runner.sh":
             content = host_runner
+        elif rel == "deploy/cios-run-finalize.sh":
+            content = SAFE_RUN_FINALIZER
         elif rel == "deploy/cios-host-permissions.sh":
             content = host_permissions
         elif rel == "deploy/cios-runner.service":
@@ -866,28 +892,30 @@ def test_preflight_fails_when_product_surface_executor_omits_batch_deadline_acco
     assert "product-surface executor missing batch deadline" in result.stderr
 
 
-def test_preflight_fails_when_process_supervisor_omits_detached_descendant_discovery(tmp_path):
+def test_preflight_fails_when_process_supervisor_omits_atomic_cgroup_kill(tmp_path):
     app = _make_app(tmp_path)
     supervisor = app / "src/cios/platform/process_supervisor.py"
     supervisor.write_text(
-        SAFE_PROCESS_SUPERVISOR.replace("_snapshot_descendants", "_ignore_descendants"),
+        SAFE_PROCESS_SUPERVISOR.replace("cgroup.kill", "unsafe_group_kill"),
         encoding="utf-8",
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "process supervisor missing descendant-tree discovery" in result.stderr
+    assert "process supervisor missing atomic cgroup kill" in result.stderr
 
 
-def test_process_supervision_runtime_self_test_passes_current_implementation(tmp_path):
+def test_process_supervision_runtime_self_test_fails_closed_outside_delegated_service(tmp_path):
     module = _load_preflight_module()
     supervisor_source = (ROOT / "src/cios/platform/process_supervisor.py").read_text(
         encoding="utf-8"
     )
     app = _make_runtime_supervisor_app(tmp_path, supervisor_source)
 
-    assert module.collect_process_supervision_runtime_errors(app) == []
+    assert module.collect_process_supervision_runtime_errors(app) == [
+        "process supervision self-test failed: delegated cgroup v2 unavailable"
+    ]
 
 
 def test_process_supervision_runtime_self_test_rejects_detached_descendant_escape(tmp_path):
@@ -897,8 +925,10 @@ import os
 import signal
 
 class UnsafeRegistry:
-    def register(self, process):
-        pass
+    cgroup_enabled = True
+
+    def spawn(self, command, **kwargs):
+        return __import__("subprocess").Popen(command, **kwargs)
 
     def unregister(self, process):
         pass
@@ -962,16 +992,16 @@ def test_preflight_fails_when_daily_runtime_omits_error_redaction(tmp_path):
     assert "daily runtime missing sensitive-error redaction" in result.stderr
 
 
-def test_preflight_fails_when_daily_runtime_omits_process_group_supervision(tmp_path):
+def test_preflight_fails_when_daily_runtime_omits_contained_spawn(tmp_path):
     app = _make_app(
         tmp_path,
-        daily_runtime=SAFE_DAILY_RUNTIME.replace("start_new_session=True", "start_new_session=False"),
+        daily_runtime=SAFE_DAILY_RUNTIME.replace("PROCESS_GROUPS.spawn", "subprocess.Popen"),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "daily runtime missing process-group supervision" in result.stderr
+    assert "daily runtime missing contained process spawn" in result.stderr
 
 
 def test_preflight_fails_when_product_surface_extraction_admin_control_missing(tmp_path):
@@ -1250,23 +1280,22 @@ cp "$CIOS_DASHBOARD_OUT" "$PUB/index.html"
     assert "wrapper missing product muscle work queue export" in result.stderr
     assert "wrapper missing Argus operator handoff builder" in result.stderr
     assert "wrapper missing Argus data-plane manifest export" in result.stderr
-    assert "wrapper missing daily-run timeout guard" in result.stderr
     assert "wrapper missing marked-output cleanup" in result.stderr
     assert "wrapper missing scoped output cleanup" in result.stderr
     assert "wrapper missing current-run artifact validation" in result.stderr
     assert "wrapper missing staged publish directory" in result.stderr
 
 
-def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
+def test_preflight_fails_when_runner_service_missing_runtime_ceiling(tmp_path):
     app = _make_app(
         tmp_path,
-        wrapper=SAFE_WRAPPER.replace("CIOS_DAILY_RUN_TIMEOUT_SECONDS", "CIOS_DAILY_RUN_TIMEOUT_DISABLED"),
+        runner_service=SAFE_RUNNER_SERVICE.replace("RuntimeMaxSec=25min", ""),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "wrapper missing daily-run timeout guard" in result.stderr
+    assert "runner service must enforce a runtime ceiling" in result.stderr
 
 
 def test_preflight_fails_when_wrapper_missing_product_surface_stage_timeout_guard(tmp_path):
@@ -1306,6 +1335,20 @@ def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp
 
     assert result.returncode == 2
     assert "host runner missing handoff bypass" in result.stderr
+
+
+def test_preflight_fails_when_run_finalizer_omits_timeout_mapping(tmp_path):
+    app = _make_app(tmp_path)
+    finalizer = app / "deploy/cios-run-finalize.sh"
+    finalizer.write_text(
+        SAFE_RUN_FINALIZER.replace("code=124", "code=2"),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "run finalizer missing timeout exit mapping" in result.stderr
 
 
 def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_path):
@@ -1367,6 +1410,33 @@ def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):
     assert result.returncode == 2
     assert "runner service must run as cios user" in result.stderr
     assert "runner service must run as cios group" in result.stderr
+
+
+def test_preflight_fails_when_runner_service_does_not_delegate_cgroups(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_service=SAFE_RUNNER_SERVICE.replace("Delegate=yes\n", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner service must delegate cgroup subtree" in result.stderr
+
+
+def test_preflight_fails_when_runner_service_allows_cgroup_fallback(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_service=SAFE_RUNNER_SERVICE.replace(
+            "Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1\n",
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner service must require command cgroups" in result.stderr
 
 
 def test_preflight_fails_when_runner_path_does_not_watch_requests(tmp_path):

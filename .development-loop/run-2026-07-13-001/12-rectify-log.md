@@ -90,6 +90,49 @@ timeout diagnostic retention, and the corresponding package-preflight guard.
 
 Final security and code re-review remain mandatory before deployment.
 
+### Review-three failure
+
+The final code review ran a wider focused selection and reproduced a timing
+race that the exact and full-suite runs had not consistently exposed. Repeating
+the reviewer's command in the primary session produced 3 failed and 214 passed:
+both detached-descendant late-marker tests and the runtime preflight probe
+failed.
+
+The process-table snapshot cannot provide atomic containment because a target
+may fork and detach after discovery. This rectification is therefore rejected,
+`b8ee261` must not be deployed, and the development-loop three-strike circuit
+breaker is active pending a human architecture decision.
+
+## Approved Cgroup Reset Rectification
+
+### Red
+
+- Four process-containment tests failed to collect because the cgroup backend
+  and launcher did not exist.
+- Five run-boundary tests failed on the old oneshot service, PID watchdog,
+  multi-request activation, and missing finalizer.
+
+### Green
+
+- Added delegated cgroup v2 discovery, launch-before-exec handshake, atomic
+  `cgroup.kill`, empty-group verification, and fail-closed deployment mode.
+- Routed both daily and product-surface commands through the shared contained
+  spawn boundary.
+- Replaced the shell PID watchdog with a systemd runtime ceiling and full-unit
+  `KillMode=control-group`.
+- Added active-request-scoped post-stop finalization and blocked timeout status.
+- Extended deployed preflight with service, launcher, finalizer, delegation,
+  and continuous fork-at-timeout runtime checks.
+
+### Verification
+
+- Affected runtime/deploy/preflight selection: 249 passed, 2 skipped.
+- Full suite: 1,237 passed, 3 skipped, 23 deselected in 36.18 seconds.
+- Package preflight with source checks: passed.
+- Python compilation, shell syntax, and `git diff --check`: passed.
+
+Independent security and code review remain mandatory before deployment.
+
 ## Detached-Session Rectification
 
 ### Red

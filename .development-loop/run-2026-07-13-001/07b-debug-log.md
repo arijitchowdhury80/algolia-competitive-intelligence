@@ -141,3 +141,37 @@ closes the reproduced escape without changing Hermes or adding a dependency.
 - Affected runtime/deployment set: 239 passed.
 - Full suite: 1,226 passed, 1 skipped, 23 deselected.
 - Package contract, Python compilation, shell syntax, and diff checks: passed.
+
+### Concurrency reproduction and circuit breaker
+
+The exact independent-review command later reproduced three failures after the
+same tests had passed in smaller selections. Under load, the target parent can
+create a detached child after the supervisor's one-time process-table snapshot
+but before the root process group is terminated. The detached child is absent
+from the snapshot and survives.
+
+Evidence: 3 failed, 214 passed. Failures were the daily detached-child test,
+the product-surface detached-child test, and the deployed runtime self-test.
+
+This invalidates the snapshot architecture for the Phase 1 no-orphan contract.
+The third rectification attempt reached the development-loop circuit breaker.
+No deployment or push occurred. An explicit human architecture decision is
+required before another implementation attempt.
+
+## Approved Cgroup Architecture Reset
+
+Arijit approved the hierarchical cgroup design on 2026-07-14. The reset
+replaces process discovery with containment before target execution:
+
+- systemd owns the whole-run cgroup and runs the application as `cios`;
+- `Delegate=yes` exposes only the unit's private subtree to `cios`;
+- a launcher enters each command cgroup before `execvp`;
+- command timeout uses `cgroup.kill` and waits for `populated 0`;
+- systemd enforces the outer runtime ceiling and finalizes interrupted queue
+  state only after control-group cleanup;
+- macOS keeps process-group fallback for local compatibility, while deployed
+  preflight fails closed without delegated cgroup v2.
+
+The affected selection passed 249 tests with two Linux-only integration skips.
+The complete local suite passed 1,237 tests, with three skips and 23 deselected.
+No deployment or push has occurred.

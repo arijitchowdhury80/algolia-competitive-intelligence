@@ -3,7 +3,7 @@ Description=CI-OS app-user daily runner
 After=network.target
 
 [Service]
-Type=oneshot
+Type=exec
 User=cios
 Group=cios
 SupplementaryGroups=hermes
@@ -11,7 +11,17 @@ WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 Environment=CIOS_PUBLIC_DIR=/opt/cios/public
 Environment=CIOS_ENV_FILE=/etc/cios-env
+Environment=CIOS_RUNNER_QUEUE_DIR=/opt/cios/app/run-queue
+Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1
+Environment=CIOS_CGROUP_SUPERVISOR_SUBGROUP=supervisor
 ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
+ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh
+Delegate=yes
+DelegateSubgroup=supervisor
+KillMode=control-group
+RuntimeMaxSec=25min
+TimeoutStopSec=15s
+SendSIGKILL=yes
 NoNewPrivileges=true
 PrivateTmp=false
 UMask=0007

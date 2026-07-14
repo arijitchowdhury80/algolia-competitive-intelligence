@@ -431,69 +431,6 @@ esac
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
 
 
-def test_hermes_wrapper_times_out_silent_daily_runner_and_publishes_latest_status(tmp_path):
-    app, public, env_file = _make_fake_app(
-        tmp_path,
-        """#!/bin/sh
-set -eu
-OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
-CALLS="$OUT/calls.txt"
-case "$1" in
-  *verify_hermes_package_contract.py|*audit_learning_policies.py|*apply_product_market_schema.py)
-    ;;
-  *daily_production_run.py)
-    echo "daily-start" >> "$CALLS"
-    printf "%s" "$$" > "$OUT/daily.pid"
-    sleep 5
-    echo "daily-finished" >> "$CALLS"
-    printf "stale cockpit should never publish" > "$CIOS_DASHBOARD_OUT"
-    ;;
-  *export_public_run_status.py)
-    echo "public-run-status" >> "$CALLS"
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --output)
-          shift
-          printf '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}' > "$1"
-          ;;
-      esac
-      shift
-    done
-    ;;
-  *)
-    echo "unexpected python target: $1" >&2
-    exit 97
-    ;;
-esac
-""",
-    )
-    (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
-
-    result = _run_wrapper(
-        app,
-        public,
-        env_file,
-        {"CIOS_DAILY_RUN_TIMEOUT_SECONDS": "1"},
-    )
-
-    assert result.returncode == 124
-    assert "daily production runner timed out after 1s" in result.stderr
-    assert (app / "out" / "calls.txt").read_text(encoding="utf-8").splitlines() == [
-        "daily-start",
-        "public-run-status",
-    ]
-    assert not (app / "out" / "argus-dashboard.html").exists()
-    assert not (public / "index.html").exists()
-    assert not (public / "data" / "semantic-dashboard.json").exists()
-    assert (app / "out" / "argus-data-plane-manifest.json").read_text(encoding="utf-8")
-    assert (public / "data" / "argus-latest-run-status.json").read_text(encoding="utf-8") == (
-        '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}'
-    )
-    assert (public / "v2" / "data" / "argus-latest-run-status.json").read_text(encoding="utf-8") == (
-        '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}'
-    )
-
-
 def test_hermes_wrapper_runs_preflight_before_daily_runner(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,

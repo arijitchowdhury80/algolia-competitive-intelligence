@@ -71,14 +71,13 @@ def _run_item_command(
 ) -> tuple[str, str, str, str | None, int | None]:
     if cancel_event is not None and cancel_event.is_set():
         return "not_started", "", "", "batch deadline elapsed before item started", None
-    process = subprocess.Popen(
+    process = PROCESS_GROUPS.spawn(
         list(item["command"]),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
     )
-    PROCESS_GROUPS.register(process)
     try:
         status, stdout, stderr, error = _wait_for_command(
             process,

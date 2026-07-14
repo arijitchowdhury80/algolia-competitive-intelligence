@@ -44,3 +44,23 @@ separate ownership boundaries.
 
 GOOD. Advance to final independent security and code re-review. Live Phase 1
 verification remains required before the phase gate can pass.
+
+## Cgroup Architecture Reset
+
+- `src/cios/platform/process_supervisor.py`: 282 lines; largest function 40
+  lines.
+- `src/cios/platform/cgroup_launcher.py`: 47 lines; target placement precedes
+  the only `execvp` call.
+- `deploy/cios-run-finalize.sh`: 62 lines; queue finalization is scoped by an
+  atomic `.active-run` pointer so old `.running` evidence is not claimed.
+- No new dependency, schema, public endpoint, firewall change, or Hermes-core
+  change was introduced.
+- The deployed service remains `User=cios`, `Group=cios`; systemd owns only the
+  lifecycle boundary.
+
+Evidence: 249 affected tests passed with two Linux-only skips; full suite 1,237
+passed, 3 skipped, 23 deselected; package preflight, Python compilation, shell
+syntax, and diff checks passed.
+
+Verdict: GOOD. Independent security and code review remain mandatory before an
+immutable release candidate can be published.

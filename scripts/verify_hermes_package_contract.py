@@ -21,6 +21,7 @@ REQUIRED_PATHS = [
     "deploy/cios-daily.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
     "deploy/claude-shim/cios-claude-shim.service",
@@ -64,6 +65,7 @@ REQUIRED_PATHS = [
     "src/cios/admin/dashboard_refresh.py",
     "src/cios/intelligence/product_surface_executor.py",
     "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/cgroup_launcher.py",
     "src/cios/platform/redaction.py",
     "src/cios/intelligence",
     "src/cios/admin/learning_apply.py",
@@ -97,7 +99,6 @@ WRAPPER_INVARIANTS = {
     "wrapper missing Argus data-plane manifest export": "export_argus_data_plane_manifest.py",
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
-    "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
     "wrapper missing product-surface batch timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS",
     "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
@@ -121,6 +122,16 @@ HOST_RUNNER_INVARIANTS = {
     "host runner missing result artifact": ".result",
     "host runner missing log artifact": ".log",
     "host runner missing cios daily wrapper call": "deploy/cios-daily.sh",
+    "host runner must process one request per activation": "break",
+    "host runner missing active request pointer": ".active-run",
+}
+
+RUN_FINALIZER_INVARIANTS = {
+    "run finalizer missing active request pointer": ".active-run",
+    "run finalizer missing systemd result handling": "SERVICE_RESULT",
+    "run finalizer missing timeout exit mapping": "code=124",
+    "run finalizer missing blocked timeout status": "blocked_runtime_timeout",
+    "run finalizer missing atomic result write": '"$result.tmp"',
 }
 
 HOST_PERMISSIONS_INVARIANTS = {
@@ -147,9 +158,11 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
     "host permissions must protect Hermes CI-OS env file": 'chmod 640 "$ENV_FILE"',
     "host permissions must install host-readable CI-OS env file": 'install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"',
+    "host permissions must install executable run finalizer": 'chmod 755 "$APP/deploy/cios-run-finalize.sh"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
+    "runner service must use executable service type": "Type=exec",
     "runner service must run as cios user": "User=cios",
     "runner service must run as cios group": "Group=cios",
     "runner service must include hermes supplementary group": "SupplementaryGroups=hermes",
@@ -158,6 +171,14 @@ RUNNER_SERVICE_INVARIANTS = {
     "runner service must set /opt CI-OS public directory": "Environment=CIOS_PUBLIC_DIR=/opt/cios/public",
     "runner service must use host-readable CI-OS env file": "Environment=CIOS_ENV_FILE=/etc/cios-env",
     "runner service must call /opt host runner": "ExecStart=/opt/cios/app/deploy/cios-host-runner.sh",
+    "runner service must finalize after cgroup cleanup": "ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh",
+    "runner service must require command cgroups": "Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1",
+    "runner service must name supervisor subgroup": "Environment=CIOS_CGROUP_SUPERVISOR_SUBGROUP=supervisor",
+    "runner service must delegate cgroup subtree": "Delegate=yes",
+    "runner service must place main process in supervisor subgroup": "DelegateSubgroup=supervisor",
+    "runner service must kill the full run cgroup": "KillMode=control-group",
+    "runner service must enforce a runtime ceiling": "RuntimeMaxSec=",
+    "runner service must bound stop cleanup": "TimeoutStopSec=",
     "runner service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "runner service must keep group-writable artifacts": "UMask=0007",
 }
@@ -219,6 +240,7 @@ PRODUCT_SURFACE_EXECUTION_INVARIANTS = {
     "product-surface executor missing empty output accounting": "empty_scout_paths",
     "product-surface executor missing product-plane status": "product_plane_status",
     "product-surface executor missing process-group supervision": "start_new_session=True",
+    "product-surface executor missing contained process spawn": "PROCESS_GROUPS.spawn",
     "product-surface executor missing batch deadline": "batch_timeout_seconds",
     "product-surface executor missing not-started accounting": "not_started",
     "product-surface executor missing sensitive-error redaction": "redact_sensitive_text",
@@ -233,13 +255,16 @@ PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
 PROCESS_SUPERVISOR_INVARIANTS = {
     "process supervisor missing process-group termination": "os.killpg",
     "process supervisor missing active-process shutdown": "terminate_all",
-    "process supervisor missing descendant-tree discovery": "_snapshot_descendants",
+    "process supervisor missing delegated cgroup backend": "CgroupV2Backend",
+    "process supervisor missing atomic cgroup kill": "cgroup.kill",
+    "process supervisor missing launch-before-exec containment": "cgroup_launcher",
 }
 
 DAILY_RUNTIME_SECURITY_INVARIANTS = {
     "daily runtime missing sensitive-error redaction": "redact_sensitive_text",
-    "daily runtime missing process-group supervision": "start_new_session=True",
+    "daily runtime missing contained process spawn": "PROCESS_GROUPS.spawn",
     "daily runtime missing process-group termination": "PROCESS_GROUPS.terminate",
+    "daily runtime missing shutdown-handler installation": "install_shutdown_handlers()",
 }
 
 PRODUCT_SURFACE_PLANNER_INVARIANTS = {
@@ -315,25 +340,32 @@ import sys
 import time
 from pathlib import Path
 
-subprocess.Popen(
-    [sys.executable, "-c", sys.argv[1], sys.argv[2]],
-    start_new_session=True,
-    stdin=subprocess.DEVNULL,
-    stdout=subprocess.DEVNULL,
-    stderr=subprocess.DEVNULL,
-)
+def spawn_detached():
+    subprocess.Popen(
+        [sys.executable, "-c", sys.argv[1], sys.argv[2]],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+spawn_detached()
 Path(sys.argv[3]).write_text("ready", encoding="utf-8")
-time.sleep(10)
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline:
+    spawn_detached()
+    time.sleep(0.01)
 """
 
 with tempfile.TemporaryDirectory(prefix="cios-process-probe-") as temp_dir:
+    if not PROCESS_GROUPS.cgroup_enabled:
+        raise SystemExit(4)
     marker = Path(temp_dir) / "detached-survivor"
     ready = Path(temp_dir) / "ready"
-    parent = subprocess.Popen(
+    parent = PROCESS_GROUPS.spawn(
         [sys.executable, "-c", parent_code, child_code, str(marker), str(ready)],
         start_new_session=True,
     )
-    PROCESS_GROUPS.register(parent)
     try:
         deadline = time.monotonic() + 1.0
         while not ready.exists() and time.monotonic() < deadline:
@@ -370,6 +402,14 @@ def collect_host_runner_errors(app_dir: Path) -> list[str]:
         app_dir,
         rel_path="deploy/cios-host-runner.sh",
         invariants=HOST_RUNNER_INVARIANTS,
+    )
+
+
+def collect_run_finalizer_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-run-finalize.sh",
+        invariants=RUN_FINALIZER_INVARIANTS,
     )
 
 
@@ -577,6 +617,8 @@ def collect_process_supervision_runtime_errors(app_dir: Path) -> list[str]:
         return []
     if completed.returncode == 2:
         return ["process supervision self-test failed: detached descendant survived cleanup"]
+    if completed.returncode == 4:
+        return ["process supervision self-test failed: delegated cgroup v2 unavailable"]
     return ["process supervision self-test failed: runtime probe error"]
 
 
@@ -636,6 +678,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_path_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
+        errors.extend(collect_run_finalizer_errors(app_dir))
         errors.extend(collect_host_permissions_errors(app_dir))
         errors.extend(collect_runner_service_errors(app_dir))
         errors.extend(collect_runner_path_errors(app_dir))

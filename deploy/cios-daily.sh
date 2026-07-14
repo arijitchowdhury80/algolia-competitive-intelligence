@@ -151,15 +151,6 @@ export CIOS_ENABLE_PRODUCT_SURFACE_CANDIDATE_PROMOTION="${CIOS_ENABLE_PRODUCT_SU
 export CIOS_PRODUCT_SURFACE_PROMOTION_TENANT="${CIOS_PRODUCT_SURFACE_PROMOTION_TENANT:-$CIOS_PRODUCT_MUSCLE_GAP_TENANT}"
 export CIOS_PRODUCT_SURFACE_PROMOTION_SOURCE="${CIOS_PRODUCT_SURFACE_PROMOTION_SOURCE:-product_muscle_gap_plan}"
 export CIOS_PRODUCT_SURFACE_PROMOTED_BY="${CIOS_PRODUCT_SURFACE_PROMOTED_BY:-hermes}"
-export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-1200}"
-
-case "$CIOS_DAILY_RUN_TIMEOUT_SECONDS" in
-  ''|*[!0-9]*)
-    echo "invalid CIOS_DAILY_RUN_TIMEOUT_SECONDS: $CIOS_DAILY_RUN_TIMEOUT_SECONDS" >&2
-    exit 2
-    ;;
-esac
-
 if [ -d "$OUT" ] && [ ! -f "$OUT/.cios-output-dir" ]; then
   echo "refusing to clean unmarked CIOS output directory: $OUT" >&2
   exit 2
@@ -230,102 +221,10 @@ publish_public_run_status() {
   fi
 }
 
-kill_process_tree() {
-  root_pid="$1"
-  if command -v pgrep >/dev/null 2>&1; then
-    for child_pid in $(pgrep -P "$root_pid" 2>/dev/null || true); do
-      kill_process_tree "$child_pid"
-    done
-  fi
-  kill "$root_pid" 2>/dev/null || true
-}
-
-kill_process_tree_force() {
-  root_pid="$1"
-  if command -v pgrep >/dev/null 2>&1; then
-    for child_pid in $(pgrep -P "$root_pid" 2>/dev/null || true); do
-      kill_process_tree_force "$child_pid"
-    done
-  fi
-  kill -KILL "$root_pid" 2>/dev/null || true
-}
-
-run_daily_production_with_timeout() {
-  timeout_seconds="$1"
-  timeout_flag="$OUT/.daily-production-timeout"
-  rm -f "$timeout_flag"
-  .venv/bin/python scripts/daily_production_run.py &
-  daily_pid="$!"
-  if [ "$timeout_seconds" -gt 0 ]; then
-    (
-      sleep "$timeout_seconds"
-      if kill -0 "$daily_pid" 2>/dev/null; then
-        printf "1" > "$timeout_flag"
-        kill_process_tree "$daily_pid"
-        sleep 2
-        if kill -0 "$daily_pid" 2>/dev/null; then
-          kill_process_tree_force "$daily_pid"
-        fi
-      fi
-    ) >/dev/null 2>&1 &
-    watchdog_pid="$!"
-  else
-    watchdog_pid=""
-  fi
-  wait "$daily_pid"
-  daily_code="$?"
-  if [ -n "$watchdog_pid" ]; then
-    kill_process_tree "$watchdog_pid"
-    wait "$watchdog_pid" 2>/dev/null || true
-  fi
-  if [ -f "$timeout_flag" ]; then
-    rm -f "$timeout_flag"
-    echo "daily production runner timed out after ${timeout_seconds}s" >&2
-    return 124
-  fi
-  return "$daily_code"
-}
-
-write_timeout_manifest() {
-  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  {
-    printf '{\n'
-    printf '  "schema_version": 1,\n'
-    printf '  "tenant_slug": "%s",\n' "$CIOS_PRODUCT_MUSCLE_GAP_TENANT"
-    printf '  "generated_at": "%s",\n' "$generated_at"
-    printf '  "status": "blocked_runtime_timeout",\n'
-    printf '  "next_hermes_action": "inspect_daily_run_stage_ledger_and_rerun_after_timeout_fix",\n'
-    printf '  "planes": {\n'
-    printf '    "runtime": {\n'
-    printf '      "status": "timeout",\n'
-    printf '      "summary": "Hermes stopped the CI-OS daily runner after it exceeded the configured runtime budget.",\n'
-    printf '      "blocks_action": true,\n'
-    printf '      "counts": {"timeout_seconds": %s},\n' "$CIOS_DAILY_RUN_TIMEOUT_SECONDS"
-    printf '      "next_hermes_action": "inspect_daily_run_stage_ledger_and_rerun_after_timeout_fix"\n'
-    printf '    }\n'
-    printf '  },\n'
-    printf '  "blockers": [\n'
-    printf '    {\n'
-    printf '      "plane": "runtime",\n'
-    printf '      "severity": "blocks_publish",\n'
-    printf '      "title": "Daily runner timed out",\n'
-    printf '      "next_step": "Inspect the CI-OS stage ledger and logs, fix the hanging stage, then rerun Hermes daily execution."\n'
-    printf '    }\n'
-    printf '  ]\n'
-    printf '}\n'
-  } > "$OUT/argus-data-plane-manifest.json"
-}
-
 set +e
-run_daily_production_with_timeout "$CIOS_DAILY_RUN_TIMEOUT_SECONDS"
+.venv/bin/python scripts/daily_production_run.py
 DAILY_CODE=$?
 set -e
-if [ "$DAILY_CODE" -eq 124 ]; then
-  write_timeout_manifest
-  write_public_run_status blocked
-  publish_public_run_status
-  exit "$DAILY_CODE"
-fi
 if [ "$DAILY_CODE" -ne 0 ]; then
   set +e
   .venv/bin/python scripts/check_argus_demand_source_gate.py \

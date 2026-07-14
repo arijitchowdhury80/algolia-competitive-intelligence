@@ -9,24 +9,41 @@
   "retry_counts": {
     "BUILD": 0,
     "DEBUG": 0,
-    "RECTIFY": 2,
+    "RECTIFY": 0,
     "STAGING": 0
   },
-  "strike_log": [],
+  "strike_log": [
+    {
+      "stage": "RECTIFY",
+      "attempt": 3,
+      "commit": "b8ee261",
+      "failure": "one-time process-tree snapshot races with late setsid descendant creation",
+      "evidence": "3 failed, 214 passed under independent review command",
+      "action": "HUMAN_ARCHITECTURE_DECISION_REQUIRED"
+    },
+    {
+      "stage": "ARCHITECTURE_GATE",
+      "attempt": 1,
+      "commit": null,
+      "failure": null,
+      "evidence": "user approved hierarchical cgroup design on 2026-07-14",
+      "action": "RESUME_RECTIFY_WITH_FRESH_AUDIT"
+    }
+  ],
   "gates": {
     "discovery": "PASSED",
     "intake": "APPROVED_BY_GOAL_CHARTER",
     "risk": "APPROVED_BY_GOAL_CHARTER",
     "spec": "APPROVED_BY_GOAL_CHARTER",
-    "arch_review": "APPROVED_BY_GOAL_CHARTER",
+    "arch_review": "APPROVED_CGROUP_RESET_2026_07_14",
     "plan": "APPROVED_BY_GOAL_CHARTER",
     "build": "PASSED",
-    "local_tests": "PASSED_1226_1_SKIPPED_23_DESELECTED",
+    "local_tests": "PASSED_1237_3_SKIPPED_23_DESELECTED",
     "package_contract": "PASSED",
     "code_health": "PASSED",
-    "security": "PENDING_FINAL_RECHECK_AFTER_REVIEW3",
-    "code_review": "PENDING_FINAL_REREVIEW_AFTER_REVIEW3_RECTIFICATION",
-    "rectify": "PASSED_REVIEW3_RECTIFICATION",
+    "security": "PENDING_CGROUP_RESET_REVIEW",
+    "code_review": "PENDING_CGROUP_RESET_REVIEW",
+    "rectify": "PASSED_CGROUP_RESET_LOCAL",
     "phase_1_live": "PENDING"
   }
 }

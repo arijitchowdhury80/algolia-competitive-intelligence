@@ -80,3 +80,23 @@ Both findings violate the Phase 1 no-orphan-work gate. They were reproduced,
 accepted for a second bounded rectification cycle, and resolved with real
 process regressions plus a dynamic deployed-package probe. No deployment was
 attempted.
+
+## Final Review Of `b8ee261`
+
+Verdict: CHANGES REQUIRED.
+
+### Critical
+
+1. A one-time descendant snapshot races with descendants created immediately
+   before root-group termination. The reviewer reproduced late writes in both
+   execution paths; the exact command reproduced the same three failures in
+   the primary session.
+2. Whole-daily-run timeout still relies on shell PID-tree cleanup. The daily
+   entrypoint does not install the shared shutdown handlers, and an already
+   detached/reparented descendant can evade `pgrep -P` traversal.
+
+### Disposition
+
+Commit `b8ee261` is not deployable. The same design has exhausted the bounded
+rectification allowance. Phase 1 is paused at an architecture decision between
+kernel-enforced cgroup containment and explicitly weakening the no-orphan gate.

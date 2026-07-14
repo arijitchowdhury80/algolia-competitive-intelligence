@@ -2118,6 +2118,8 @@ def test_run_checked_timeout_kills_descendant_process_group(daily_run, tmp_path)
 
 
 def test_run_checked_timeout_kills_detached_descendant(daily_run, tmp_path):
+    if not daily_run.PROCESS_GROUPS.cgroup_enabled:
+        pytest.skip("requires delegated cgroup v2 containment")
     orphan_marker = tmp_path / "daily-detached-orphan.txt"
     child_code = (
         "import pathlib, signal, sys, time; "
