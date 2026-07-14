@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
@@ -19,6 +21,25 @@ if TYPE_CHECKING:
 class CheckResult:
     name: str
     detail: str
+
+
+def build_verdict(
+    *,
+    run_id: str,
+    results: list[CheckResult],
+    generated_at: str | None = None,
+) -> dict[str, Any]:
+    """Build the authoritative run-bound click-validation verdict."""
+    return {
+        "schema_version": 1,
+        "gate": "dashboard_click_validation",
+        "run_id": run_id,
+        "generated_at": generated_at
+        or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "status": "pass",
+        "exit_code": 0,
+        "checks": {result.name: True for result in results},
+    }
 
 
 def _playwright_sync_api() -> tuple[Any, type[Exception]]:
@@ -281,24 +302,7 @@ def validate_responsive(base_url: str, viewports: list[tuple[int, int]]) -> list
     return results
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="https://ci.chowmes.com/")
-    parser.add_argument("--tenant", help=argparse.SUPPRESS)
-    parser.add_argument("--check-dependencies", action="store_true")
-    args = parser.parse_args()
-    errors = dependency_errors()
-    if args.check_dependencies:
-        if errors:
-            print(_dependency_help(errors), file=sys.stderr)
-            raise SystemExit(2)
-        print("PASS dashboard_click_dependencies")
-        return
-    if errors:
-        print(_dependency_help(errors), file=sys.stderr)
-        raise SystemExit(2)
-
-    base_url = args.url if args.url.endswith("/") else args.url + "/"
+def _run_validation(base_url: str) -> list[CheckResult]:
     results: list[CheckResult] = []
     sync_playwright, _ = _playwright_sync_api()
     with sync_playwright() as p:
@@ -315,10 +319,65 @@ def main() -> None:
         results.append(validate_appendices(page, base_url))
         browser.close()
     results.extend(validate_responsive(base_url, [(390, 844), (768, 1024), (1280, 900)]))
+    return results
+
+
+def _write_failure_verdict(output: Path, *, run_id: str, check: str) -> None:
+    payload = {
+        "schema_version": 1,
+        "gate": "dashboard_click_validation",
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "status": "fail",
+        "exit_code": 2,
+        "checks": {check: False},
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(f"{json.dumps(payload, indent=2, sort_keys=True)}\n", encoding="utf-8")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default="https://ci.chowmes.com/")
+    parser.add_argument("--tenant", help=argparse.SUPPRESS)
+    parser.add_argument("--check-dependencies", action="store_true")
+    parser.add_argument("--run-id")
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv)
+    if args.output and not args.run_id:
+        parser.error("--run-id is required with --output")
+    errors = dependency_errors()
+    if args.check_dependencies:
+        if errors:
+            print(_dependency_help(errors), file=sys.stderr)
+            return 2
+        print("PASS dashboard_click_dependencies")
+        return 0
+    if errors:
+        if args.output:
+            _write_failure_verdict(args.output, run_id=args.run_id, check="dependencies")
+        print(_dependency_help(errors), file=sys.stderr)
+        return 2
+
+    base_url = args.url if args.url.endswith("/") else args.url + "/"
+    try:
+        results = _run_validation(base_url)
+    except Exception as exc:  # noqa: BLE001 - emit a terminal structured verdict.
+        if args.output:
+            _write_failure_verdict(args.output, run_id=args.run_id, check="dashboard_clicks")
+        print(f"dashboard click validation failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     for result in results:
         print(f"PASS {result.name}: {result.detail}")
     print("PASS dashboard_click_validation")
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            f"{json.dumps(build_verdict(run_id=args.run_id, results=results), indent=2, sort_keys=True)}\n",
+            encoding="utf-8",
+        )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

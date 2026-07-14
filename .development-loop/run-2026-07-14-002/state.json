@@ -1,0 +1,31 @@
+{
+  "mode": "FULL",
+  "run_id": "2026-07-14-002",
+  "project": "CI-OS",
+  "feature": "Phase 2 atomic run-bound publication integrity",
+  "status": "WAITING_FOR_HUMAN",
+  "current_stage": "STAGING",
+  "builder": "module-builder",
+  "retry_counts": {
+    "BUILD": 0,
+    "DEBUG": 1,
+    "RECTIFY": 0,
+    "STAGING": 0
+  },
+  "strike_log": [],
+  "gates": {
+    "discovery": "PASSED_INLINE_AGENT_LIMIT_RECORDED",
+    "intake": "APPROVED_BY_GOAL_CHARTER",
+    "risk": "APPROVED_BY_GOAL_CHARTER",
+    "spec": "APPROVED_BY_GOAL_CHARTER",
+    "arch_review": "PASSED_INLINE_LIVE_BOUNDARY_VERIFIED",
+    "plan": "APPROVED_BY_GOAL_CHARTER",
+    "build": "PASSED_1312_TESTS",
+    "code_health": "ACCEPTABLE_INLINE_AGENT_LIMIT_RECORDED",
+    "security_review": "PASSED_STANDING_GOAL_AUTHORIZATION",
+    "code_review": "ONE_IMPORTANT_ACTION_APPROVED_BY_GOAL_CHARTER",
+    "rectify": "PASSED_1316_TESTS",
+    "validate": "PASSED_8_LAYERS",
+    "staging": "AWAITING_HUMAN_APPROVAL"
+  }
+}

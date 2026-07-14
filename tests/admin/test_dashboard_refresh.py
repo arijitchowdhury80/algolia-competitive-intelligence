@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -153,6 +154,68 @@ def test_admin_dashboard_refresh_runner_rerenders_and_publishes(tmp_path, monkey
     )
     assert (public_dir / "v2" / "data" / "argus-demand-plan-template.csv").exists()
     assert (public_dir / "briefs" / "algolia" / "constructor-2026-07-11.html").exists()
+
+
+def test_admin_dashboard_refresh_v2_publishes_diagnostic_through_shared_store(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    app_dir = tmp_path / "app"
+    out_dir = tmp_path / "out"
+    store = tmp_path / "public-store"
+    run_id = "cios-20260714T090000Z-1234"
+    script = app_dir / "scripts" / "rerender_dashboard.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# fake rerender script path\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        command = [str(part) for part in cmd]
+        calls.append(command)
+        _write_dashboard_artifacts(out_dir)
+        (out_dir / "argus-dashboard.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-07-14T09:00:00Z",
+                    "run_health": {"run_id": run_id},
+                    "product_market_run": {"run_id": run_id},
+                }
+            ),
+            encoding="utf-8",
+        )
+        if str(cmd[1]).endswith("run_argus_demand_intake.py"):
+            _write_demand_intake_artifact(out_dir)
+            return subprocess.CompletedProcess(cmd, 2, stdout="blocked\n", stderr="")
+        if str(cmd[1]).endswith("export_argus_demand_plan_template.py"):
+            (out_dir / "argus-demand-plan-template.csv").write_text("topic\n", encoding="utf-8")
+        if str(cmd[1]).endswith("export_public_run_status.py"):
+            (out_dir / "argus-public-run-status.json").write_text(
+                json.dumps({"schema_version": 2, "run_id": run_id}),
+                encoding="utf-8",
+            )
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setattr("cios.admin.dashboard_refresh.subprocess.run", fake_run)
+    runner = AdminDashboardRefreshRunner(
+        app_dir=app_dir,
+        out_dir=out_dir,
+        work_root=tmp_path / "work",
+        python_bin="/venv/bin/python",
+        public_store=store,
+        publication_v2=True,
+    )
+
+    result = runner(tenant_slug="algolia")
+
+    publish_cmd = next(command for command in calls if command[1].endswith("publish_generation.py"))
+    assert result["status"] == "diagnostic_published"
+    assert publish_cmd[publish_cmd.index("--kind") + 1] == "diagnostic"
+    assert publish_cmd[publish_cmd.index("--run-id") + 1] == run_id
+    assert publish_cmd[publish_cmd.index("--store-root") + 1] == str(store)
+    manifest_cmd = next(command for command in calls if command[1].endswith("export_argus_data_plane_manifest.py"))
+    status_cmd = next(command for command in calls if command[1].endswith("export_public_run_status.py"))
+    assert manifest_cmd[manifest_cmd.index("--run-id") + 1] == run_id
+    assert status_cmd[status_cmd.index("--run-id") + 1] == run_id
 
 
 def test_admin_dashboard_refresh_runner_blocks_failed_rerender(tmp_path, monkeypatch) -> None:

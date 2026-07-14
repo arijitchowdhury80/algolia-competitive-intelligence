@@ -114,6 +114,7 @@ def test_rerender_dashboard_preserves_last_product_market_run_trace() -> None:
     )
 
     summary = run["product_market_summary"]
+    assert run["run_id"] == "daily-algolia-123"
     assert summary["status"] == "ran"
     assert summary["product_surface_plan_summary"]["target_count"] == 3
     assert summary["product_surface_plan_summary"]["target_company_count"] == 2

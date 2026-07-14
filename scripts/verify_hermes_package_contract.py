@@ -9,10 +9,12 @@ publish wrapper needed before a daily run is considered production-acceptable.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -25,6 +27,7 @@ REQUIRED_PATHS = [
     "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/cios-static.service",
     "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
@@ -52,6 +55,7 @@ REQUIRED_PATHS = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
+    "scripts/publish_generation.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
     "scripts/cios_run_queue.py",
@@ -74,6 +78,7 @@ REQUIRED_PATHS = [
     "src/cios/admin/demand_imports.py",
     "src/cios/db/repos/product_market.py",
     "src/cios/admin",
+    "src/cios/publication",
 ]
 
 WRAPPER_INVARIANTS = {
@@ -101,6 +106,10 @@ WRAPPER_INVARIANTS = {
     "wrapper missing Argus data-plane manifest export": "export_argus_data_plane_manifest.py",
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
+    "wrapper missing immutable publication feature flag": "CIOS_PUBLICATION_V2:-0",
+    "wrapper missing immutable package provenance requirement": "CIOS_PACKAGE_VERSION is required",
+    "wrapper missing immutable publication command": "publish_generation.py",
+    "wrapper missing structured package verdict": "--verdict-output",
     "wrapper missing product-surface batch timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS",
     "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
@@ -172,6 +181,8 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must persist app bind mount": 'app_fstab="$SOURCE_APP $APP none bind 0 0"',
     "host permissions must persist public bind mount": 'pub_fstab="$SOURCE_PUB $PUB none bind 0 0"',
     "host permissions must create CI-OS app user": "useradd --system",
+    "host permissions must define immutable public store": 'PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"',
+    "host permissions must create app-owned public store": 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"',
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
     "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
     "host permissions must manage host env copy": 'HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"',
@@ -242,6 +253,24 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must run as cios group": "Group=cios",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "admin service must read Hermes product-market artifacts": "PrivateTmp=false",
+}
+
+STATIC_SERVICE_INVARIANTS = {
+    "static service must run as cios user": "User=cios",
+    "static service must run as cios group": "Group=cios",
+    "static service must serve immutable router": "WorkingDirectory=/opt/cios/public-store/served",
+    "static service must bind localhost only": "--bind 127.0.0.1 8662",
+    "static service must keep no-new-privileges enabled": "NoNewPrivileges=true",
+    "static service must enforce memory cgroup limit": "MemoryMax=128M",
+    "static service must enforce CPU cgroup limit": "CPUQuota=20%",
+    "static service must enforce task cgroup limit": "TasksMax=32",
+}
+
+LAUNCH_READINESS_INVARIANTS = {
+    "launch readiness missing publication verdict input": "--publication-verdict",
+    "launch readiness missing served manifest input": "--publication-manifest",
+    "launch readiness missing publication verdict gate": 'expected_gate="publication_integrity"',
+    "launch readiness missing exact manifest digest binding": "publication_manifest_sha256",
 }
 
 MANUAL_DEMAND_FAST_LANE_INVARIANTS = {
@@ -528,6 +557,22 @@ def collect_admin_service_errors(app_dir: Path) -> list[str]:
     return errors
 
 
+def collect_static_service_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-static.service",
+        invariants=STATIC_SERVICE_INVARIANTS,
+    )
+
+
+def collect_launch_readiness_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="scripts/check_e2e_launch_readiness.py",
+        invariants=LAUNCH_READINESS_INVARIANTS,
+    )
+
+
 def collect_text_invariant_errors(
     app_dir: Path,
     *,
@@ -736,11 +781,31 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Require test-only dependencies needed for remote full-suite validation.",
     )
     parser.add_argument("--scout-bin", default="scout", help="Scout CLI command name/path.")
+    parser.add_argument("--run-id", help="Current CI-OS run identity for a structured verdict.")
+    parser.add_argument("--verdict-output", type=Path, help="Write a machine-readable package verdict.")
     return parser.parse_args(argv)
+
+
+def _write_verdict(*, output: Path, run_id: str, errors: list[str]) -> None:
+    status = "fail" if errors else "pass"
+    payload = {
+        "schema_version": 1,
+        "gate": "hermes_package_contract",
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "status": status,
+        "exit_code": 2 if errors else 0,
+        "checks": {"required_contract": not errors},
+        "error_count": len(errors),
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(f"{json.dumps(payload, indent=2, sort_keys=True)}\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.verdict_output and not args.run_id:
+        raise SystemExit("--run-id is required with --verdict-output")
     app_dir = args.app_dir
 
     errors: list[str] = []
@@ -757,6 +822,8 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_runner_path_errors(app_dir))
         errors.extend(collect_claude_shim_service_errors(app_dir))
         errors.extend(collect_admin_service_errors(app_dir))
+        errors.extend(collect_static_service_errors(app_dir))
+        errors.extend(collect_launch_readiness_errors(app_dir))
         errors.extend(collect_manual_demand_fast_lane_errors(app_dir))
         errors.extend(collect_admin_refresh_errors(app_dir))
         errors.extend(collect_operator_handoff_errors(app_dir))
@@ -776,6 +843,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.require_test_deps:
             errors.extend(collect_test_dependency_errors(app_dir))
 
+    if args.verdict_output:
+        _write_verdict(output=args.verdict_output, run_id=args.run_id, errors=errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

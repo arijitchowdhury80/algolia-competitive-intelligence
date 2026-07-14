@@ -33,7 +33,31 @@ else
 fi
 set +a
 
+CIOS_RUN_ID="cios-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+export CIOS_RUN_ID
+
 OUT="${CIOS_OUTPUT_DIR:-$APP/out}"
+PUBLICATION_V2="${CIOS_PUBLICATION_V2:-0}"
+PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
+case "$(printf '%s' "$PUBLICATION_V2" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    if [ -z "${CIOS_PACKAGE_VERSION:-}" ]; then
+      echo "CIOS_PACKAGE_VERSION is required for publication v2" >&2
+      exit 2
+    fi
+    case "$CIOS_PACKAGE_VERSION" in
+      *[!A-Za-z0-9._-]*)
+        echo "unsafe CIOS_PACKAGE_VERSION" >&2
+        exit 2
+        ;;
+    esac
+    if [ "${#CIOS_PACKAGE_VERSION}" -gt 128 ]; then
+      echo "unsafe CIOS_PACKAGE_VERSION" >&2
+      exit 2
+    fi
+    export CIOS_PACKAGE_VERSION
+    ;;
+esac
 if [ -z "$OUT" ] || [ "$OUT" = "/" ]; then
   echo "unsafe CIOS output directory: $OUT" >&2
   exit 2
@@ -101,7 +125,9 @@ case "$(printf '%s' "$CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE" | tr '[:upper:]' 
     preflight_args="$preflight_args --require-scout --scout-bin $CIOS_SCOUT_BIN"
     ;;
 esac
-.venv/bin/python scripts/verify_hermes_package_contract.py $preflight_args
+.venv/bin/python scripts/verify_hermes_package_contract.py $preflight_args \
+  --run-id "$CIOS_RUN_ID" \
+  --verdict-output "$OUT/hermes-package-contract-verdict.json"
 .venv/bin/python scripts/audit_learning_policies.py --package-root "$APP"
 .venv/bin/python scripts/apply_product_market_schema.py
 
@@ -134,6 +160,7 @@ write_public_run_status() {
     --manifest "$OUT/argus-data-plane-manifest.json" \
     --dashboard "$OUT/argus-dashboard.json" \
     --publish-status "$publish_status" \
+    --run-id "$CIOS_RUN_ID" \
     --output "$OUT/argus-public-run-status.json"
 }
 
@@ -141,6 +168,21 @@ publish_public_run_status() {
   if [ ! -s "$OUT/argus-public-run-status.json" ]; then
     return 0
   fi
+  case "$(printf '%s' "$PUBLICATION_V2" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on)
+      .venv/bin/python scripts/publish_generation.py \
+        --store-root "$PUBLIC_STORE" \
+        --run-id "$CIOS_RUN_ID" \
+        --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
+        --kind diagnostic \
+        --status "$OUT/argus-public-run-status.json" \
+        --demand-plan-template "$OUT/argus-demand-plan-template.csv" \
+        --demand-work-order-guide "$OUT/argus-demand-work-order-guide.json" \
+        --package-verdict "$OUT/hermes-package-contract-verdict.json" \
+        --output "$OUT/publication-integrity-verdict.json"
+      return 0
+      ;;
+  esac
   mkdir -p "$PUB/data" "$PUB/v2/data"
   cp "$OUT/argus-public-run-status.json" "$PUB/data/argus-latest-run-status.json"
   cp "$OUT/argus-public-run-status.json" "$PUB/v2/data/argus-latest-run-status.json"
@@ -258,6 +300,7 @@ if [ "$DAILY_CODE" -ne 0 ]; then
       --evidence-work-queue "$OUT/argus-evidence-work-queue.json" \
       --product-muscle-work-queue "$OUT/argus-product-muscle-work-queue.json" \
       --operator-handoff "$OUT/argus-operator-handoff.json" \
+      --run-id "$CIOS_RUN_ID" \
       --output "$OUT/argus-data-plane-manifest.json"
 
     write_public_run_status blocked
@@ -437,6 +480,7 @@ fi
   --evidence-work-queue "$OUT/argus-evidence-work-queue.json" \
   --product-muscle-work-queue "$OUT/argus-product-muscle-work-queue.json" \
   --operator-handoff "$OUT/argus-operator-handoff.json" \
+  --run-id "$CIOS_RUN_ID" \
   --output "$OUT/argus-data-plane-manifest.json"
 
 if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
@@ -457,6 +501,28 @@ if [ ! -d "$OUT/briefs" ]; then
 fi
 
 write_public_run_status published
+
+case "$(printf '%s' "$PUBLICATION_V2" | tr '[:upper:]' '[:lower:]')" in
+  1|true|yes|on)
+    .venv/bin/python scripts/publish_generation.py \
+      --store-root "$PUBLIC_STORE" \
+      --run-id "$CIOS_RUN_ID" \
+      --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT" \
+      --kind decision \
+      --dashboard-html "$CIOS_DASHBOARD_OUT" \
+      --brief "$OUT/brief.html" \
+      --dashboard-json "$OUT/argus-dashboard.json" \
+      --data-plane-manifest "$OUT/argus-data-plane-manifest.json" \
+      --status "$OUT/argus-public-run-status.json" \
+      --briefs-dir "$OUT/briefs" \
+      --demand-plan-template "$OUT/argus-demand-plan-template.csv" \
+      --demand-work-order-guide "$OUT/argus-demand-work-order-guide.json" \
+      --package-verdict "$OUT/hermes-package-contract-verdict.json" \
+      --output "$OUT/publication-integrity-verdict.json"
+    echo "immutable dashboard generation published from $APP"
+    exit 0
+    ;;
+esac
 
 STAGE="$PUB/.argus-publish.$$"
 rm -rf "$STAGE"

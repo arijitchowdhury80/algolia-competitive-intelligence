@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -149,6 +150,57 @@ def test_hermes_wrapper_has_no_caller_controlled_execution_paths():
     assert "CIOS_RUN_QUEUE_HELPER" not in text
     assert "CIOS_APP_USER" not in text
     assert "CIOS_DISABLE_RUNNER_HANDOFF" not in text
+
+
+def test_app_wrapper_generates_safe_run_identity_before_preflight(tmp_path):
+    marker = tmp_path / "run-id.txt"
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        f'''#!/bin/sh
+printf "%s" "$CIOS_RUN_ID" > "{marker}"
+exit 42
+''',
+    )
+
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_RUN_ID": "../caller"},
+    )
+
+    assert result.returncode == 42
+    run_id = marker.read_text(encoding="utf-8")
+    assert re.fullmatch(r"cios-[0-9]{8}T[0-9]{6}Z-[0-9]+", run_id)
+    assert run_id != "../caller"
+
+
+def test_app_wrapper_has_flagged_immutable_publication_path() -> None:
+    text = APP_WRAPPER.read_text(encoding="utf-8")
+
+    assert 'CIOS_PUBLICATION_V2:-0' in text
+    assert 'CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store' in text
+    assert 'scripts/publish_generation.py' in text
+    assert '--kind diagnostic' in text
+    assert '--kind decision' in text
+    assert '--run-id "$CIOS_RUN_ID"' in text
+    assert '--package-verdict "$OUT/hermes-package-contract-verdict.json"' in text
+    assert '--output "$OUT/publication-integrity-verdict.json"' in text
+    assert "CIOS_PACKAGE_VERSION" in text
+
+
+def test_app_wrapper_requires_named_package_for_publication_v2(tmp_path):
+    app, public, env_file = _make_fake_app(tmp_path, "#!/bin/sh\nexit 0\n")
+
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_PUBLICATION_V2": "1", "CIOS_PACKAGE_VERSION": ""},
+    )
+
+    assert result.returncode == 2
+    assert "CIOS_PACKAGE_VERSION is required" in result.stderr
 
 
 def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_same_run_artifacts(tmp_path):

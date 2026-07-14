@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ REQUIRED_FILES = [
     "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/cios-static.service",
     "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
@@ -47,6 +49,7 @@ REQUIRED_FILES = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
+    "scripts/publish_generation.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
     "scripts/cios_run_queue.py",
@@ -72,6 +75,7 @@ REQUIRED_FILES = [
 REQUIRED_DIRS = [
     "src/cios/intelligence",
     "src/cios/admin",
+    "src/cios/publication",
 ]
 
 SAFE_ADMIN_SERVICE = """[Unit]
@@ -94,8 +98,19 @@ PrivateTmp=false
 WantedBy=multi-user.target
 """
 
+SAFE_LAUNCH_READINESS = """
+parser.add_argument("--publication-verdict")
+parser.add_argument("--publication-manifest")
+expected_gate="publication_integrity"
+publication_manifest_sha256 = "digest"
+"""
+
 
 SAFE_WRAPPER = """#!/bin/sh
+CIOS_RUN_ID="cios-20260714T090000Z-1234"
+PUBLICATION_V2="${CIOS_PUBLICATION_V2:-0}"
+CIOS_PACKAGE_VERSION="${CIOS_PACKAGE_VERSION:-phase2-test-release}"
+echo "CIOS_PACKAGE_VERSION is required" >/dev/null
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS:-600}"
@@ -103,7 +118,7 @@ export CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_E
 export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
-.venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP"
+.venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP" --run-id "$CIOS_RUN_ID" --verdict-output "$OUT/hermes-package-contract-verdict.json"
 .venv/bin/python scripts/audit_learning_policies.py --package-root "$APP"
 .venv/bin/python scripts/apply_product_market_schema.py
 .venv/bin/python scripts/promote_product_surface_candidates.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/product-surface-candidate-promotion-summary.json"
@@ -118,6 +133,7 @@ find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/attach_operator_handoff_to_dashboard.py --dashboard "$OUT/argus-dashboard.json" --handoff "$OUT/argus-operator-handoff.json" --html "$CIOS_DASHBOARD_OUT"
 .venv/bin/python scripts/export_argus_data_plane_manifest.py --tenant "$CIOS_DELIVER_TENANT" --dashboard "$OUT/argus-dashboard.json" --demand-readiness "$OUT/argus-demand-readiness.json" --demand-plan-template "$OUT/argus-demand-plan-template.csv" --demand-intake "$OUT/argus-demand-intake.json" --evidence-work-queue "$OUT/argus-evidence-work-queue.json" --product-muscle-work-queue "$OUT/argus-product-muscle-work-queue.json" --operator-handoff "$OUT/argus-operator-handoff.json" --output "$OUT/argus-data-plane-manifest.json"
 .venv/bin/python scripts/export_public_run_status.py --tenant "$CIOS_DELIVER_TENANT" --manifest "$OUT/argus-data-plane-manifest.json" --dashboard "$OUT/argus-dashboard.json" --publish-status blocked --output "$OUT/argus-public-run-status.json"
+.venv/bin/python scripts/publish_generation.py --kind diagnostic --status "$OUT/argus-public-run-status.json"
 cp "$OUT/argus-public-run-status.json" "$PUB/data/argus-latest-run-status.json"
 if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
   echo "missing dashboard artifact from current run" >&2
@@ -197,6 +213,7 @@ SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
 SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
+PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
@@ -211,6 +228,7 @@ setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
 mount --bind "$SOURCE_APP" "$APP"
 mount --bind "$SOURCE_PUB" "$PUB"
 install -d -o root -g root -m 0755 /opt/cios
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"
 app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
@@ -264,6 +282,21 @@ Description=Watch for CI-OS app-user runner requests
 [Path]
 PathExistsGlob=/opt/cios/app/run-queue/*.request
 Unit=cios-runner.service
+"""
+
+
+SAFE_STATIC_SERVICE = """[Unit]
+Description=CI-OS immutable public dashboard
+
+[Service]
+User=cios
+Group=cios
+WorkingDirectory=/opt/cios/public-store/served
+ExecStart=/usr/bin/python3 -m http.server --bind 127.0.0.1 8662
+NoNewPrivileges=true
+MemoryMax=128M
+CPUQuota=20%
+TasksMax=32
 """
 
 
@@ -467,6 +500,7 @@ def _make_app(
     host_permissions: str = SAFE_HOST_PERMISSIONS,
     runner_service: str = SAFE_RUNNER_SERVICE,
     runner_path: str = SAFE_RUNNER_PATH,
+    static_service: str = SAFE_STATIC_SERVICE,
     claude_shim_service: str = SAFE_CLAUDE_SHIM_SERVICE,
     demand_fast_lane: str = SAFE_DEMAND_FAST_LANE,
     admin_dashboard_refresh: str = SAFE_ADMIN_DASHBOARD_REFRESH,
@@ -480,6 +514,7 @@ def _make_app(
     product_surface_candidate_promotion_control: str = SAFE_PRODUCT_SURFACE_CANDIDATE_PROMOTION_CONTROL,
     product_muscle_work_queue_admin: str = SAFE_PRODUCT_MUSCLE_WORK_QUEUE_ADMIN,
     admin_app: str = SAFE_ADMIN_APP,
+    launch_readiness: str = SAFE_LAUNCH_READINESS,
 ) -> Path:
     app = tmp_path / "cios"
     for rel in REQUIRED_FILES:
@@ -587,8 +622,12 @@ def _make_app(
             content = runner_service
         elif rel == "deploy/cios-runner.path":
             content = runner_path
+        elif rel == "deploy/cios-static.service":
+            content = static_service
         elif rel == "deploy/claude-shim/cios-claude-shim.service":
             content = claude_shim_service
+        elif rel == "scripts/check_e2e_launch_readiness.py":
+            content = launch_readiness
         path.write_text(content, encoding="utf-8")
     for rel in REQUIRED_DIRS:
         if rel == "src/cios/intelligence" and not include_intelligence:
@@ -615,6 +654,37 @@ def _run_preflight(app: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
     )
+
+
+def test_package_preflight_writes_run_bound_structured_failure_verdict(tmp_path: Path) -> None:
+    verdict = tmp_path / "package-verdict.json"
+    run_id = "cios-20260714T090000Z-1234"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--app-dir",
+            str(tmp_path / "missing-app"),
+            "--skip-python-imports",
+            "--run-id",
+            run_id,
+            "--verdict-output",
+            str(verdict),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    payload = json.loads(verdict.read_text(encoding="utf-8"))
+    assert result.returncode == 2
+    assert payload["schema_version"] == 1
+    assert payload["gate"] == "hermes_package_contract"
+    assert payload["run_id"] == run_id
+    assert payload["status"] == "fail"
+    assert payload["exit_code"] == 2
+    assert payload["checks"]["required_contract"] is False
 
 
 def _load_preflight_module():
@@ -742,6 +812,21 @@ def test_preflight_fails_when_launch_readiness_gate_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: scripts/check_e2e_launch_readiness.py" in result.stderr
+
+
+def test_preflight_fails_when_launch_readiness_omits_manifest_digest_binding(tmp_path):
+    app = _make_app(
+        tmp_path,
+        launch_readiness=SAFE_LAUNCH_READINESS.replace(
+            "publication_manifest_sha256",
+            "unbound_manifest",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "launch readiness missing exact manifest digest binding" in result.stderr
 
 
 def test_preflight_fails_when_e2e_validation_plan_missing(tmp_path):

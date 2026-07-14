@@ -172,6 +172,7 @@ class RunHealth(BaseModel):
     material_delta_count: int = 0
     delivery_status: Optional[str] = None
     quality_review_status: Optional[str] = None
+    source_coverage: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProductMarketRunStatus(BaseModel):
@@ -182,6 +183,7 @@ class ProductMarketRunStatus(BaseModel):
     what Argus prioritized before drawing conclusions.
     """
 
+    run_id: Optional[str] = None
     status: str = "not_recorded"
     next_sweep_plan_path: Optional[str] = None
     learning_apply_plan_path: Optional[str] = None

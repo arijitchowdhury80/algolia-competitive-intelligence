@@ -62,11 +62,13 @@ def superuser_dsn() -> str:
     return _require_dsn()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def _schema_applied(superuser_dsn: str) -> str:
-    """Reset the public schema and apply schema.sql + seed.sql once per test
-    session, then set a known password on cios_app so tests can connect as
-    the RLS-bound app role. Returns the superuser dsn for convenience."""
+    """Reset the schema per test so committed integration rows cannot leak.
+
+    Set a known password on cios_app so tests can connect as the RLS-bound app
+    role. Return the superuser DSN for convenience.
+    """
     safety_error = _schema_reset_safety_error(superuser_dsn)
     if safety_error:
         pytest.skip(safety_error)

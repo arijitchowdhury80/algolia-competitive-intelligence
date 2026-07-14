@@ -53,6 +53,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -80,11 +81,9 @@ from cios.brain.quality import QualityReviewer, UnparseableVerdict, extract_json
 from cios.brain.synthesizer import Synthesizer
 from cios.brain.thesis import ThesisEngine, find_similar_active_thesis
 from cios.brain.types import (
-    CadenceActionItem,
     CoverageReport,
     LaneStatus,
     MonthlySynthesisResult,
-    Pattern,
     Signal,
     SynthesisInput,
     Thesis,
@@ -130,7 +129,6 @@ from cios.db.repos.sources import PgSourceRepository
 from cios.db.session import get_dsn, tenant_context
 from cios.delivery.action_router import ActionRouter
 from cios.delivery.gated_commander import GatedDeliveryCommander
-from cios.delivery.telegram_format import render_brief_html
 from cios.delivery.types import Cadence, DeliveryRequest, ReportReadyEvent
 from cios.execspeech.providers import SnapshotQuoteProvider
 from cios.execspeech.scanner import ExecSpeechScanner
@@ -139,11 +137,10 @@ from cios.hunter.types import Competitor, HealthEventType, Source, SourceHealthE
 from cios.hunter.validator import SourceValidator, normalize_url
 from cios.intelligence.capabilities import capability_key
 from cios.intelligence.ga4_exporter import resolve_ga4_date_windows
-from cios.intelligence.importers import diagnose_looker_rows, load_export_records, normalize_looker_rows
+from cios.intelligence.importers import diagnose_looker_rows, load_export_records
 from cios.intelligence.scout_surface_exporter import ProductSurfaceTarget
 from cios.intelligence.product_surface_executor import MAX_PRODUCT_SURFACE_WORKERS
 from cios.learn.recorder import LearningRecorder
-from cios.learn.types import FalseNegativeAuditStatus
 from cios.platform.channels.adapter import ChannelAdapter
 from cios.platform.channels.adapters.telegram import TelegramAdapter
 from cios.platform.channels.types import (
@@ -158,6 +155,7 @@ from cios.platform.redaction import redact_sensitive_text
 from cios.platform.models.providers.claude_cli import ClaudeCliShimProvider
 from cios.platform.models.types import ModelRequest
 
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 LLM_BUDGET = 35
 LLM_CALLS = {"count": 0}
 
@@ -247,6 +245,35 @@ def env_flag(env: dict[str, str], key: str, *, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_run_id(slug: str, env: Mapping[str, str], epoch_seconds: int) -> str:
+    """Use the wrapper run identity or create a local-execution fallback."""
+    provided = str(env.get("CIOS_RUN_ID") or "").strip()
+    if provided:
+        if not RUN_ID_PATTERN.fullmatch(provided):
+            raise ValueError("unsafe CIOS_RUN_ID")
+        return provided
+    return f"daily-{slug}-{epoch_seconds}"
+
+
+def runtime_provenance(
+    env: Mapping[str, str],
+    *,
+    require_package_version: bool = False,
+) -> dict[str, str]:
+    """Return private reproducibility metadata for one runtime execution."""
+    package_version = str(env.get("CIOS_PACKAGE_VERSION") or "").strip()
+    if require_package_version and not package_version:
+        raise ValueError("CIOS_PACKAGE_VERSION is required for publication v2")
+    if package_version and RUN_ID_PATTERN.fullmatch(package_version) is None:
+        raise ValueError("unsafe CIOS_PACKAGE_VERSION")
+    model_route = str(env.get("CIOS_MODEL_ALIAS") or "sonnet").strip() or "sonnet"
+    return {
+        "package_version": package_version or "unversioned",
+        "model_provider": "claude-shim",
+        "model_route": model_route,
+    }
 
 
 def env_paths(env: dict[str, str], key: str) -> list[str]:
@@ -2252,9 +2279,10 @@ def start_daily_run_stage_ledger(
             run_id=run_id,
             package_name="cios.daily",
         )
-        result.daily_stage_ledger_id = recorder.start(
-            metadata={"tenant": result.slug, "cadence": "daily"},
-        )
+        metadata: dict[str, Any] = {"tenant": result.slug, "cadence": "daily"}
+        if result.runtime_provenance:
+            metadata["runtime_provenance"] = dict(result.runtime_provenance)
+        result.daily_stage_ledger_id = recorder.start(metadata=metadata)
         return result.daily_stage_ledger_id
     except Exception as exc:  # noqa: BLE001
         result.errors.append(f"daily stage ledger start error: {redacted_exception_detail(exc)}")
@@ -2318,6 +2346,8 @@ def daily_run_ledger_metadata(result, *, extra: dict[str, Any] | None = None) ->
         "tenant": result.slug,
         "product_market_stage_ledger_id": product_market_summary.get("stage_ledger_id"),
     }
+    if result.runtime_provenance:
+        metadata["runtime_provenance"] = dict(result.runtime_provenance)
     if extra:
         metadata.update(extra)
     return metadata
@@ -3001,9 +3031,49 @@ class TenantResult:
         self.dashboard_state = None
         self.reader_text: Optional[str] = None
         self.product_market_summary: dict[str, Any] = {"status": "not_run"}
+        self.runtime_provenance: dict[str, str] = {}
         self.daily_stage_ledger_id: Optional[int] = None
         self.daily_live_stage_orders: set[int] = set()
         self.errors: list[str] = []
+
+
+def current_source_coverage(result: TenantResult, *, run_id: str) -> dict[str, Any]:
+    """Build current-run source accounting with bounded explicit dispositions."""
+    disposed = [
+        item
+        for item in result.sources_skipped
+        if isinstance(item, dict) and item.get("checked") is False
+    ]
+    checked_failures = [
+        item
+        for item in result.sources_skipped
+        if isinstance(item, dict) and item.get("checked") is True
+    ]
+    dispositions = []
+    for index, item in enumerate(disposed):
+        reason = str(item.get("reason") or "unspecified")[:120]
+        competitor_name = str(item.get("name") or "unknown")[:120]
+        source_key = str(
+            item.get("normalized_url")
+            or item.get("url")
+            or item.get("source_id")
+            or f"{competitor_name}|{item.get('family') or ''}|{index}"
+        ).strip()
+        dispositions.append(
+            {
+                "source_ref": hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:16],
+                "competitor_name": competitor_name,
+                "reason": reason,
+            }
+        )
+    return {
+        "run_id": run_id,
+        "active_source_count": int(result.sources_planned_count),
+        "checked_source_count": int(result.sources_attempted_count),
+        "failed_source_count": len(result.sources_failed) + len(checked_failures),
+        "disposed_source_count": len(disposed),
+        "dispositions": dispositions,
+    }
 
 
 def format_tenant_run_summary(r: TenantResult) -> str:
@@ -3865,8 +3935,12 @@ async def run_tenant(
     defer_publish_gate: bool = False,
 ) -> TenantResult:
     res = TenantResult(slug)
+    res.runtime_provenance = runtime_provenance(
+        os.environ,
+        require_package_version=env_flag(os.environ, "CIOS_PUBLICATION_V2"),
+    )
     res.tenant_id = tenant_id
-    run_id = f"daily-{slug}-{int(time.time())}"
+    run_id = resolve_run_id(slug, os.environ, int(time.time()))
     start_daily_run_stage_ledger(
         app_conn,
         tenant_id=tenant_id,
@@ -3980,6 +4054,7 @@ async def run_tenant(
                         "competitor_id": competitor_id,
                         "url": c["url"],
                         "reason": vr.reason,
+                        "checked": False,
                     })
                     continue
             source_id = source.id
@@ -3989,6 +4064,7 @@ async def run_tenant(
                 "competitor_id": competitor_id,
                 "url": c["url"],
                 "reason": "source_id_missing",
+                "checked": False,
             })
             continue
         res.sources_attempted_count += 1
@@ -4013,6 +4089,7 @@ async def run_tenant(
                     "url": c["url"],
                     "reason": block_reason,
                     "http": fetched.http_status,
+                    "checked": True,
                 })
                 insert_health_event(app_conn, SourceHealthEvent(
                     tenant_id=tenant_id,
@@ -4583,10 +4660,16 @@ async def run_tenant(
         raise
 
     cov_dict = {
-        "lanes": [{"lane": l.lane, "ran": l.ran, "error": l.error} for l in coverage.lanes],
-        "coverage_score": round(sum(1 for l in coverage.lanes if l.ran) / len(coverage.lanes), 4),
+        "lanes": [
+            {"lane": lane.lane, "ran": lane.ran, "error": lane.error}
+            for lane in coverage.lanes
+        ],
+        "coverage_score": round(
+            sum(1 for lane in coverage.lanes if lane.ran) / len(coverage.lanes),
+            4,
+        ),
         "false_negative_audit_status": res.fn_status,
-        "missing_source_families": [l.lane for l in coverage.lanes if not l.ran],
+        "missing_source_families": [lane.lane for lane in coverage.lanes if not lane.ran],
     }
     product_market_stage_event_id = daily_stage_recorder.start_stage(
         stage="product_market_chain",
@@ -4603,6 +4686,7 @@ async def run_tenant(
         )
         run_dict = {"run_id": run_id, "report_id": report_id, "generated_at": generated_at,
                     "model_tier": "judgment", "source_family_count": res.sources_attempted_count,
+                    "source_coverage": current_source_coverage(res, run_id=run_id),
                     "material_delta_count": len(promoted),
                     "delivery_status": "sent" if res.delivered else "failed", "quality_review_status": res.quality_status,
                     "argus_read": {"useful_truth": reader_text.split(chr(10))[0]},

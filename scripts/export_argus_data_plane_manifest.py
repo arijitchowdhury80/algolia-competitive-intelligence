@@ -914,6 +914,7 @@ def build_data_plane_manifest_payload(
     product_muscle_work_queue: dict[str, Any] | None = None,
     operator_handoff: dict[str, Any] | None = None,
     artifact_refs: dict[str, str | None] | None = None,
+    run_id: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     demand_readiness = demand_readiness or {}
@@ -948,7 +949,7 @@ def build_data_plane_manifest_payload(
         operator_handoff=operator_handoff,
     )
 
-    return {
+    payload = {
         "schema_version": 1,
         "tenant_slug": tenant_slug,
         "generated_at": generated_at or _now(),
@@ -978,6 +979,9 @@ def build_data_plane_manifest_payload(
             "empty_or_missing_plane_blocks_promotion": True,
         },
     }
+    if run_id:
+        payload["run_id"] = run_id
+    return payload
 
 
 def write_payload(payload: dict[str, Any], output: Path) -> None:
@@ -995,6 +999,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-work-queue", type=Path)
     parser.add_argument("--product-muscle-work-queue", type=Path)
     parser.add_argument("--operator-handoff", type=Path)
+    parser.add_argument("--run-id")
     parser.add_argument("--output", type=Path)
     return parser.parse_args(argv)
 
@@ -1021,6 +1026,7 @@ def main(argv: list[str] | None = None) -> int:
         product_muscle_work_queue=_load_json(args.product_muscle_work_queue),
         operator_handoff=_load_json(args.operator_handoff),
         artifact_refs=artifact_refs,
+        run_id=args.run_id,
     )
     if args.output:
         write_payload(payload, args.output)

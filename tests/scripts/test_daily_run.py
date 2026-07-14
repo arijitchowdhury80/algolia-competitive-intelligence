@@ -59,6 +59,53 @@ def test_config_loads_expected_shape():
     assert "algolia" in data["product_surfaces"]
 
 
+def test_resolve_run_id_uses_valid_wrapper_identity(daily_run):
+    run_id = daily_run.resolve_run_id(
+        "algolia",
+        {"CIOS_RUN_ID": "cios-20260714T090000Z-12345"},
+        epoch_seconds=1784023200,
+    )
+
+    assert run_id == "cios-20260714T090000Z-12345"
+
+
+def test_resolve_run_id_rejects_unsafe_wrapper_identity(daily_run):
+    with pytest.raises(ValueError, match="unsafe CIOS_RUN_ID"):
+        daily_run.resolve_run_id(
+            "algolia",
+            {"CIOS_RUN_ID": "../escape"},
+            epoch_seconds=1784023200,
+        )
+
+
+def test_resolve_run_id_falls_back_for_local_execution(daily_run):
+    run_id = daily_run.resolve_run_id("algolia", {}, epoch_seconds=1784023200)
+
+    assert run_id == "daily-algolia-1784023200"
+
+
+def test_runtime_provenance_requires_named_package_for_publication_v2(daily_run):
+    with pytest.raises(ValueError, match="CIOS_PACKAGE_VERSION"):
+        daily_run.runtime_provenance(
+            {"CIOS_MODEL_ALIAS": "gemini-2.5-pro"},
+            require_package_version=True,
+        )
+
+
+def test_runtime_provenance_records_exact_private_package_and_model_route(daily_run):
+    assert daily_run.runtime_provenance(
+        {
+            "CIOS_PACKAGE_VERSION": "phase2-deadbeef",
+            "CIOS_MODEL_ALIAS": "gemini-2.5-pro",
+        },
+        require_package_version=True,
+    ) == {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
+
+
 def test_runtime_source_plan_uses_all_active_db_sources_not_yaml_cap(daily_run):
     seed_plan = [
         {"name": "Elastic", "domain": "elastic.co", "url": "https://www.elastic.co/blog", "family": "blog"},
@@ -2707,6 +2754,11 @@ def test_start_daily_run_stage_ledger_sets_result_id(daily_run, monkeypatch):
     calls = []
     fake_conn = object()
     result = daily_run.TenantResult("algolia")
+    result.runtime_provenance = {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
 
     class FakeRunStageRepository:
         def __init__(self, conn):
@@ -2733,9 +2785,26 @@ def test_start_daily_run_stage_ledger_sets_result_id(daily_run, monkeypatch):
             "tenant_id": 1,
             "run_id": "daily-algolia-2026-07-11",
             "package_name": "cios.daily",
-            "metadata": {"tenant": "algolia", "cadence": "daily"},
+            "metadata": {
+                "tenant": "algolia",
+                "cadence": "daily",
+                "runtime_provenance": result.runtime_provenance,
+            },
         }
     ]
+
+
+def test_daily_run_ledger_metadata_retains_private_runtime_provenance(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.runtime_provenance = {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
+
+    metadata = daily_run.daily_run_ledger_metadata(result)
+
+    assert metadata["runtime_provenance"] == result.runtime_provenance
 
 
 def test_run_tenant_starts_daily_stage_ledger_before_registry_work() -> None:
@@ -3237,6 +3306,46 @@ def test_tenant_run_summary_separates_active_attempted_fetched_failed_and_skippe
     assert "failed=5" in summary
     assert "skipped=1" in summary
     assert "sources=42" not in summary
+
+
+def test_current_source_coverage_accounts_for_checked_and_disposed_sources(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.sources_planned_count = 3
+    result.sources_attempted_count = 2
+    result.sources_failed = [{"name": "Coveo", "error": "timeout"}]
+    result.sources_skipped = [
+        {
+            "name": "Klevu",
+            "url": "https://www.klevu.com/blog",
+            "reason": "source_id_missing",
+            "checked": False,
+        },
+        {
+            "name": "Constructor",
+            "reason": "blocked_by_challenge",
+            "checked": True,
+        },
+    ]
+
+    coverage = daily_run.current_source_coverage(
+        result,
+        run_id="cios-20260714T090000Z-1234",
+    )
+
+    assert coverage == {
+        "run_id": "cios-20260714T090000Z-1234",
+        "active_source_count": 3,
+        "checked_source_count": 2,
+        "failed_source_count": 2,
+        "disposed_source_count": 1,
+        "dispositions": [
+            {
+                "source_ref": "3995b87e38e234fe",
+                "competitor_name": "Klevu",
+                "reason": "source_id_missing",
+            }
+        ],
+    }
 
 
 def test_write_dashboard_artifacts_publishes_competitor_briefs_and_stamped_cockpit(daily_run, tmp_path):

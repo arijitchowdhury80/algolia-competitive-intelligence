@@ -35,6 +35,13 @@ def _list_value(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _counts(value: Any) -> dict[str, int]:
     counts: dict[str, int] = {}
     for key, raw in _dict_value(value).items():
@@ -61,7 +68,41 @@ def _public_empty_outputs(value: Any, *, limit: int = 8) -> list[dict[str, str]]
     return rows
 
 
-def _source_coverage(dashboard: Mapping[str, Any]) -> dict[str, int]:
+def _source_coverage(dashboard: Mapping[str, Any]) -> dict[str, Any]:
+    current = _dict_value(_dict_value(dashboard.get("run_health")).get("source_coverage"))
+    if current:
+        coverage: dict[str, Any] = {}
+        run_id = str(current.get("run_id") or "").strip()
+        if run_id:
+            coverage["run_id"] = run_id
+        coverage.update(
+            _counts(
+                {
+                    "active_source_count": current.get("active_source_count"),
+                    "checked_source_count": current.get("checked_source_count"),
+                    "failed_source_count": current.get("failed_source_count"),
+                    "disposed_source_count": current.get("disposed_source_count"),
+                }
+            )
+        )
+        dispositions: list[dict[str, str]] = []
+        for item in _list_value(current.get("dispositions"))[:64]:
+            if not isinstance(item, dict):
+                continue
+            reason = str(item.get("reason") or "").strip()[:120]
+            competitor_name = str(item.get("competitor_name") or "").strip()[:120]
+            source_ref = str(item.get("source_ref") or "").strip()[:64]
+            if reason and source_ref:
+                dispositions.append(
+                    {
+                        "source_ref": source_ref,
+                        "competitor_name": competitor_name or "unknown",
+                        "reason": reason,
+                    }
+                )
+        coverage["dispositions"] = dispositions
+        return coverage
+
     health_value = dashboard.get("source_health")
     if isinstance(health_value, list):
         active_rows = [row for row in health_value if isinstance(row, dict) and row.get("status") == "active"]
@@ -90,6 +131,7 @@ def _source_coverage(dashboard: Mapping[str, Any]) -> dict[str, int]:
 def _product_market_run(dashboard: Mapping[str, Any]) -> dict[str, Any]:
     run = _dict_value(dashboard.get("product_market_run"))
     fields = (
+        "run_id",
         "status",
         "product_event_count",
         "conversation_theme_count",
@@ -110,6 +152,38 @@ def _product_market_run(dashboard: Mapping[str, Any]) -> dict[str, Any]:
         else:
             payload[field] = value
     return payload
+
+
+def _product_extraction(dashboard: Mapping[str, Any]) -> dict[str, Any]:
+    run = _dict_value(dashboard.get("product_market_run"))
+    summary = _dict_value(run.get("product_surface_execution_summary"))
+    if not summary:
+        return {}
+    planned = _int_value(summary.get("planned"))
+    successful = _int_value(summary.get("succeeded"))
+    empty = _int_value(summary.get("empty"))
+    failed = _int_value(summary.get("failed"))
+    timed_out = _int_value(summary.get("timed_out"))
+    not_started = _int_value(summary.get("not_started"))
+    attempted = max(planned - not_started, 0)
+    terminal = successful + empty + failed + timed_out
+    accounting_complete = (
+        planned > 0
+        and attempted + not_started == planned
+        and terminal == attempted
+    )
+    return {
+        "run_id": run.get("run_id"),
+        "planned": planned,
+        "attempted": attempted,
+        "terminal": terminal,
+        "successful": successful,
+        "failed": empty + failed + timed_out,
+        "timed_out": timed_out,
+        "not_started": not_started,
+        "accounting_complete": accounting_complete,
+        "all_planned_terminal": accounting_complete and not_started == 0,
+    }
 
 
 def _public_demand_plan_topics(topics: Any, *, limit: int = 5) -> list[dict[str, Any]]:
@@ -371,6 +445,7 @@ def build_public_run_status_payload(
     manifest: dict[str, Any],
     dashboard: dict[str, Any] | None = None,
     publish_status: str,
+    run_id: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     dashboard = dashboard or {}
@@ -379,8 +454,21 @@ def build_public_run_status_payload(
         manifest.get("next_monitoring_actions")
     )
     planes = _public_planes(manifest)
+    if run_id and manifest.get("run_id") != run_id:
+        raise ValueError("manifest run_id mismatch")
+    source_coverage = _source_coverage(dashboard)
+    product_market_run = _product_market_run(dashboard)
+    product_extraction = _product_extraction(dashboard)
+    if run_id:
+        for label, payload_run_id in (
+            ("source coverage", source_coverage.get("run_id")),
+            ("product market", product_market_run.get("run_id")),
+            ("product extraction", product_extraction.get("run_id")),
+        ):
+            if payload_run_id not in (None, "", run_id):
+                raise ValueError(f"{label} run_id mismatch")
     payload = {
-        "schema_version": 1,
+        "schema_version": 2 if run_id else 1,
         "tenant_slug": tenant_slug,
         "generated_at": generated_at or _now(),
         "manifest_generated_at": manifest.get("generated_at"),
@@ -389,8 +477,9 @@ def build_public_run_status_payload(
         "status": status,
         "next_hermes_action": manifest.get("next_hermes_action"),
         "public_dashboard_updated": publish_status == "published",
-        "source_coverage": _source_coverage(dashboard),
-        "product_market_run": _product_market_run(dashboard),
+        "source_coverage": source_coverage,
+        "product_market_run": product_market_run,
+        "product_extraction": product_extraction,
         "planes": planes,
         "blockers": _public_blockers(manifest),
         "safety": {
@@ -399,6 +488,8 @@ def build_public_run_status_payload(
             "public_safe": True,
         },
     }
+    if run_id:
+        payload["run_id"] = run_id
     demand_plane = planes.get("audience_demand") or {}
     for key in ("demand_collection_plan", "demand_plan_template"):
         value = demand_plane.get(key)
@@ -420,6 +511,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--dashboard", type=Path)
     parser.add_argument("--publish-status", choices=("blocked", "published"), required=True)
+    parser.add_argument("--run-id")
     parser.add_argument("--output", type=Path)
     return parser.parse_args(argv)
 
@@ -431,6 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest=_load_json(args.manifest),
         dashboard=_load_json(args.dashboard),
         publish_status=args.publish_status,
+        run_id=args.run_id,
     )
     if args.output:
         write_payload(payload, args.output)

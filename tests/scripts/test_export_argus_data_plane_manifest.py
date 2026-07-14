@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "export_argus_data_plane_manifest.py"
 
@@ -17,6 +19,19 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_data_plane_manifest_binds_explicit_wrapper_run_id() -> None:
+    module = _load_module()
+
+    payload = module.build_data_plane_manifest_payload(
+        tenant_slug="algolia",
+        dashboard=_dashboard_payload(),
+        run_id="cios-20260714T090000Z-12345",
+        generated_at="2026-07-14T09:00:00Z",
+    )
+
+    assert payload["run_id"] == "cios-20260714T090000Z-12345"
 
 
 def _dashboard_payload() -> dict:
