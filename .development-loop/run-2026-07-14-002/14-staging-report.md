@@ -21,6 +21,29 @@ Read-only inspection on 2026-07-14 confirmed:
 No production file, process, service, Caddy route, firewall rule, credential,
 Hermes core file, or public response changed during inspection.
 
+### Baseline revalidation
+
+A second read-only inspection at `2026-07-14T10:50Z` found no staging drift:
+
+- `ci-dashboard-static.service` remains active as `root:root`, serving the
+  retained mutable dashboard root on `127.0.0.1:8662` with unlimited memory
+  and CPU and `TasksMax=9483`.
+- `cios-static.service` is not installed or active, and
+  `/opt/cios/public-store` remains absent.
+- Loopback and public root responses are both HTTP 200, 394,895 bytes, and
+  SHA-256 `280b721bb5276394abac2d4ea1547c1883d1b2b6e94a993a919d4b316dff5db7`.
+- Caddy runs in the `caddy` Docker container, not as a host systemd unit. Its
+  active config is mounted from `/home/chowmesadmin/lab-judge/Caddyfile`; the
+  `ci.chowmes.com` route reverse-proxies only to `127.0.0.1:8662`, and
+  `caddy validate` reports `Valid configuration`.
+- The local candidate archive still hashes to
+  `0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298`,
+  and candidate tree `47d3bd7^{tree}` remains
+  `ef09b04cfe9a0e4d5b3cf5f7008693a10b3a14eb`.
+
+The staging sequence therefore requires no Caddy edit or reload. Cutover and
+rollback change only which loopback static service owns port 8662.
+
 ## Proposed bounded staging sequence
 
 1. Install immutable Phase 2 candidate `47d3bd7` under
