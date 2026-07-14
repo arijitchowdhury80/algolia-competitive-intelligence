@@ -86,6 +86,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
+Environment=PYTHONPATH=/opt/cios/app/src
 User=cios
 Group=cios
 ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /etc/cios-env --host 127.0.0.1 --port 8765
@@ -638,6 +639,17 @@ def _make_app(
     (app / "deploy" / "cios-daily-app.sh").write_text(wrapper, encoding="utf-8")
     if include_admin_service:
         (app / "deploy" / "cios-admin.service").write_text(admin_service, encoding="utf-8")
+    for rel in (
+        "deploy/cios-daily.sh",
+        "deploy/cios-daily-app.sh",
+        "deploy/cios-host-runner.sh",
+        "deploy/cios-run-finalize.sh",
+        "scripts/cios_run_queue.py",
+        "scripts/scout_http_shim",
+    ):
+        path = app / rel
+        if path.is_file():
+            path.chmod(0o700)
     return app
 
 
@@ -939,6 +951,21 @@ def test_preflight_fails_when_admin_service_skips_env_file(tmp_path):
 
     assert result.returncode == 2
     assert "admin service must load host-readable CI-OS env file" in result.stderr
+
+
+def test_preflight_fails_when_admin_service_omits_src_pythonpath(tmp_path):
+    app = _make_app(
+        tmp_path,
+        admin_service=SAFE_ADMIN_SERVICE.replace(
+            "Environment=PYTHONPATH=/opt/cios/app/src\n",
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "admin service must import the src-layout package" in result.stderr
 
 
 def test_preflight_fails_when_admin_service_private_tmp_hides_hermes_artifacts(tmp_path):
@@ -1543,6 +1570,17 @@ def test_preflight_rejects_caller_controlled_public_path_in_finalizer(tmp_path):
 
     assert result.returncode == 2
     assert "run finalizer permits caller-controlled execution paths" in result.stderr
+
+
+def test_preflight_rejects_non_executable_run_finalizer(tmp_path):
+    app = _make_app(tmp_path)
+    finalizer = app / "deploy/cios-run-finalize.sh"
+    finalizer.chmod(0o600)
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "required executable is not executable: deploy/cios-run-finalize.sh" in result.stderr
 
 
 def test_preflight_requires_root_owned_opt_cios_parent(tmp_path):

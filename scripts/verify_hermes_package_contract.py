@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -80,6 +81,15 @@ REQUIRED_PATHS = [
     "src/cios/admin",
     "src/cios/publication",
 ]
+
+REQUIRED_EXECUTABLE_PATHS = (
+    "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
+    "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
+    "scripts/cios_run_queue.py",
+    "scripts/scout_http_shim",
+)
 
 WRAPPER_INVARIANTS = {
     "wrapper missing product-market default enable": "CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1",
@@ -249,6 +259,7 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must use the expected local admin port": "--port 8765",
     "admin service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
     "admin service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",
+    "admin service must import the src-layout package": "Environment=PYTHONPATH=/opt/cios/app/src",
     "admin service must run as cios user": "User=cios",
     "admin service must run as cios group": "Group=cios",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",
@@ -449,6 +460,15 @@ def collect_path_errors(app_dir: Path) -> list[str]:
     for rel in REQUIRED_PATHS:
         if not (app_dir / rel).exists():
             errors.append(f"missing required path: {rel}")
+    return errors
+
+
+def collect_executable_errors(app_dir: Path) -> list[str]:
+    errors: list[str] = []
+    for relative_path in REQUIRED_EXECUTABLE_PATHS:
+        path = app_dir / relative_path
+        if path.is_file() and not path.stat().st_mode & stat.S_IXUSR:
+            errors.append(f"required executable is not executable: {relative_path}")
     return errors
 
 
@@ -813,6 +833,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.append(f"missing app directory: {app_dir}")
     else:
         errors.extend(collect_path_errors(app_dir))
+        errors.extend(collect_executable_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
         errors.extend(collect_run_finalizer_errors(app_dir))

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import runpy
 import stat
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -34,6 +32,10 @@ def test_runner_service_delegates_cgroups_to_cios_and_enforces_outer_timeout():
     assert "TimeoutStopSec=" in text
     assert "Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1" in text
     assert "ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh" in text
+
+
+def test_runner_finalizer_is_executable_in_release_archives():
+    assert FINALIZER.stat().st_mode & stat.S_IXUSR
 
 
 def test_daily_wrapper_has_no_pid_tree_watchdog():
