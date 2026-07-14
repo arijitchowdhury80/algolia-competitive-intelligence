@@ -1409,6 +1409,20 @@ def test_preflight_rejects_caller_controlled_public_path_in_host_runner(tmp_path
     assert "host runner permits caller-controlled execution paths" in result.stderr
 
 
+def test_preflight_rejects_caller_controlled_public_path_in_finalizer(tmp_path):
+    app = _make_app(tmp_path)
+    finalizer = app / "deploy/cios-run-finalize.sh"
+    finalizer.write_text(
+        SAFE_RUN_FINALIZER + '\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "run finalizer permits caller-controlled execution paths" in result.stderr
+
+
 def test_preflight_requires_root_owned_opt_cios_parent(tmp_path):
     app = _make_app(
         tmp_path,
