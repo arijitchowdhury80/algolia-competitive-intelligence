@@ -30,7 +30,7 @@ separate ownership boundaries.
 
 ## Evidence
 
-- Full tests: 1,204 passed, 1 skipped, 23 deselected.
+- Full tests after rectification: 1,205 passed, 1 skipped, 23 deselected.
 - Focused package preflight tests: 64 passed.
 - Package preflight on the working package: passed.
 - Shell syntax and diff whitespace checks: passed.

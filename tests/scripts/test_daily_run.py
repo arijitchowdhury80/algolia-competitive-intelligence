@@ -362,6 +362,16 @@ def test_model_call_settings_are_cron_bounded_by_default(daily_run):
     assert attempts == 1
 
 
+def test_product_surface_timeout_settings_reject_tight_stage_cleanup_margin(daily_run):
+    with pytest.raises(ValueError, match="at least 30 seconds longer"):
+        daily_run.product_surface_timeout_settings(
+            {
+                "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS": "600",
+                "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS": "600.1",
+            }
+        )
+
+
 def test_quality_timeout_defaults_separately_from_synthesis_timeout(daily_run):
     assert daily_run.quality_timeout_seconds({}) == 75.0
     assert daily_run.quality_timeout_seconds({"CIOS_MODEL_TIMEOUT_SECONDS": "150"}) == 150.0

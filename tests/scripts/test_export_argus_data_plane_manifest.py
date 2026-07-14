@@ -449,6 +449,10 @@ def test_data_plane_manifest_uses_product_surface_execution_summary_as_product_r
         "succeeded": 0,
         "empty": 2,
         "failed": 0,
+        "timed_out": 1,
+        "not_started": 1,
+        "batch_timed_out": True,
+        "batch_timeout_seconds": 600,
         "product_row_count": 0,
         "empty_scout_paths": [
             "/tmp/cios-product-market/algolia/surface-exports/000031-coveo-docs.json",
@@ -492,6 +496,10 @@ def test_data_plane_manifest_uses_product_surface_execution_summary_as_product_r
         "succeeded": 0,
         "empty": 2,
         "failed": 0,
+        "timed_out": 1,
+        "not_started": 1,
+        "batch_timed_out": True,
+        "batch_timeout_seconds": 600,
         "product_row_count": 0,
         "empty_outputs": [
             {"company_name": "Coveo", "surface_family": "docs"},

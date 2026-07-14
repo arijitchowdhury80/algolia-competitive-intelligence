@@ -311,6 +311,9 @@ def test_execute_plan_item_timeout_kills_descendant_process_group(tmp_path) -> N
     time.sleep(1.0)
 
     assert summary["failed"] == 1
+    assert summary["timed_out"] == 1
+    assert summary["not_started"] == 0
+    assert summary["results"][0]["status"] == "timed_out"
     assert summary["results"][0]["error"] == "timed out after 0.2s"
     assert not orphan_marker.exists()
 

@@ -43,7 +43,8 @@ The focused tests failed against the retained baseline as expected.
 ## Local verification
 
 - Focused Phase 1 set: 196 passed.
-- Full suite: 1,204 passed, 1 skipped, 23 deselected in 29.84 seconds.
+- Pre-review full suite: 1,204 passed, 1 skipped, 23 deselected in 29.84 seconds.
+- Post-review full suite: 1,205 passed, 1 skipped, 23 deselected in 35.11 seconds.
 - Package contract: passed.
 - Shell syntax: passed.
 - `git diff --check`: passed.

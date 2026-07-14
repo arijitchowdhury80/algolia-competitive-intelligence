@@ -51,7 +51,7 @@ def _wait_for_command(
         if remaining <= 0:
             PROCESS_GROUPS.terminate(process)
             stdout, stderr = process.communicate()
-            return "failed", stdout, stderr, f"timed out after {timeout_seconds:g}s"
+            return "timed_out", stdout, stderr, f"timed out after {timeout_seconds:g}s"
         try:
             stdout, stderr = process.communicate(timeout=min(0.1, remaining))
             return "completed", stdout, stderr, None

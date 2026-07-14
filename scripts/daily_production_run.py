@@ -1386,6 +1386,9 @@ def _run_checked(cmd: list[str], *, timeout_seconds: float) -> subprocess.Comple
     return completed
 
 
+PRODUCT_SURFACE_STAGE_CLEANUP_MARGIN_SECONDS = 30.0
+
+
 def product_surface_timeout_settings(env: Mapping[str, str]) -> dict[str, float | int]:
     item_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS", "300"))
     batch_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS", "600"))
@@ -1397,9 +1400,10 @@ def product_surface_timeout_settings(env: Mapping[str, str]) -> dict[str, float 
         raise ValueError("product-surface timeout values must be greater than zero")
     if max_workers <= 0:
         raise ValueError("product-surface max workers must be greater than zero")
-    if stage_timeout <= batch_timeout:
+    if stage_timeout < batch_timeout + PRODUCT_SURFACE_STAGE_CLEANUP_MARGIN_SECONDS:
         raise ValueError(
-            "product-surface stage timeout must exceed the executor batch timeout"
+            "product-surface stage timeout must be at least 30 seconds longer "
+            "than the executor batch timeout"
         )
     return {
         "item_timeout": item_timeout,

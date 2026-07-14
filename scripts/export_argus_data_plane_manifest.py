@@ -311,6 +311,10 @@ def _product_surface_execution_summary(run: Mapping[str, Any]) -> dict[str, Any]
         "succeeded": _int_value(raw.get("succeeded")),
         "empty": _int_value(raw.get("empty")),
         "failed": _int_value(raw.get("failed")),
+        "timed_out": _int_value(raw.get("timed_out")),
+        "not_started": _int_value(raw.get("not_started")),
+        "batch_timed_out": bool(raw.get("batch_timed_out")),
+        "batch_timeout_seconds": _int_value(raw.get("batch_timeout_seconds")),
         "product_row_count": _int_value(raw.get("product_row_count")),
         "empty_outputs": _sanitized_empty_outputs(raw.get("empty_outputs")),
     }

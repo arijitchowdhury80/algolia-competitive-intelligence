@@ -178,7 +178,18 @@ def _public_product_surface_execution(plane: Mapping[str, Any]) -> dict[str, Any
     if not execution:
         return {}
     public: dict[str, Any] = {}
-    for field in ("product_plane_status", "planned", "succeeded", "empty", "failed", "product_row_count"):
+    for field in (
+        "product_plane_status",
+        "planned",
+        "succeeded",
+        "empty",
+        "failed",
+        "timed_out",
+        "not_started",
+        "batch_timed_out",
+        "batch_timeout_seconds",
+        "product_row_count",
+    ):
         value = execution.get(field)
         if value not in (None, "", []):
             public[field] = value
