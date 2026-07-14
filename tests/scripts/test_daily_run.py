@@ -372,6 +372,13 @@ def test_product_surface_timeout_settings_reject_tight_stage_cleanup_margin(dail
         )
 
 
+def test_product_surface_timeout_settings_reject_worker_count_above_hard_cap(daily_run):
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        daily_run.product_surface_timeout_settings(
+            {"CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS": "9"}
+        )
+
+
 def test_quality_timeout_defaults_separately_from_synthesis_timeout(daily_run):
     assert daily_run.quality_timeout_seconds({}) == 75.0
     assert daily_run.quality_timeout_seconds({"CIOS_MODEL_TIMEOUT_SECONDS": "150"}) == 150.0
@@ -2047,6 +2054,42 @@ def test_product_market_stage_ledger_records_failed_stage(daily_run):
     assert entry["elapsed_s"] >= 0
     assert entry["started_at"].endswith("Z")
     assert entry["ended_at"].endswith("Z")
+
+
+def test_product_market_stage_redacts_sensitive_environment_values(
+    daily_run, monkeypatch, capsys
+):
+    stage_ledger = []
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-stage-secret")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        daily_run._run_product_market_stage(
+            slug="algolia",
+            stage="product_market_synthesis",
+            stage_ledger=stage_ledger,
+            action=lambda: (_ for _ in ()).throw(RuntimeError("phase-one-stage-secret")),
+        )
+
+    assert stage_ledger[0]["error"] == "[redacted]"
+    assert "phase-one-stage-secret" not in str(exc_info.value)
+    assert "phase-one-stage-secret" not in capsys.readouterr().out
+
+
+def test_run_checked_redacts_sensitive_environment_values(daily_run, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-command-secret")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        daily_run._run_checked(
+            [
+                sys.executable,
+                "-c",
+                "import os, sys; print(os.environ['GEMINI_API_KEY'], file=sys.stderr); sys.exit(1)",
+            ],
+            timeout_seconds=5,
+        )
+
+    assert "phase-one-command-secret" not in str(exc_info.value)
+    assert "[redacted]" in str(exc_info.value)
 
 
 def test_product_market_chain_returns_failed_summary_with_stage_ledger(daily_run, tmp_path, monkeypatch):

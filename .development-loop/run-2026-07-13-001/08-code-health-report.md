@@ -11,6 +11,7 @@ their deployment preflight/test coverage.
 - `src/cios/intelligence/product_surface_executor.py`: 294 lines; largest
   function 38 lines.
 - `src/cios/platform/process_supervisor.py`: 85 lines; largest method 12 lines.
+- `src/cios/platform/redaction.py`: 43 lines; one focused diagnostic sanitizer.
 - No new function exceeds the development-loop 50-line threshold.
 - No new module exceeds the 350-line threshold.
 
@@ -22,16 +23,18 @@ separate ownership boundaries.
 
 - Existing `execute_plan` callers retain the no-batch-deadline behavior when
   the new optional argument is omitted.
-- No schema migration, public endpoint, Hermes core change, or secret handling
-  was introduced.
+- No schema migration, public endpoint, or Hermes core change was introduced.
+- Sensitive subprocess diagnostics are centralized through a bounded redaction
+  helper, and export concurrency has an explicit hard cap.
 - The existing product-market feature flag remains the rollback control.
 - Package preflight fails closed if any supervision component or timeout guard
   is missing from a deployment.
 
 ## Evidence
 
-- Full tests after rectification: 1,205 passed, 1 skipped, 23 deselected.
-- Focused package preflight tests: 64 passed.
+- Full tests after security rectification: 1,215 passed, 1 skipped, 23 deselected.
+- Focused package preflight tests: 68 passed.
+- Affected runtime and deployment tests: 228 passed.
 - Package preflight on the working package: passed.
 - Shell syntax and diff whitespace checks: passed.
 

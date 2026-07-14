@@ -64,6 +64,7 @@ REQUIRED_PATHS = [
     "src/cios/admin/dashboard_refresh.py",
     "src/cios/intelligence/product_surface_executor.py",
     "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/redaction.py",
     "src/cios/intelligence",
     "src/cios/admin/learning_apply.py",
     "src/cios/admin/demand_imports.py",
@@ -220,6 +221,8 @@ PRODUCT_SURFACE_EXECUTION_INVARIANTS = {
     "product-surface executor missing process-group supervision": "start_new_session=True",
     "product-surface executor missing batch deadline": "batch_timeout_seconds",
     "product-surface executor missing not-started accounting": "not_started",
+    "product-surface executor missing sensitive-error redaction": "redact_sensitive_text",
+    "product-surface executor missing worker hard cap": "MAX_PRODUCT_SURFACE_WORKERS",
 }
 
 PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
@@ -230,6 +233,10 @@ PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
 PROCESS_SUPERVISOR_INVARIANTS = {
     "process supervisor missing process-group termination": "os.killpg",
     "process supervisor missing active-process shutdown": "terminate_all",
+}
+
+DAILY_RUNTIME_SECURITY_INVARIANTS = {
+    "daily runtime missing sensitive-error redaction": "redact_sensitive_text",
 }
 
 PRODUCT_SURFACE_PLANNER_INVARIANTS = {
@@ -411,6 +418,7 @@ def collect_product_surface_execution_errors(app_dir: Path) -> list[str]:
             PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS,
         ),
         ("src/cios/platform/process_supervisor.py", PROCESS_SUPERVISOR_INVARIANTS),
+        ("scripts/daily_production_run.py", DAILY_RUNTIME_SECURITY_INVARIANTS),
     )
     errors: list[str] = []
     for rel_path, invariants in checks:

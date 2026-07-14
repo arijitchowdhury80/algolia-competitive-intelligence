@@ -12,6 +12,8 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "execute_product_surface_plan.py"
 
@@ -189,6 +191,38 @@ def test_execute_product_surface_plan_allows_partial_success_with_failures_recor
     assert summary["scout_paths"] == [str(good_output)]
     assert summary["company_row_counts"] == {"Constructor": 1}
     assert summary["results"][1]["status"] == "failed"
+
+
+def test_execute_plan_redacts_sensitive_environment_values_from_child_errors(
+    tmp_path, monkeypatch
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-test-secret")
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [
+                    sys.executable,
+                    "-c",
+                    "import os, sys; print(os.environ['GEMINI_API_KEY'], file=sys.stderr); sys.exit(1)",
+                ],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=5)
+
+    assert summary["results"][0]["error"] == "[redacted]"
+    assert "phase-one-test-secret" not in json.dumps(summary)
+
+
+def test_execute_plan_rejects_worker_count_above_hard_cap() -> None:
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        module.execute_plan({"tenant_id": 1, "items": []}, timeout_seconds=5, max_workers=9)
 
 
 def test_execute_product_surface_plan_marks_empty_outputs_without_treating_them_as_product_proof(tmp_path) -> None:

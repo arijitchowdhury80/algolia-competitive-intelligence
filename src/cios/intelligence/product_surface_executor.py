@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from cios.platform.process_supervisor import PROCESS_GROUPS
+from cios.platform.redaction import redact_sensitive_text
+
+
+MAX_PRODUCT_SURFACE_WORKERS = 8
 
 
 def _target(item: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +107,11 @@ def _execute_item(
         return result
     output_path = Path(item["output_path"])
     if returncode != 0:
-        result = _terminal_result(item, status="failed", error=stderr.strip() or stdout.strip())
+        result = _terminal_result(
+            item,
+            status="failed",
+            error=redact_sensitive_text(stderr.strip() or stdout.strip()),
+        )
         result["returncode"] = returncode
         return result
     if not output_path.exists():
@@ -184,7 +192,11 @@ def execute_plan(
     max_workers: int = 1,
 ) -> dict[str, Any]:
     items = list(plan.get("items", []))
-    worker_count = max(1, int(max_workers))
+    worker_count = int(max_workers)
+    if not 1 <= worker_count <= MAX_PRODUCT_SURFACE_WORKERS:
+        raise ValueError(
+            f"product-surface max workers must be between 1 and {MAX_PRODUCT_SURFACE_WORKERS}"
+        )
     if batch_timeout_seconds is not None and batch_timeout_seconds <= 0:
         raise ValueError("batch timeout must be greater than zero")
     if batch_timeout_seconds is None:

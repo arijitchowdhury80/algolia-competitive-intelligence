@@ -141,6 +141,7 @@ from cios.intelligence.capabilities import capability_key
 from cios.intelligence.ga4_exporter import resolve_ga4_date_windows
 from cios.intelligence.importers import diagnose_looker_rows, load_export_records, normalize_looker_rows
 from cios.intelligence.scout_surface_exporter import ProductSurfaceTarget
+from cios.intelligence.product_surface_executor import MAX_PRODUCT_SURFACE_WORKERS
 from cios.learn.recorder import LearningRecorder
 from cios.learn.types import FalseNegativeAuditStatus
 from cios.platform.channels.adapter import ChannelAdapter
@@ -152,6 +153,7 @@ from cios.platform.channels.types import (
     ResponseEnvelope,
     VerificationResult,
 )
+from cios.platform.redaction import redact_sensitive_text
 from cios.platform.models.providers.claude_cli import ClaudeCliShimProvider
 from cios.platform.models.types import ModelRequest
 
@@ -1381,7 +1383,7 @@ def _run_checked(cmd: list[str], *, timeout_seconds: float) -> subprocess.Comple
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
-        detail = stderr or stdout or f"exit {completed.returncode}"
+        detail = redact_sensitive_text(stderr or stdout or f"exit {completed.returncode}")
         raise RuntimeError(f"command failed: {Path(cmd[1]).name}: {detail}")
     return completed
 
@@ -1398,8 +1400,10 @@ def product_surface_timeout_settings(env: Mapping[str, str]) -> dict[str, float 
     max_workers = int(env.get("CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS", "1"))
     if item_timeout <= 0 or batch_timeout <= 0 or stage_timeout <= 0:
         raise ValueError("product-surface timeout values must be greater than zero")
-    if max_workers <= 0:
-        raise ValueError("product-surface max workers must be greater than zero")
+    if not 1 <= max_workers <= MAX_PRODUCT_SURFACE_WORKERS:
+        raise ValueError(
+            f"product-surface max workers must be between 1 and {MAX_PRODUCT_SURFACE_WORKERS}"
+        )
     if stage_timeout < batch_timeout + PRODUCT_SURFACE_STAGE_CLEANUP_MARGIN_SECONDS:
         raise ValueError(
             "product-surface stage timeout must be at least 30 seconds longer "
@@ -1452,13 +1456,14 @@ def _run_product_market_stage(
     except Exception as exc:
         elapsed_s = round(time.monotonic() - started_at, 3)
         ended_at_wall = _utc_stage_timestamp()
+        safe_error = redact_sensitive_text(str(exc))
         _emit_product_market_stage(
             slug=slug,
             stage=stage,
             event="failed",
             elapsed_s=elapsed_s,
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=safe_error,
         )
         if stage_ledger is not None:
             stage_ledger.append(
@@ -1470,10 +1475,10 @@ def _run_product_market_stage(
                     "ended_at": ended_at_wall,
                     "elapsed_s": elapsed_s,
                     "error_type": type(exc).__name__,
-                    "error": str(exc)[:500],
+                    "error": safe_error,
                 }
             )
-        raise
+        raise RuntimeError(safe_error) from None
     elapsed_s = round(time.monotonic() - started_at, 3)
     ended_at_wall = _utc_stage_timestamp()
     _emit_product_market_stage(

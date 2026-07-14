@@ -61,6 +61,7 @@ REQUIRED_FILES = [
     "src/cios/db/repos/product_market.py",
     "src/cios/intelligence/product_surface_executor.py",
     "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/redaction.py",
 ]
 
 REQUIRED_DIRS = [
@@ -267,9 +268,18 @@ control.run("algolia", demand_plan=demand_plan)
 """
 
 
+SAFE_DAILY_RUNTIME = """
+from cios.platform.redaction import redact_sensitive_text
+safe_error = redact_sensitive_text(stderr)
+"""
+
+
 SAFE_PRODUCT_SURFACE_EXECUTOR = """
+from cios.platform.redaction import redact_sensitive_text
+MAX_PRODUCT_SURFACE_WORKERS = 8
 process = subprocess.Popen(command, start_new_session=True)
 batch_timeout_seconds = 600
+safe_error = redact_sensitive_text(stderr)
 summary = {
     "product_row_count": 1,
     "empty_scout_paths": [],
@@ -385,6 +395,7 @@ def _make_app(
     operator_handoff_builder: str = SAFE_OPERATOR_HANDOFF_BUILDER,
     ga4_export_script: str = SAFE_GA4_EXPORT_SCRIPT,
     demand_intake: str = SAFE_DEMAND_INTAKE,
+    daily_runtime: str = SAFE_DAILY_RUNTIME,
     product_surface_executor: str = SAFE_PRODUCT_SURFACE_EXECUTOR,
     product_surface_planner: str = SAFE_PRODUCT_SURFACE_PLANNER,
     product_surface_extraction_control: str = SAFE_PRODUCT_SURFACE_EXTRACTION_CONTROL,
@@ -458,12 +469,16 @@ def _make_app(
             content = ga4_export_script
         elif rel == "scripts/run_argus_demand_intake.py":
             content = demand_intake
+        elif rel == "scripts/daily_production_run.py":
+            content = daily_runtime
         elif rel == "scripts/execute_product_surface_plan.py":
             content = SAFE_PRODUCT_SURFACE_EXECUTOR_CLI
         elif rel == "src/cios/intelligence/product_surface_executor.py":
             content = product_surface_executor
         elif rel == "src/cios/platform/process_supervisor.py":
             content = SAFE_PROCESS_SUPERVISOR
+        elif rel == "src/cios/platform/redaction.py":
+            content = "def redact_sensitive_text(text):\n    return text\n"
         elif rel == "scripts/plan_product_surface_exports.py":
             content = product_surface_planner
         elif rel == "scripts/build_argus_operator_handoff.py":
@@ -824,6 +839,52 @@ def test_preflight_fails_when_product_surface_executor_omits_batch_deadline_acco
 
     assert result.returncode == 2
     assert "product-surface executor missing batch deadline" in result.stderr
+
+
+def test_preflight_fails_when_runtime_redaction_module_missing(tmp_path):
+    app = _make_app(tmp_path)
+    (app / "src/cios/platform/redaction.py").unlink()
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "missing required path: src/cios/platform/redaction.py" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_error_redaction(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("redact_sensitive_text", "unsafe_error_text"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing sensitive-error redaction" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_worker_hard_cap(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("MAX_PRODUCT_SURFACE_WORKERS", "UNBOUNDED_WORKERS"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing worker hard cap" in result.stderr
+
+
+def test_preflight_fails_when_daily_runtime_omits_error_redaction(tmp_path):
+    app = _make_app(
+        tmp_path,
+        daily_runtime=SAFE_DAILY_RUNTIME.replace("redact_sensitive_text", "unsafe_error_text"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "daily runtime missing sensitive-error redaction" in result.stderr
 
 
 def test_preflight_fails_when_product_surface_extraction_admin_control_missing(tmp_path):

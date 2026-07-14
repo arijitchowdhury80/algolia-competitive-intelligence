@@ -28,3 +28,35 @@ Four focused regressions failed against reviewed commit `8b0e800`:
 
 No live deployment has occurred. Security review and corrected-commit review
 remain ahead of the Phase 1 staging gate.
+
+## Security Rectification
+
+### Red
+
+Focused regressions proved that child stderr could preserve a configured API
+key, stage exceptions could publish the same value, worker counts above the
+intended operational bound were accepted, and package preflight did not reject
+those regressions.
+
+### Green
+
+- Added a shared environment-derived diagnostic redactor.
+- Redacted nonzero child stderr/stdout and product-market stage exceptions
+  before they enter exceptions, summaries, stdout, or stage ledgers.
+- Enforced a hard product-surface worker range of 1 through 8 in both direct and
+  environment-driven entry points.
+- Extended package preflight to require the redaction module, redaction calls,
+  and worker hard cap.
+
+### Verification
+
+- Security regression selection: 6 passed.
+- Package-contract tests: 68 passed after four expected RED failures.
+- Affected test set: 228 passed.
+- Full suite JUnit: 1,216 tests, 0 failures, 0 errors, 1 skipped.
+- Independent security re-review: GO; no Critical, High, or Medium findings.
+- Live read-only service check: CI-OS application services and runtime paths use
+  the dedicated `cios` account and `cios:hermes` ownership.
+
+Corrected-commit code review remains ahead of deployment. Phase 1 still requires
+two consecutive real Hermes-triggered runs before its gate can pass.
