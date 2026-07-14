@@ -198,6 +198,7 @@ setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
 setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
 mount --bind "$SOURCE_APP" "$APP"
 mount --bind "$SOURCE_PUB" "$PUB"
+install -d -o root -g root -m 0755 /opt/cios
 app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
@@ -1370,6 +1371,20 @@ def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):
     assert "wrapper missing fixed cios identity gate" in result.stderr
 
 
+def test_preflight_rejects_caller_controlled_paths_in_hermes_wrapper(tmp_path):
+    app = _make_app(tmp_path)
+    handoff = app / "deploy/cios-daily.sh"
+    handoff.write_text(
+        SAFE_HANDOFF_WRAPPER + '\nAPP="${CIOS_APP_DIR:-$APP}"\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper permits caller-controlled execution paths" in result.stderr
+
+
 def test_preflight_fails_when_host_runner_does_not_use_secure_queue_helper(tmp_path):
     app = _make_app(
         tmp_path,
@@ -1380,6 +1395,33 @@ def test_preflight_fails_when_host_runner_does_not_use_secure_queue_helper(tmp_p
 
     assert result.returncode == 2
     assert "host runner must drain requests through queue helper" in result.stderr
+
+
+def test_preflight_rejects_caller_controlled_public_path_in_host_runner(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_runner=SAFE_HOST_RUNNER + '\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host runner permits caller-controlled execution paths" in result.stderr
+
+
+def test_preflight_requires_root_owned_opt_cios_parent(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace(
+            'install -d -o root -g root -m 0755 /opt/cios',
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must harden the /opt/cios parent" in result.stderr
 
 
 def test_preflight_fails_when_run_queue_omits_timeout_mapping(tmp_path):

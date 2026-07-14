@@ -149,6 +149,7 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must define Hermes source public dir": 'SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"',
     "host permissions must default app runtime mount to /opt": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
     "host permissions must default public runtime mount to /opt": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
+    "host permissions must harden the /opt/cios parent": "install -d -o root -g root -m 0755 /opt/cios",
     "host permissions must bind-mount CI-OS app": 'mount --bind "$SOURCE_APP" "$APP"',
     "host permissions must bind-mount CI-OS public dir": 'mount --bind "$SOURCE_PUB" "$PUB"',
     "host permissions must persist app bind mount": 'app_fstab="$SOURCE_APP $APP none bind 0 0"',
@@ -413,8 +414,18 @@ def collect_wrapper_errors(app_dir: Path) -> list[str]:
     public_text = wrapper_path.read_text(encoding="utf-8")
     text = public_text + "\n" + app_wrapper_path.read_text(encoding="utf-8")
     errors = [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
-    if "CIOS_APP_USER" in public_text or "CIOS_RUNNER_HANDOFF" in public_text or "CIOS_DISABLE_RUNNER_HANDOFF" in public_text:
-        errors.append("wrapper permits an app-user handoff bypass")
+    forbidden = (
+        "CIOS_APP_DIR",
+        "CIOS_PUBLIC_DIR",
+        "CIOS_RUNNER_QUEUE_DIR",
+        "CIOS_PYTHON_BIN",
+        "CIOS_RUN_QUEUE_HELPER",
+        "CIOS_APP_USER",
+        "CIOS_RUNNER_HANDOFF",
+        "CIOS_DISABLE_RUNNER_HANDOFF",
+    )
+    if any(name in public_text for name in forbidden):
+        errors.append("wrapper permits caller-controlled execution paths")
     if 'cat "$log"' in public_text or 'tail -120 "$log"' in public_text:
         errors.append("wrapper exposes unredacted runner logs")
     return errors
@@ -427,7 +438,8 @@ def collect_host_runner_errors(app_dir: Path) -> list[str]:
         invariants=HOST_RUNNER_INVARIANTS,
     )
     path = app_dir / "deploy/cios-host-runner.sh"
-    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in ("CIOS_APP_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")):
+    forbidden = ("CIOS_APP_DIR", "CIOS_PUBLIC_DIR", "CIOS_RUNNER_QUEUE_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in forbidden):
         errors.append("host runner permits caller-controlled execution paths")
     return errors
 
@@ -439,7 +451,8 @@ def collect_run_finalizer_errors(app_dir: Path) -> list[str]:
         invariants=RUN_FINALIZER_INVARIANTS,
     )
     path = app_dir / "deploy/cios-run-finalize.sh"
-    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in ("CIOS_APP_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")):
+    forbidden = ("CIOS_APP_DIR", "CIOS_PUBLIC_DIR", "CIOS_RUNNER_QUEUE_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in forbidden):
         errors.append("run finalizer permits caller-controlled execution paths")
     return errors
 

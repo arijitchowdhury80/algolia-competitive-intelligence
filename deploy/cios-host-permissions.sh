@@ -32,7 +32,8 @@ if id "$SHIM_USER" >/dev/null 2>&1; then
   usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 fi
 
-mkdir -p /opt/cios "$APP" "$PUB"
+install -d -o root -g root -m 0755 /opt/cios
+mkdir -p "$APP" "$PUB"
 if ! mountpoint -q "$APP"; then
   mount --bind "$SOURCE_APP" "$APP"
 fi
