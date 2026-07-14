@@ -19,6 +19,7 @@ from pathlib import Path
 REQUIRED_PATHS = [
     "deploy/cios-admin.service",
     "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
     "deploy/cios-run-finalize.sh",
@@ -53,6 +54,7 @@ REQUIRED_PATHS = [
     "scripts/export_public_run_status.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
@@ -102,10 +104,11 @@ WRAPPER_INVARIANTS = {
     "wrapper missing product-surface batch timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS",
     "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
-    "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
-    "wrapper missing app-user runner request queue": ".request",
-    "wrapper missing app-user runner result wait": ".result",
-    "wrapper missing handoff bypass for app-user execution": "CIOS_DISABLE_RUNNER_HANDOFF",
+    "wrapper missing fixed cios identity gate": '"$current_user" = "cios"',
+    "wrapper missing fixed systemd request queue": "CIOS_RUNNER_QUEUE_DIR:-/opt/cios/app/run-queue",
+    "wrapper wait must exceed systemd cleanup window": "CIOS_RUNNER_WAIT_SECONDS:-1800",
+    "wrapper missing secure queue enqueue": '"$queue_helper" enqueue',
+    "wrapper missing secure result read": '"$queue_helper" read-result',
     "wrapper missing marked-output cleanup": ".cios-output-dir",
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
@@ -113,25 +116,26 @@ WRAPPER_INVARIANTS = {
 }
 
 HOST_RUNNER_INVARIANTS = {
-    "host runner missing handoff bypass": "CIOS_DISABLE_RUNNER_HANDOFF=1",
-    "host runner missing app directory handoff": 'CIOS_APP_DIR="$APP"',
-    "host runner missing public directory handoff": 'CIOS_PUBLIC_DIR="$PUB"',
     "host runner must default to /opt CI-OS app mount": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
     "host runner must default to /opt CI-OS public mount": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
-    "host runner missing request glob": "*.request",
-    "host runner missing result artifact": ".result",
-    "host runner missing log artifact": ".log",
-    "host runner missing cios daily wrapper call": "deploy/cios-daily.sh",
-    "host runner must process one request per activation": "break",
-    "host runner missing active request pointer": ".active-run",
+    "host runner missing secure queue helper": "cios_run_queue.py",
+    "host runner must delegate one request to queue helper": '"$HELPER" run-one',
 }
 
 RUN_FINALIZER_INVARIANTS = {
-    "run finalizer missing active request pointer": ".active-run",
     "run finalizer missing systemd result handling": "SERVICE_RESULT",
-    "run finalizer missing timeout exit mapping": "code=124",
-    "run finalizer missing blocked timeout status": "blocked_runtime_timeout",
-    "run finalizer missing atomic result write": '"$result.tmp"',
+    "run finalizer missing secure queue helper": "cios_run_queue.py",
+    "run finalizer must delegate finalization": '"$HELPER" finalize',
+}
+
+RUN_QUEUE_INVARIANTS = {
+    "run queue missing no-follow filesystem access": "O_NOFOLLOW",
+    "run queue missing atomic state replacement": "os.replace",
+    "run queue missing private active state": '".state"',
+    "run queue missing unguessable request ids": "uuid.uuid4",
+    "run queue missing one-request execution": "def run_one",
+    "run queue missing timeout exit mapping": "124 if timed_out else 2",
+    "run queue missing blocked timeout status": '"blocked_runtime_timeout"',
 }
 
 HOST_PERMISSIONS_INVARIANTS = {
@@ -152,13 +156,17 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must preserve execute-only Hermes traversal fallback": "chmod 711 /root/.hermes /root/.hermes/apps",
     "host permissions must chown source app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"',
-    "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
+    "host permissions must keep request queue setgid and sticky": 'chmod 3770 "$APP/run-queue"',
+    "host permissions must make active state private to cios": 'chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"',
+    "host permissions must protect active state permissions": 'chmod 700 "$APP/run-queue/.state"',
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
     "host permissions must protect Hermes CI-OS env file": 'chmod 640 "$ENV_FILE"',
     "host permissions must install host-readable CI-OS env file": 'install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"',
     "host permissions must install executable run finalizer": 'chmod 755 "$APP/deploy/cios-run-finalize.sh"',
+    "host permissions must install executable secure queue helper": 'chmod 755 "$APP/scripts/cios_run_queue.py"',
+    "host permissions must make app body cios-private": 'chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
@@ -391,10 +399,17 @@ def collect_path_errors(app_dir: Path) -> list[str]:
 
 def collect_wrapper_errors(app_dir: Path) -> list[str]:
     wrapper_path = app_dir / "deploy" / "cios-daily.sh"
-    if not wrapper_path.exists():
+    app_wrapper_path = app_dir / "deploy" / "cios-daily-app.sh"
+    if not wrapper_path.exists() or not app_wrapper_path.exists():
         return []
-    text = wrapper_path.read_text(encoding="utf-8")
-    return [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+    public_text = wrapper_path.read_text(encoding="utf-8")
+    text = public_text + "\n" + app_wrapper_path.read_text(encoding="utf-8")
+    errors = [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+    if "CIOS_APP_USER" in public_text or "CIOS_RUNNER_HANDOFF" in public_text or "CIOS_DISABLE_RUNNER_HANDOFF" in public_text:
+        errors.append("wrapper permits an app-user handoff bypass")
+    if 'cat "$log"' in public_text or 'tail -120 "$log"' in public_text:
+        errors.append("wrapper exposes unredacted runner logs")
+    return errors
 
 
 def collect_host_runner_errors(app_dir: Path) -> list[str]:
@@ -410,6 +425,14 @@ def collect_run_finalizer_errors(app_dir: Path) -> list[str]:
         app_dir,
         rel_path="deploy/cios-run-finalize.sh",
         invariants=RUN_FINALIZER_INVARIANTS,
+    )
+
+
+def collect_run_queue_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="scripts/cios_run_queue.py",
+        invariants=RUN_QUEUE_INVARIANTS,
     )
 
 
@@ -679,6 +702,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
         errors.extend(collect_run_finalizer_errors(app_dir))
+        errors.extend(collect_run_queue_errors(app_dir))
         errors.extend(collect_host_permissions_errors(app_dir))
         errors.extend(collect_runner_service_errors(app_dir))
         errors.extend(collect_runner_path_errors(app_dir))

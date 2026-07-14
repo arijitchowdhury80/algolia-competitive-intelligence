@@ -175,6 +175,8 @@ class CgroupV2Backend:
 
 
 class ProcessGroupRegistry:
+    _MISSING = object()
+
     def __init__(
         self,
         *,
@@ -218,12 +220,18 @@ class ProcessGroupRegistry:
 
     def terminate(self, process: subprocess.Popen[str], *, grace_seconds: float = 0.5) -> None:
         with self._lock:
-            group = self._active.get(process)
-        if group is not None and self._backend is not None:
-            self._backend.terminate(process, group, grace_seconds=grace_seconds)
-        else:
-            self._terminate_process_group(process, grace_seconds=grace_seconds)
-        self._reap(process, grace_seconds=grace_seconds)
+            group = self._active.pop(process, self._MISSING)
+        if group is self._MISSING:
+            return
+        try:
+            if group is not None and self._backend is not None:
+                self._backend.terminate(process, group, grace_seconds=grace_seconds)
+            else:
+                self._terminate_process_group(process, grace_seconds=grace_seconds)
+            self._reap(process, grace_seconds=grace_seconds)
+        finally:
+            if group is not None and self._backend is not None:
+                self._backend.release(group)
 
     def terminate_all(self) -> None:
         with self._lock:

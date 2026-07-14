@@ -57,9 +57,12 @@ else
   chmod 711 /root/.hermes /root/.hermes/apps
 fi
 
-mkdir -p "$SOURCE_APP/run-queue" "$SOURCE_APP/out" "$SOURCE_APP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
+mkdir -p "$SOURCE_APP/run-queue/.state" "$SOURCE_APP/out" "$SOURCE_APP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
 chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
-chmod 2775 "$APP" "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+chmod 2775 "$APP" "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+chmod 3770 "$APP/run-queue"
+chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
+chmod 700 "$APP/run-queue/.state"
 
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 mkdir -p "$PRODUCT_MARKET_WORKDIR"
@@ -75,6 +78,10 @@ fi
 if [ -f "$APP/deploy/cios-daily.sh" ]; then
   chmod 750 "$APP/deploy/cios-daily.sh"
 fi
+if [ -f "$APP/deploy/cios-daily-app.sh" ]; then
+  chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"
+  chmod 750 "$APP/deploy/cios-daily-app.sh"
+fi
 if [ -f "$ROOT_WRAPPER" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
   chmod 750 "$ROOT_WRAPPER"
@@ -84,6 +91,9 @@ if [ -f "$APP/deploy/cios-host-runner.sh" ]; then
 fi
 if [ -f "$APP/deploy/cios-run-finalize.sh" ]; then
   chmod 755 "$APP/deploy/cios-run-finalize.sh"
+fi
+if [ -f "$APP/scripts/cios_run_queue.py" ]; then
+  chmod 755 "$APP/scripts/cios_run_queue.py"
 fi
 if [ -f "$ENV_FILE" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ENV_FILE"

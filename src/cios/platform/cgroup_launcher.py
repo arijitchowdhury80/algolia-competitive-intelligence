@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Sequence
 
@@ -33,7 +34,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         enter_and_exec(args.cgroup, args.ready_fd, args.command)
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        if isinstance(exc, OSError):
+            detail = exc.strerror or type(exc).__name__
+            print(f"CI-OS contained exec failed: {detail}", file=sys.stderr)
         try:
             os.write(args.ready_fd, b"ERROR\n")
             os.close(args.ready_fd)

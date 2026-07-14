@@ -6,44 +6,7 @@ set -eu
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 QUEUE="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
-ACTIVE="$QUEUE/.active-run"
+PYTHON="${CIOS_PYTHON_BIN:-$APP/.venv/bin/python}"
+HELPER="${CIOS_RUN_QUEUE_HELPER:-$APP/scripts/cios_run_queue.py}"
 
-mkdir -p "$QUEUE"
-chmod 2775 "$QUEUE" 2>/dev/null || true
-
-found=0
-for request in "$QUEUE"/*.request; do
-  [ -e "$request" ] || continue
-  found=1
-  base="${request%.request}"
-  running="$base.running"
-  log="$base.log"
-  result="$base.result"
-  request_id="$(basename "$base")"
-  printf '%s\n' "$request_id" > "$ACTIVE.tmp"
-  mv "$ACTIVE.tmp" "$ACTIVE"
-  if ! mv "$request" "$running" 2>/dev/null; then
-    rm -f "$ACTIVE"
-    continue
-  fi
-
-  set +e
-  CIOS_DISABLE_RUNNER_HANDOFF=1 \
-    CIOS_APP_DIR="$APP" \
-    CIOS_PUBLIC_DIR="$PUB" \
-    "$APP/deploy/cios-daily.sh" > "$log" 2>&1
-  code=$?
-  set -e
-
-  printf '%s\n' "$code" > "$result.tmp"
-  mv "$result.tmp" "$result"
-  mv "$running" "$base.done" 2>/dev/null || true
-  rm -f "$ACTIVE"
-  break
-done
-
-if [ "$found" -eq 0 ]; then
-  echo "no CI-OS runner requests found"
-fi
-
-exit 0
+exec "$PYTHON" "$HELPER" run-one --queue "$QUEUE" --app "$APP" --public "$PUB"

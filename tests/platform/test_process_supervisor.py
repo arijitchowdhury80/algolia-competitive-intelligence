@@ -76,6 +76,18 @@ def test_registry_launches_and_terminates_through_cgroup_backend(tmp_path):
     ]
 
 
+def test_registry_cleanup_is_idempotent_when_terminate_and_unregister_race(tmp_path):
+    backend = _FakeBackend(tmp_path / "command-1")
+    registry = ProcessGroupRegistry(backend=backend, require_cgroup=True)
+    process = registry.spawn(["echo", "ok"])
+
+    registry.terminate(process)
+    registry.unregister(process)
+    registry.terminate(process)
+
+    assert [call[0] for call in backend.calls] == ["launch", "terminate", "release"]
+
+
 def test_launcher_enters_cgroup_before_target_exec(tmp_path, monkeypatch):
     group = tmp_path / "command-1"
     group.mkdir()
@@ -96,6 +108,28 @@ def test_launcher_enters_cgroup_before_target_exec(tmp_path, monkeypatch):
     assert os.read(read_fd, 32) == b"READY\n"
     os.close(read_fd)
     assert observed == [("exec", ("echo", ["echo", "contained"], str(os.getpid())))]
+
+
+def test_launcher_reports_exec_failure_without_echoing_command(tmp_path, monkeypatch, capsys):
+    group = tmp_path / "command-1"
+    group.mkdir()
+    (group / "cgroup.procs").write_text("", encoding="utf-8")
+    read_fd, write_fd = os.pipe()
+
+    def fail_exec(_executable, _command):
+        raise FileNotFoundError(2, "No such file or directory", "secret-command")
+
+    monkeypatch.setattr(cgroup_launcher.os, "execvp", fail_exec)
+
+    code = cgroup_launcher.main(
+        ["--cgroup", str(group), "--ready-fd", str(write_fd), "--", "secret-command"]
+    )
+
+    os.close(read_fd)
+    captured = capsys.readouterr()
+    assert code == 125
+    assert "contained exec failed: No such file or directory" in captured.err
+    assert "secret-command" not in captured.err
 
 
 def test_cgroup_kill_is_used_when_group_remains_populated(tmp_path, monkeypatch):

@@ -14,6 +14,7 @@ SCRIPT = ROOT / "scripts" / "verify_hermes_package_contract.py"
 
 REQUIRED_FILES = [
     "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
     "deploy/cios-run-finalize.sh",
@@ -48,6 +49,7 @@ REQUIRED_FILES = [
     "scripts/export_public_run_status.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
@@ -98,7 +100,6 @@ export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS:-600}"
 export CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS:-630}"
-case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
 export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
@@ -127,28 +128,44 @@ mkdir -p "$STAGE"
 """
 
 
+SAFE_HANDOFF_WRAPPER = """#!/bin/sh
+current_user="$(/usr/bin/id -un)"
+if [ "$current_user" = "cios" ]; then
+  exec "$APP/deploy/cios-daily-app.sh"
+fi
+queue_dir="${CIOS_RUNNER_QUEUE_DIR:-/opt/cios/app/run-queue}"
+wait_seconds="${CIOS_RUNNER_WAIT_SECONDS:-1800}"
+"$queue_helper" enqueue
+"$queue_helper" read-result
+"""
+
+
 SAFE_HOST_RUNNER = """#!/bin/sh
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
-QUEUE="$APP/run-queue"
-ACTIVE="$QUEUE/.active-run"
-for request in "$QUEUE"/*.request; do
-  base="${request%.request}"
-  log="$base.log"
-  result="$base.result"
-  CIOS_DISABLE_RUNNER_HANDOFF=1 CIOS_APP_DIR="$APP" CIOS_PUBLIC_DIR="$PUB" "$APP/deploy/cios-daily.sh" > "$log" 2>&1
-  printf "%s\\n" "$?" > "$result"
-  break
-done
+HELPER="$APP/scripts/cios_run_queue.py"
+"$HELPER" run-one
 """
 
 SAFE_RUN_FINALIZER = """#!/bin/sh
-ACTIVE="$QUEUE/.active-run"
 service_result="${SERVICE_RESULT:-unknown}"
-code=124
-status=blocked_runtime_timeout
-printf "%s\\n" "$code" > "$result.tmp"
+HELPER="$APP/scripts/cios_run_queue.py"
+"$HELPER" finalize
 """
+
+
+SAFE_RUN_QUEUE = '''#!/usr/bin/env python3
+import os
+import uuid
+NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+os.replace
+state = ".state"
+request_id = uuid.uuid4().hex
+def run_one():
+    pass
+code = 124 if timed_out else 2
+status = "blocked_runtime_timeout"
+'''
 
 
 SAFE_HOST_PERMISSIONS = """#!/bin/sh
@@ -173,13 +190,17 @@ app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
 chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
-chmod 2775 "$APP" "$APP/run-queue"
+chmod 3770 "$APP/run-queue"
+chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
+chmod 700 "$APP/run-queue/.state"
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
 install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
 chmod 755 "$APP/deploy/cios-run-finalize.sh"
+chmod 755 "$APP/scripts/cios_run_queue.py"
+chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"
 """
 
 
@@ -524,8 +545,14 @@ def _make_app(
             content = admin_app
         elif rel == "deploy/cios-host-runner.sh":
             content = host_runner
+        elif rel == "deploy/cios-daily.sh":
+            content = SAFE_HANDOFF_WRAPPER
+        elif rel == "deploy/cios-daily-app.sh":
+            content = wrapper
         elif rel == "deploy/cios-run-finalize.sh":
             content = SAFE_RUN_FINALIZER
+        elif rel == "scripts/cios_run_queue.py":
+            content = SAFE_RUN_QUEUE
         elif rel == "deploy/cios-host-permissions.sh":
             content = host_permissions
         elif rel == "deploy/cios-runner.service":
@@ -540,7 +567,8 @@ def _make_app(
             continue
         (app / rel).mkdir(parents=True, exist_ok=True)
         (app / rel / "__init__.py").write_text("", encoding="utf-8")
-    (app / "deploy" / "cios-daily.sh").write_text(wrapper, encoding="utf-8")
+    (app / "deploy" / "cios-daily.sh").write_text(SAFE_HANDOFF_WRAPPER, encoding="utf-8")
+    (app / "deploy" / "cios-daily-app.sh").write_text(wrapper, encoding="utf-8")
     if include_admin_service:
         (app / "deploy" / "cios-admin.service").write_text(admin_service, encoding="utf-8")
     return app
@@ -1314,41 +1342,43 @@ def test_preflight_fails_when_wrapper_missing_product_surface_stage_timeout_guar
 
 
 def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):
-    app = _make_app(
-        tmp_path,
-        wrapper=SAFE_WRAPPER.replace("CIOS_RUNNER_HANDOFF", "CIOS_RUNNER_DISABLED"),
-    )
-
-    result = _run_preflight(app)
-
-    assert result.returncode == 2
-    assert "wrapper missing app-user runner handoff switch" in result.stderr
-
-
-def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp_path):
-    app = _make_app(
-        tmp_path,
-        host_runner=SAFE_HOST_RUNNER.replace("CIOS_DISABLE_RUNNER_HANDOFF=1", "CIOS_DISABLE_RUNNER_HANDOFF=0"),
-    )
-
-    result = _run_preflight(app)
-
-    assert result.returncode == 2
-    assert "host runner missing handoff bypass" in result.stderr
-
-
-def test_preflight_fails_when_run_finalizer_omits_timeout_mapping(tmp_path):
     app = _make_app(tmp_path)
-    finalizer = app / "deploy/cios-run-finalize.sh"
-    finalizer.write_text(
-        SAFE_RUN_FINALIZER.replace("code=124", "code=2"),
+    handoff = app / "deploy/cios-daily.sh"
+    handoff.write_text(
+        SAFE_HANDOFF_WRAPPER.replace('"$current_user" = "cios"', '"$current_user" = "disabled"'),
         encoding="utf-8",
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "run finalizer missing timeout exit mapping" in result.stderr
+    assert "wrapper missing fixed cios identity gate" in result.stderr
+
+
+def test_preflight_fails_when_host_runner_does_not_use_secure_queue_helper(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_runner=SAFE_HOST_RUNNER.replace('"$HELPER" run-one', '"$HELPER" unsafe-run'),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host runner must delegate one request to queue helper" in result.stderr
+
+
+def test_preflight_fails_when_run_queue_omits_timeout_mapping(tmp_path):
+    app = _make_app(tmp_path)
+    helper = app / "scripts/cios_run_queue.py"
+    helper.write_text(
+        SAFE_RUN_QUEUE.replace("124 if timed_out else 2", "2 if timed_out else 2"),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "run queue missing timeout exit mapping" in result.stderr
 
 
 def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_path):
