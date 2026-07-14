@@ -62,6 +62,8 @@ REQUIRED_PATHS = [
     "src/cios/admin/product_surface_extraction.py",
     "src/cios/admin/product_surface_repair.py",
     "src/cios/admin/dashboard_refresh.py",
+    "src/cios/intelligence/product_surface_executor.py",
+    "src/cios/platform/process_supervisor.py",
     "src/cios/intelligence",
     "src/cios/admin/learning_apply.py",
     "src/cios/admin/demand_imports.py",
@@ -95,6 +97,8 @@ WRAPPER_INVARIANTS = {
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
     "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
+    "wrapper missing product-surface batch timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS",
+    "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
     "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
     "wrapper missing app-user runner request queue": ".request",
@@ -213,6 +217,19 @@ PRODUCT_SURFACE_EXECUTION_INVARIANTS = {
     "product-surface executor missing row-count summary": "product_row_count",
     "product-surface executor missing empty output accounting": "empty_scout_paths",
     "product-surface executor missing product-plane status": "product_plane_status",
+    "product-surface executor missing process-group supervision": "start_new_session=True",
+    "product-surface executor missing batch deadline": "batch_timeout_seconds",
+    "product-surface executor missing not-started accounting": "not_started",
+}
+
+PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
+    "product-surface executor CLI missing batch deadline option": "--batch-timeout-seconds",
+    "product-surface executor CLI missing shutdown handlers": "install_shutdown_handlers",
+}
+
+PROCESS_SUPERVISOR_INVARIANTS = {
+    "process supervisor missing process-group termination": "os.killpg",
+    "process supervisor missing active-process shutdown": "terminate_all",
 }
 
 PRODUCT_SURFACE_PLANNER_INVARIANTS = {
@@ -384,11 +401,27 @@ def collect_demand_intake_plan_errors(app_dir: Path) -> list[str]:
 
 
 def collect_product_surface_execution_errors(app_dir: Path) -> list[str]:
-    return collect_text_invariant_errors(
-        app_dir,
-        rel_path="scripts/execute_product_surface_plan.py",
-        invariants=PRODUCT_SURFACE_EXECUTION_INVARIANTS,
+    checks = (
+        (
+            "src/cios/intelligence/product_surface_executor.py",
+            PRODUCT_SURFACE_EXECUTION_INVARIANTS,
+        ),
+        (
+            "scripts/execute_product_surface_plan.py",
+            PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS,
+        ),
+        ("src/cios/platform/process_supervisor.py", PROCESS_SUPERVISOR_INVARIANTS),
     )
+    errors: list[str] = []
+    for rel_path, invariants in checks:
+        errors.extend(
+            collect_text_invariant_errors(
+                app_dir,
+                rel_path=rel_path,
+                invariants=invariants,
+            )
+        )
+    return errors
 
 
 def collect_product_surface_planner_errors(app_dir: Path) -> list[str]:

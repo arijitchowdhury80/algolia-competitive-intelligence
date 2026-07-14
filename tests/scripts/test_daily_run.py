@@ -1408,6 +1408,7 @@ def test_current_sweep_deltas_infer_capability_theme_from_statement_before_gener
 
 def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tmp_path, monkeypatch):
     calls = []
+    timeouts = {}
     scout_path = tmp_path / "surface-exports" / "000011-constructor-changelog.json"
     looker_path = tmp_path / "looker.csv"
     looker_path.write_text(
@@ -1417,9 +1418,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     )
 
     def fake_run(cmd, capture_output, text, timeout, check):
-        del capture_output, text, timeout, check
+        del capture_output, text, check
         calls.append(cmd)
         script_name = Path(cmd[1]).name
+        timeouts[script_name] = timeout
         if script_name == "build_next_sweep_learning_plan.py":
             plan_output = Path(cmd[cmd.index("--output") + 1])
             plan_output.parent.mkdir(parents=True, exist_ok=True)
@@ -1550,7 +1552,17 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             scout_path.write_text(json.dumps([{"company_name": "Constructor"}]), encoding="utf-8")
             summary_output = Path(cmd[cmd.index("--summary-output") + 1])
             summary_output.write_text(
-                json.dumps({"failed": 0, "succeeded": 1, "scout_paths": [str(scout_path)]}),
+                json.dumps(
+                    {
+                        "failed": 3,
+                        "succeeded": 1,
+                        "timed_out": 1,
+                        "not_started": 2,
+                        "batch_timed_out": True,
+                        "batch_timeout_seconds": 600,
+                        "scout_paths": [str(scout_path)],
+                    }
+                ),
                 encoding="utf-8",
             )
         elif script_name == "build_product_market_payload.py":
@@ -1573,6 +1585,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             "CIOS_PRODUCT_MARKET_USE_JS": "1",
             "CIOS_PRODUCT_MARKET_LOOKER_EXPORTS": str(looker_path),
             "CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS": "4",
+            "CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS": "240",
+            "CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS": "300",
+            "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS": "600",
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS": "630",
             "CIOS_PRODUCT_MARKET_DEMAND_CHANGE_FLOOR": "0.03",
             "CIOS_PRODUCT_MARKET_DEMAND_VALUE_FLOOR": "25",
         },
@@ -1647,6 +1663,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             }
         ],
     }
+    assert result["product_surface_execution_summary"]["timed_out"] == 1
+    assert result["product_surface_execution_summary"]["not_started"] == 2
+    assert result["product_surface_execution_summary"]["batch_timed_out"] is True
+    assert result["product_surface_execution_summary"]["batch_timeout_seconds"] == 600.0
     assert [Path(call[1]).name for call in calls] == [
         "build_next_sweep_learning_plan.py",
         "build_learning_apply_plan.py",
@@ -1669,6 +1689,9 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     assert "--approved-by" not in learning_execute_call
     assert plan_call[plan_call.index("--learning-plan") + 1].endswith("next-sweep-learning-plan.json")
     assert execute_call[execute_call.index("--max-workers") + 1] == "4"
+    assert execute_call[execute_call.index("--command-timeout-seconds") + 1] == "300"
+    assert execute_call[execute_call.index("--batch-timeout-seconds") + 1] == "600"
+    assert timeouts["execute_product_surface_plan.py"] == 630.0
     assert payload_call[payload_call.index("--scout") + 1] == str(scout_path)
     payload_looker_path = Path(payload_call[payload_call.index("--looker") + 1])
     assert payload_looker_path.name == "looker.normalized.json"
@@ -2926,6 +2949,20 @@ def test_dashboard_publish_blocks_product_market_run_without_demand_source(daily
 
     assert daily_run.should_publish_dashboard(result) is False
     assert daily_run.product_market_publish_block_reason(result).startswith("demand_source_status=missing")
+    assert daily_run.publish_gate_exit_code(result) == 3
+
+
+def test_publish_gate_exit_code_keeps_runtime_failure_distinct_from_readiness_block(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.dashboard_state = object()
+    result.quality_status = "passed"
+    result.synth_verdict = daily_run.Verdict.SIGNALS.value
+    result.product_market_summary = {
+        "status": "failed",
+        "error": "TimeoutExpired: command timed out",
+    }
+
+    assert daily_run.publish_gate_exit_code(result) == 2
 
 
 def test_dashboard_publish_allows_product_market_run_with_ledger_demand(daily_run):

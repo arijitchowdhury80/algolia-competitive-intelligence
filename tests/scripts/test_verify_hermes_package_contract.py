@@ -59,6 +59,8 @@ REQUIRED_FILES = [
     "src/cios/admin/demand_imports.py",
     "src/cios/admin/dashboard_refresh.py",
     "src/cios/db/repos/product_market.py",
+    "src/cios/intelligence/product_surface_executor.py",
+    "src/cios/platform/process_supervisor.py",
 ]
 
 REQUIRED_DIRS = [
@@ -91,6 +93,8 @@ SAFE_WRAPPER = """#!/bin/sh
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
 export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
+export CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS:-600}"
+export CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS:-630}"
 case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
 export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 touch "$OUT/.cios-output-dir"
@@ -264,11 +268,26 @@ control.run("algolia", demand_plan=demand_plan)
 
 
 SAFE_PRODUCT_SURFACE_EXECUTOR = """
+process = subprocess.Popen(command, start_new_session=True)
+batch_timeout_seconds = 600
 summary = {
     "product_row_count": 1,
     "empty_scout_paths": [],
     "product_plane_status": "ready",
+    "not_started": 0,
 }
+"""
+
+
+SAFE_PRODUCT_SURFACE_EXECUTOR_CLI = """
+parser.add_argument("--batch-timeout-seconds")
+install_shutdown_handlers()
+"""
+
+
+SAFE_PROCESS_SUPERVISOR = """
+os.killpg(process.pid, signal.SIGTERM)
+PROCESS_GROUPS.terminate_all()
 """
 
 
@@ -375,6 +394,8 @@ def _make_app(
 ) -> Path:
     app = tmp_path / "cios"
     for rel in REQUIRED_FILES:
+        if rel == "src/cios/intelligence/product_surface_executor.py" and not include_intelligence:
+            continue
         if rel == "scripts/build_learning_apply_plan.py" and not include_learning_apply_plan:
             continue
         if rel == "scripts/execute_learning_apply_plan.py" and not include_learning_apply_executor:
@@ -410,7 +431,11 @@ def _make_app(
             continue
         if rel == "scripts/promote_product_surface_candidates.py" and not include_candidate_promotion:
             continue
-        if rel == "scripts/execute_product_surface_plan.py" and not include_product_surface_executor:
+        if rel in {
+            "scripts/execute_product_surface_plan.py",
+            "src/cios/intelligence/product_surface_executor.py",
+            "src/cios/platform/process_supervisor.py",
+        } and not include_product_surface_executor:
             continue
         if rel == "scripts/run_product_surface_repair.py" and not include_product_surface_repair_runner:
             continue
@@ -434,7 +459,11 @@ def _make_app(
         elif rel == "scripts/run_argus_demand_intake.py":
             content = demand_intake
         elif rel == "scripts/execute_product_surface_plan.py":
+            content = SAFE_PRODUCT_SURFACE_EXECUTOR_CLI
+        elif rel == "src/cios/intelligence/product_surface_executor.py":
             content = product_surface_executor
+        elif rel == "src/cios/platform/process_supervisor.py":
+            content = SAFE_PROCESS_SUPERVISOR
         elif rel == "scripts/plan_product_surface_exports.py":
             content = product_surface_planner
         elif rel == "scripts/build_argus_operator_handoff.py":
@@ -773,6 +802,30 @@ def test_preflight_fails_when_product_surface_executor_omits_row_quality_summary
     assert "product-surface executor missing row-count summary" in result.stderr
 
 
+def test_preflight_fails_when_product_surface_executor_omits_process_group_supervision(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("start_new_session=True", "start_new_session=False"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing process-group supervision" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_batch_deadline_accounting(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("batch_timeout_seconds", "batch_timeout_disabled"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing batch deadline" in result.stderr
+
+
 def test_preflight_fails_when_product_surface_extraction_admin_control_missing(tmp_path):
     app = _make_app(tmp_path, include_product_surface_extraction_admin=False)
 
@@ -1066,6 +1119,21 @@ def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
 
     assert result.returncode == 2
     assert "wrapper missing daily-run timeout guard" in result.stderr
+
+
+def test_preflight_fails_when_wrapper_missing_product_surface_stage_timeout_guard(tmp_path):
+    app = _make_app(
+        tmp_path,
+        wrapper=SAFE_WRAPPER.replace(
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_DISABLED",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing product-surface stage timeout guard" in result.stderr
 
 
 def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):

@@ -1386,6 +1386,29 @@ def _run_checked(cmd: list[str], *, timeout_seconds: float) -> subprocess.Comple
     return completed
 
 
+def product_surface_timeout_settings(env: Mapping[str, str]) -> dict[str, float | int]:
+    item_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS", "300"))
+    batch_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS", "600"))
+    stage_timeout = float(
+        env.get("CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS", str(batch_timeout + 30))
+    )
+    max_workers = int(env.get("CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS", "1"))
+    if item_timeout <= 0 or batch_timeout <= 0 or stage_timeout <= 0:
+        raise ValueError("product-surface timeout values must be greater than zero")
+    if max_workers <= 0:
+        raise ValueError("product-surface max workers must be greater than zero")
+    if stage_timeout <= batch_timeout:
+        raise ValueError(
+            "product-surface stage timeout must exceed the executor batch timeout"
+        )
+    return {
+        "item_timeout": item_timeout,
+        "batch_timeout": batch_timeout,
+        "stage_timeout": stage_timeout,
+        "max_workers": max_workers,
+    }
+
+
 def _utc_stage_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -1513,6 +1536,7 @@ def run_product_market_chain_if_enabled(
 
     python_bin = env.get("CIOS_PRODUCT_MARKET_PYTHON_BIN") or sys.executable
     command_timeout = float(env.get("CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS", "240"))
+    product_surface_timeouts = product_surface_timeout_settings(env)
     surface_timeout = env.get("CIOS_PRODUCT_MARKET_SURFACE_TIMEOUT_SECONDS", "120")
     provider = env.get("CIOS_PRODUCT_MARKET_PROVIDER", "ollama/llama3.2:3b")
     scout_bin = env.get("CIOS_SCOUT_BIN", "scout")
@@ -1628,15 +1652,20 @@ def run_product_market_chain_if_enabled(
         "--summary-output",
         str(execution_summary_path),
         "--command-timeout-seconds",
-        env.get("CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS", "300"),
+        f"{product_surface_timeouts['item_timeout']:g}",
+        "--batch-timeout-seconds",
+        f"{product_surface_timeouts['batch_timeout']:g}",
         "--max-workers",
-        env.get("CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS", "1"),
+        str(product_surface_timeouts["max_workers"]),
     ]
     try:
         _run_product_market_stage(
             slug=slug,
             stage="product_surface_export",
-            action=lambda: _run_checked(execute_cmd, timeout_seconds=command_timeout),
+            action=lambda: _run_checked(
+                execute_cmd,
+                timeout_seconds=float(product_surface_timeouts["stage_timeout"]),
+            ),
             stage_ledger=stage_ledger,
         )
     except Exception as exc:
@@ -1650,6 +1679,10 @@ def run_product_market_chain_if_enabled(
         "succeeded": int(execution_summary.get("succeeded") or 0),
         "empty": int(execution_summary.get("empty") or 0),
         "failed": int(execution_summary.get("failed") or 0),
+        "timed_out": int(execution_summary.get("timed_out") or 0),
+        "not_started": int(execution_summary.get("not_started") or 0),
+        "batch_timed_out": bool(execution_summary.get("batch_timed_out")),
+        "batch_timeout_seconds": float(execution_summary.get("batch_timeout_seconds") or 0),
         "product_row_count": int(execution_summary.get("product_row_count") or 0),
         "empty_scout_paths": [str(path) for path in execution_summary.get("empty_scout_paths", [])],
         "empty_outputs": list(execution_summary.get("empty_outputs", []))
@@ -2422,6 +2455,21 @@ def should_publish_dashboard(result) -> bool:
         and result.synth_verdict != Verdict.COVERAGE_FAILURE.value
         and product_market_publish_block_reason(result) is None
     )
+
+
+def publish_gate_exit_code(result) -> int:
+    if should_publish_dashboard(result):
+        return 0
+    demand_block = product_market_demand_source_block_reason(result)
+    if (
+        demand_block
+        and result is not None
+        and result.dashboard_state is not None
+        and result.quality_status == "passed"
+        and result.synth_verdict != Verdict.COVERAGE_FAILURE.value
+    ):
+        return 3
+    return 2
 
 
 def should_apply_quality_revision_result(
@@ -4724,7 +4772,7 @@ async def main() -> int:
                 print(f"  {product_market_block}")
             if delivered_result.errors:
                 print(f"  {deliver_tenant} errors={delivered_result.errors}")
-            return 2
+            return publish_gate_exit_code(delivered_result)
         if published_paths:
             # Two artifacts, same run: the cockpit (Arijit's designed Luxury
             # Editorial surface, built from DashboardState) is the primary

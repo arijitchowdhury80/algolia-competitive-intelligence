@@ -6,6 +6,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "deploy" / "cios-daily.sh"
@@ -236,7 +238,15 @@ exit 0
     assert (stale_out / "argus-dashboard.html").exists()
 
 
-def test_hermes_wrapper_writes_demand_source_gate_when_daily_blocks_publish(tmp_path):
+@pytest.mark.parametrize(
+    ("daily_exit_code", "expected_wrapper_code"),
+    [(2, 2), (3, 0)],
+)
+def test_hermes_wrapper_writes_demand_source_gate_when_daily_blocks_publish(
+    tmp_path,
+    daily_exit_code,
+    expected_wrapper_code,
+):
     app, public, env_file = _make_fake_app(
         tmp_path,
         """#!/bin/sh
@@ -254,7 +264,7 @@ case "$1" in
     mkdir -p "$OUT/briefs/algolia"
     printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     echo "ABORT: dashboard publish blocked for algolia" >&2
-    exit 2
+    exit DAILY_EXIT_CODE
     ;;
   *check_argus_demand_source_gate.py)
     echo "demand-source-gate" >> "$CALLS"
@@ -357,13 +367,15 @@ case "$1" in
     exit 97
     ;;
 esac
-""",
+""".replace("DAILY_EXIT_CODE", str(daily_exit_code)),
     )
     (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
 
     result = _run_wrapper(app, public, env_file)
 
-    assert result.returncode == 2
+    assert result.returncode == expected_wrapper_code
+    if daily_exit_code == 3:
+        assert "runtime completed with blocked evidence readiness" in result.stderr
     assert (app / "out" / "calls.txt").read_text(encoding="utf-8").splitlines() == [
         "daily",
         "demand-source-gate",
