@@ -10,7 +10,7 @@
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 3
+    "STAGING": 4
   },
   "strike_log": [
     {
@@ -34,6 +34,14 @@
       "request_id": "332b3a51ef0a4c8ca4eb032a28d0f5b8",
       "outcome": "FAILED_FRESH_RELEASE_OUTPUT_MARKER_MISSING",
       "changed_hypothesis": "PACKAGE_ENFORCED_OUTPUT_MARKER_INITIALIZATION"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 4,
+      "request_id": "db7adb02342f46c8968e88d99de79188",
+      "run_id": "cios-20260714T164836Z-2116876",
+      "outcome": "FAILED_PUBLIC_ARTIFACT_LOCAL_PATH_VALIDATION",
+      "changed_hypothesis": "TEMPORARY_PUBLIC_JSON_REDACTION_ADAPTER"
     }
   ],
   "gates": {
@@ -52,8 +60,8 @@
     "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
-    "release_candidate": "707fee5_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "OUTPUT_MARKER_FIX_VERIFIED_READY_FOR_FRESH_CANDIDATE"
+    "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
+    "staging": "PUBLIC_JSON_REDACTION_FIX_VERIFIED_READY_FOR_FRESH_CANDIDATE"
   },
   "human_decisions": [
     {

@@ -114,3 +114,38 @@ new regression test failed before the fix, then the focused suite passed 87
 tests. Full verification passed `1322 passed, 3 skipped, 23 deselected`, scoped
 Ruff, Pyright, strict MyPy, and the package contract. Candidate `707fee5` is
 retained as failed evidence and must not be mutated or retried.
+
+## Public-artifact adapter failure
+
+Candidate `1ea8c68` passed GitHub Actions run `29350795379`, off-route and
+mounted package preflight, marker ownership, and demand preparation. Real
+Hermes request `db7adb02342f46c8968e88d99de79188` ran as `hermes -> cios`
+within the systemd runtime ceiling and completed source collection, model
+generation, learning, product-surface export, demand import, dashboard render,
+brief render, and data-plane manifest generation. Run
+`cios-20260714T164836Z-2116876` recorded one audience-demand signal and a watch
+decision, but publication validation failed before install or pointer movement.
+
+The exact off-route validator reproduction reported
+`unsafe artifact data/semantic-dashboard.json: local_path`. A key-path-only
+audit found internal filesystem references in the internal semantic dashboard
+and data-plane manifest, while HTML artifacts contained none. The internal
+artifacts are legitimate runbook evidence; the defect was that
+`publish_generation.py` copied them directly into the public generation instead
+of creating a redacted public JSON view.
+
+The changed hypothesis is a publication-boundary adapter: recursively remove
+local-path JSON keys and values into temporary copies, preserve internal source
+bytes, then keep the existing immutable scanner as the final rejecting gate for
+HTML paths, credentials, secrets, malformed JSON, and symlinks. The regression
+test failed before the fix and then the focused publication suite passed 25
+tests. Full verification passed `1322 passed, 3 skipped, 23 deselected`, scoped
+Ruff, Pyright, strict MyPy, and package preflight. Candidate `1ea8c68` remains
+failed evidence and is ineligible for retry.
+
+The run also proved why demand coverage must remain explicit: the current
+product scan regenerated a different 12-topic Argus plan, so the truthful
+`Agent Search` row remained a processed but unmapped signal instead of being
+silently reassigned. The data-plane manifest reported one audience-demand
+signal and blocked action on incomplete plan coverage. No synthetic topic or
+week-over-week claim was introduced.

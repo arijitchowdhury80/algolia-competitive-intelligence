@@ -57,8 +57,22 @@ def test_cli_publishes_complete_decision_and_structured_verdict(tmp_path: Path) 
     dashboard = {
         "generated_at": GENERATED_AT.isoformat(),
         "run_health": {"run_id": RUN_ID},
-        "product_market_run": {"run_id": RUN_ID},
+        "product_market_run": {
+            "run_id": RUN_ID,
+            "learning_apply_plan_path": "/opt/cios/app/tmp/learning-apply-plan.json",
+        },
     }
+    dashboard_source = _write(source / "dashboard.json", json.dumps(dashboard))
+    data_plane_source = _write(
+        source / "data-plane.json",
+        json.dumps(
+            {
+                "run_id": RUN_ID,
+                "generated_at": GENERATED_AT.isoformat(),
+                "artifact_refs": {"dashboard": "/opt/cios/app/out/argus-dashboard.json"},
+            }
+        ),
+    )
     brief = _write(source / "briefs" / "algolia" / "constructor.html", "<article>Constructor</article>")
     package_verdict = _write(
         source / "package-verdict.json",
@@ -83,8 +97,8 @@ def test_cli_publishes_complete_decision_and_structured_verdict(tmp_path: Path) 
             "--kind", "decision",
             "--dashboard-html", str(_write(source / "index.html", "<main>Argus</main>")),
             "--brief", str(_write(source / "brief.html", "<article>Brief</article>")),
-            "--dashboard-json", str(_write(source / "dashboard.json", json.dumps(dashboard))),
-            "--data-plane-manifest", str(_write(source / "data-plane.json", json.dumps({"run_id": RUN_ID, "generated_at": GENERATED_AT.isoformat()}))),
+            "--dashboard-json", str(dashboard_source),
+            "--data-plane-manifest", str(data_plane_source),
             "--status", str(_status(source / "status.json", run_id=RUN_ID, publish_status="published")),
             "--briefs-dir", str(source / "briefs"),
             "--package-verdict", str(package_verdict),
@@ -107,3 +121,9 @@ def test_cli_publishes_complete_decision_and_structured_verdict(tmp_path: Path) 
     assert (store / "served" / "briefs" / "algolia" / brief.name).is_file()
     published_status = json.loads((store / "latest-status.json").read_text(encoding="utf-8"))
     assert published_status["safety"]["public_safe"] is True
+    published_dashboard = (store / "served" / "data" / "semantic-dashboard.json").resolve()
+    published_data_plane = (store / "served" / "data" / "argus-data-plane-manifest.json").resolve()
+    assert "/opt/" not in published_dashboard.read_text(encoding="utf-8")
+    assert "/opt/" not in published_data_plane.read_text(encoding="utf-8")
+    assert "/opt/" in dashboard_source.read_text(encoding="utf-8")
+    assert "/opt/" in data_plane_source.read_text(encoding="utf-8")

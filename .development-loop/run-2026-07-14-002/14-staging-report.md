@@ -212,6 +212,33 @@ skipped, 23 deselected`, scoped Ruff, Pyright, strict MyPy, and package
 preflight. The next staging attempt requires a fresh immutable candidate from
 this post-`707fee5` fix and a clean GitHub CI run.
 
+## Candidate 1ea8c68 staging result
+
+Candidate `1ea8c68`, tagged `ci-os-phase2-candidate-2026-07-14-r3`, passed
+GitHub Actions run `29350795379`. Archive SHA-256 was
+`d4a48c2cb7936e322d4d6f4011876eb14b0496e191654adffcf52c32405081bd`.
+Its off-route and mounted package checks passed, the output marker was
+`cios:hermes` mode `0660`, and the real Hermes-owned run crossed to the `cios`
+runner without timeout, orphan work, or public route change.
+
+Run `cios-20260714T164836Z-2116876` generated a watch decision with product,
+conversation, and one audience-demand signal present. Because the current
+product scan regenerated the Argus topic plan, the truthful `Agent Search`
+signal remained processed but unmapped; the decision correctly retained an
+incomplete-coverage blocker. Publication then failed closed on internal local
+paths in the semantic dashboard JSON. The exact validator reason was
+`unsafe artifact data/semantic-dashboard.json: local_path`. No decision
+generation was installed, `current` remained absent, and the legacy public
+service stayed active with its original hash.
+
+TDD now makes `publish_generation.py` create temporary, local-path-redacted
+copies of JSON artifacts while preserving the internal runbook source files.
+The immutable scanner remains authoritative and still rejects unsafe text,
+secrets, credentials, malformed files, and symlinks. Local verification passed
+`1322 passed, 3 skipped, 23 deselected`, focused publication `25 passed`, scoped
+Ruff, Pyright, strict MyPy, and package preflight. A fresh candidate and clean
+GitHub CI run are required before the next Stage 12 attempt.
+
 ## Proposed bounded staging sequence
 
 1. Install immutable Phase 2 candidate `47d3bd7` under
