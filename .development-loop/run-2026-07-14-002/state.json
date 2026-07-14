@@ -25,7 +25,9 @@
     "security_review": "PASSED_STANDING_GOAL_AUTHORIZATION",
     "code_review": "ONE_IMPORTANT_ACTION_APPROVED_BY_GOAL_CHARTER",
     "rectify": "PASSED_1316_TESTS",
-    "validate": "PASSED_8_LAYERS",
+    "validate": "PASSED_8_LAYERS_1318_TESTS",
+    "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
+    "github_ci": "PASSED_RUN_29326371217",
     "release_candidate": "47d3bd7_SHA256_0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298",
     "staging": "AWAITING_HUMAN_APPROVAL"
   }

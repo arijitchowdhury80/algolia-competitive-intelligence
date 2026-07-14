@@ -37,3 +37,14 @@ intentionally commit through one connection and verify through another.
 
 No Debug strike was recorded: the first root-cause hypothesis was confirmed by
 the installed Psycopg source and the focused regression run.
+
+## GitHub package-contract failure
+
+The first package CI run later failed after static checks and tests because
+`verify_package.py` expected the deployment `.venv/bin/python`, while Actions
+uses an editable checkout install in the runner Python. This was CI environment
+configuration, not a package/runtime defect. A workflow contract test was
+changed first and failed, then the CI-only verifier invocation added
+`--skip-python-imports`. Importability remains independently covered by `pip
+check`, Pyright, MyPy, and the full suite. GitHub run `29326371217` passed both
+jobs after the fix.

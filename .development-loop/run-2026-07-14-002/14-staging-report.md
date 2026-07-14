@@ -2,6 +2,10 @@
 
 Status: AWAITING HUMAN APPROVAL
 
+Draft package PR #1 targets the dedicated `ci-os-package-main` source branch.
+Its GitHub static/unit and Postgres integration checks pass. The PR remains a
+draft, and this automated evidence does not authorize the staging sequence.
+
 ## Verified current production baseline
 
 Read-only inspection on 2026-07-14 confirmed:

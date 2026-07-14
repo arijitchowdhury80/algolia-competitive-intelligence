@@ -7,3 +7,7 @@ Current step: Development-Loop Stage 12 staging human gate
 All eight local validation layers passed. Production remains unchanged. The
 full product, risk, specification, architecture, validation evidence, staging
 sequence, and rollback drill live in the Development-Loop run.
+
+Draft PR #1 targets `ci-os-package-main`; GitHub static/unit and Postgres
+integration checks pass. The PR remains draft and the staging gate remains
+closed.

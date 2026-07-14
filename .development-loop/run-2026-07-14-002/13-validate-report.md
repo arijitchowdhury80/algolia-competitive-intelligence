@@ -24,7 +24,8 @@ surfaces are clean and the full regression suite is green.
 
 ## 2. Unit tests and coverage: PASS
 
-- Full default suite: `1316 passed, 3 skipped, 23 deselected in 35.04s`.
+- Full default suite after adding the CI workflow contract: `1318 passed, 3
+  skipped, 23 deselected in 34.55s`.
 - Focused publication/launch tests after strict-type rectification: `42 passed`.
 - Branch coverage across `cios.publication` and the two publication/readiness
   CLIs: 88% total, above the 80% SOP floor. Per-file coverage ranges from 81%
@@ -55,6 +56,10 @@ The immutable release candidate is Git commit `47d3bd7` with tree
 `ef09b04cfe9a0e4d5b3cf5f7008693a10b3a14eb`. Its extracted archive passed
 package preflight; `/private/tmp/cios-47d3bd7.tar.gz` has SHA-256
 `0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298`.
+
+GitHub Actions run `29326371217` independently passed `static-and-unit` and
+`postgres-integration` on the draft package pull request. The subsequent
+workflow-only commits do not alter the archived `47d3bd7` candidate.
 
 ## 5. End to end: PASS LOCALLY
 
