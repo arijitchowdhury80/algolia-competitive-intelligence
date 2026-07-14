@@ -129,27 +129,34 @@ mkdir -p "$STAGE"
 
 
 SAFE_HANDOFF_WRAPPER = """#!/bin/sh
+APP=/opt/cios/app
+PUB=/opt/cios/public
+QUEUE=/opt/cios/app/run-queue
+PYTHON=/opt/cios/app/.venv/bin/python
+HELPER=/opt/cios/app/scripts/cios_run_queue.py
+WAIT_SECONDS=1800
+ENV=/usr/bin/env
 current_user="$(/usr/bin/id -un)"
 if [ "$current_user" = "cios" ]; then
   exec "$APP/deploy/cios-daily-app.sh"
 fi
-queue_dir="${CIOS_RUNNER_QUEUE_DIR:-/opt/cios/app/run-queue}"
-wait_seconds="${CIOS_RUNNER_WAIT_SECONDS:-1800}"
-"$queue_helper" enqueue
-"$queue_helper" read-result
+"$ENV" -i PATH=/usr/bin:/bin "$HELPER" enqueue
+"$ENV" -i PATH=/usr/bin:/bin "$HELPER" read-result
 """
 
 
 SAFE_HOST_RUNNER = """#!/bin/sh
-APP="${CIOS_APP_DIR:-/opt/cios/app}"
-PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
+APP=/opt/cios/app
+PUB=/opt/cios/public
 HELPER="$APP/scripts/cios_run_queue.py"
-"$HELPER" run-one
+if [ "$(/usr/bin/id -un)" != "cios" ]; then exit 2; fi
+"$HELPER" run-pending
 """
 
 SAFE_RUN_FINALIZER = """#!/bin/sh
 service_result="${SERVICE_RESULT:-unknown}"
 HELPER="$APP/scripts/cios_run_queue.py"
+if [ "$(/usr/bin/id -un)" != "cios" ]; then exit 2; fi
 "$HELPER" finalize
 """
 
@@ -161,7 +168,12 @@ NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 os.replace
 state = ".state"
 request_id = uuid.uuid4().hex
-def run_one():
+def require_cios_user():
+    pass
+require_cios_user()
+def _create_state_regular():
+    mode = 0o600
+def run_pending():
     pass
 code = 124 if timed_out else 2
 status = "blocked_runtime_timeout"
@@ -190,6 +202,8 @@ app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
 chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
+code_dir="$APP/scripts"
+chmod -R g-w,o-w "$code_dir"
 chmod 3770 "$APP/run-queue"
 chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
 chmod 700 "$APP/run-queue/.state"
@@ -198,7 +212,8 @@ LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-m
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
 install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
-chmod 755 "$APP/deploy/cios-run-finalize.sh"
+chmod 700 "$APP/deploy/cios-run-finalize.sh"
+chmod 700 "$APP/deploy/cios-host-runner.sh"
 chmod 755 "$APP/scripts/cios_run_queue.py"
 chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"
 """
@@ -1358,13 +1373,13 @@ def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):
 def test_preflight_fails_when_host_runner_does_not_use_secure_queue_helper(tmp_path):
     app = _make_app(
         tmp_path,
-        host_runner=SAFE_HOST_RUNNER.replace('"$HELPER" run-one', '"$HELPER" unsafe-run'),
+        host_runner=SAFE_HOST_RUNNER.replace('"$HELPER" run-pending', '"$HELPER" unsafe-run'),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "host runner must delegate one request to queue helper" in result.stderr
+    assert "host runner must drain requests through queue helper" in result.stderr
 
 
 def test_preflight_fails_when_run_queue_omits_timeout_mapping(tmp_path):

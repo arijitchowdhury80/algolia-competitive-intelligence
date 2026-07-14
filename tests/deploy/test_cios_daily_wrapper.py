@@ -59,88 +59,28 @@ def _run_wrapper(
     )
 
 
-def test_hermes_wrapper_hands_off_to_app_user_runner_by_default(tmp_path):
-    app, public, env_file = _make_fake_app(
-        tmp_path,
-        """#!/bin/sh
-echo "daily body should not run before app-user handoff" >&2
-exit 99
-""",
-    )
-    queue = app / "run-queue"
-    queue.mkdir()
-    watcher = subprocess.Popen(
-        [
-            "sh",
-            "-c",
-            (
-                "set -eu; "
-                f"queue={queue}; "
-                "while :; do "
-                'for request in "$queue"/*.request; do '
-                '[ -e "$request" ] || continue; '
-                'base="${request%.request}"; '
-                'printf "runner log\\n" > "$base.log"; '
-                'printf "17\\n" > "$base.result"; '
-                "exit 0; "
-                "done; "
-                "sleep 1; "
-                "done"
-            ),
-        ],
-        text=True,
-    )
-    try:
-        result = _run_wrapper(
-            app,
-            public,
-            env_file,
-            {
-                "CIOS_PYTHON_BIN": "python3",
-                "CIOS_RUN_QUEUE_HELPER": str(QUEUE_HELPER),
-                "CIOS_RUNNER_QUEUE_DIR": str(queue),
-                "CIOS_RUNNER_WAIT_SECONDS": "8",
-            },
-            entrypoint=WRAPPER,
-        )
-    finally:
-        watcher.terminate()
-        watcher.wait(timeout=5)
+def test_hermes_wrapper_uses_fixed_cios_queue_client_paths():
+    text = WRAPPER.read_text(encoding="utf-8")
 
-    assert result.returncode == 17
-    assert result.stdout == ""
-    assert "runner log" not in result.stderr
-    assert "queued CI-OS runner handoff request" in result.stderr
-    assert "daily body should not run" not in result.stderr
-    assert list(queue.glob("*.request"))
-    assert list(queue.glob("*.result"))
+    assert "APP=/opt/cios/app" in text
+    assert "PUB=/opt/cios/public" in text
+    assert "QUEUE=/opt/cios/app/run-queue" in text
+    assert "PYTHON=/opt/cios/app/.venv/bin/python" in text
+    assert "HELPER=/opt/cios/app/scripts/cios_run_queue.py" in text
+    assert '"$ENV" -i PATH=/usr/bin:/bin' in text
+    assert '"$current_user" = "cios"' in text
 
 
-def test_hermes_wrapper_does_not_allow_non_app_user_to_disable_handoff(tmp_path):
-    app, public, env_file = _make_fake_app(
-        tmp_path,
-        """#!/bin/sh
-echo "unsafe direct execution" >&2
-exit 99
-""",
-    )
+def test_hermes_wrapper_has_no_caller_controlled_execution_paths():
+    text = WRAPPER.read_text(encoding="utf-8")
 
-    result = _run_wrapper(
-        app,
-        public,
-        env_file,
-        {
-            "CIOS_APP_USER": os.environ.get("USER", "hermes"),
-            "CIOS_DISABLE_RUNNER_HANDOFF": "1",
-            "CIOS_PYTHON_BIN": "python3",
-            "CIOS_RUN_QUEUE_HELPER": str(QUEUE_HELPER),
-            "CIOS_RUNNER_QUEUE_DIR": str(app / "missing-queue"),
-        },
-        entrypoint=WRAPPER,
-    )
-
-    assert result.returncode != 99
-    assert "unsafe direct execution" not in result.stderr
+    assert "CIOS_APP_DIR" not in text
+    assert "CIOS_PUBLIC_DIR" not in text
+    assert "CIOS_RUNNER_QUEUE_DIR" not in text
+    assert "CIOS_PYTHON_BIN" not in text
+    assert "CIOS_RUN_QUEUE_HELPER" not in text
+    assert "CIOS_APP_USER" not in text
+    assert "CIOS_DISABLE_RUNNER_HANDOFF" not in text
 
 
 def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_same_run_artifacts(tmp_path):

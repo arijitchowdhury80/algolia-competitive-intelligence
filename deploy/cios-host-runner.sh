@@ -3,10 +3,15 @@
 # the dedicated `cios` app user and writes the result back for Hermes cron.
 set -eu
 
-APP="${CIOS_APP_DIR:-/opt/cios/app}"
-PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
-QUEUE="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
-PYTHON="${CIOS_PYTHON_BIN:-$APP/.venv/bin/python}"
-HELPER="${CIOS_RUN_QUEUE_HELPER:-$APP/scripts/cios_run_queue.py}"
+APP=/opt/cios/app
+PUB=/opt/cios/public
+QUEUE=/opt/cios/app/run-queue
+PYTHON=/opt/cios/app/.venv/bin/python
+HELPER=/opt/cios/app/scripts/cios_run_queue.py
 
-exec "$PYTHON" "$HELPER" run-one --queue "$QUEUE" --app "$APP" --public "$PUB"
+if [ "$(/usr/bin/id -un)" != "cios" ]; then
+  echo "CI-OS host runner must run as cios" >&2
+  exit 2
+fi
+
+exec "$PYTHON" "$HELPER" run-pending --queue "$QUEUE" --app "$APP" --public "$PUB"

@@ -26,6 +26,11 @@ class QueueSafetyError(OSError):
     """Raised when queue state cannot be accessed without following links."""
 
 
+def require_cios_user() -> None:
+    if pwd.getpwuid(os.geteuid()).pw_name != "cios":
+        raise PermissionError("privileged CI-OS queue operation must run as cios")
+
+
 def _write_all(fd: int, payload: bytes) -> None:
     view = memoryview(payload)
     while view:
@@ -152,6 +157,25 @@ class RunQueue:
         finally:
             os.close(state_fd)
 
+    def _create_state_regular(self, name: str) -> int:
+        self._validate_name(name)
+        state_fd = self._state_fd()
+        try:
+            fd = os.open(
+                name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW | CLOEXEC,
+                0o600,
+                dir_fd=state_fd,
+            )
+        except OSError as exc:
+            raise QueueSafetyError(f"refusing unsafe CI-OS private state entry: {name}") from exc
+        finally:
+            os.close(state_fd)
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            raise QueueSafetyError(f"CI-OS private state entry is not regular: {name}")
+        return fd
+
     def _read_active(self) -> str | None:
         state_fd = self._state_fd()
         try:
@@ -222,15 +246,17 @@ class RunQueue:
                     continue
                 except FileNotFoundError:
                     pass
+                self._write_active(request_id)
                 try:
                     os.rename(name, running, src_dir_fd=self.fd, dst_dir_fd=self.fd)
                 except OSError:
+                    self._clear_active(request_id)
                     continue
                 moved_stat = os.stat(running, dir_fd=self.fd, follow_symlinks=False)
                 if (source_stat.st_dev, source_stat.st_ino) != (moved_stat.st_dev, moved_stat.st_ino):
                     os.unlink(running, dir_fd=self.fd)
+                    self._clear_active(request_id)
                     continue
-                self._write_active(request_id)
                 return request_id
             finally:
                 os.close(source_fd)
@@ -238,15 +264,35 @@ class RunQueue:
 
     def _append_log(self, request_id: str, message: str) -> None:
         name = f"{request_id}.log"
+        state_fd = self._state_fd()
         try:
-            fd = os.open(name, os.O_WRONLY | os.O_APPEND | NOFOLLOW | CLOEXEC, dir_fd=self.fd)
+            fd = os.open(name, os.O_WRONLY | os.O_APPEND | NOFOLLOW | CLOEXEC, dir_fd=state_fd)
             if not stat.S_ISREG(os.fstat(fd).st_mode):
+                os.close(fd)
                 raise QueueSafetyError("CI-OS runner log is not regular")
         except FileNotFoundError:
-            fd = self._create_regular(name)
+            os.close(state_fd)
+            fd = self._create_state_regular(name)
         except OSError:
-            self._write_atomic(name, message.encode())
+            try:
+                temporary = f".{name}.{uuid.uuid4().hex}.tmp"
+                fd = os.open(
+                    temporary,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW | CLOEXEC,
+                    0o600,
+                    dir_fd=state_fd,
+                )
+                try:
+                    _write_all(fd, message.encode())
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
+                os.replace(temporary, name, src_dir_fd=state_fd, dst_dir_fd=state_fd)
+            finally:
+                os.close(state_fd)
             return
+        else:
+            os.close(state_fd)
         try:
             _write_all(fd, message.encode())
             os.fsync(fd)
@@ -263,13 +309,9 @@ class RunQueue:
             pass
         self._clear_active(request_id)
 
-    def run_one(self, app: Path, public: Path) -> None:
-        request_id = self.claim_next()
-        if request_id is None:
-            print("no CI-OS runner requests found")
-            return
+    def _run_claimed(self, request_id: str, app: Path, public: Path) -> None:
         try:
-            log_fd = self._create_regular(f"{request_id}.log")
+            log_fd = self._create_state_regular(f"{request_id}.log")
         except QueueSafetyError:
             self.finish(request_id, 2)
             return
@@ -298,6 +340,17 @@ class RunQueue:
         except Exception as exc:  # noqa: BLE001 - boundary must always publish a result
             self._append_log(request_id, f"CI-OS runner failed: {type(exc).__name__}\n")
         self.finish(request_id, code)
+
+    def run_pending(self, app: Path, public: Path) -> None:
+        found = False
+        while True:
+            request_id = self.claim_next()
+            if request_id is None:
+                if not found:
+                    print("no CI-OS runner requests found")
+                return
+            found = True
+            self._run_claimed(request_id, app, public)
 
     def finalize(self, public: Path, service_result: str) -> None:
         request_id = self._read_active()
@@ -374,10 +427,10 @@ def _parser() -> argparse.ArgumentParser:
     result.add_argument("--queue", required=True, type=Path)
     result.add_argument("--request-id", required=True)
 
-    run_one = subparsers.add_parser("run-one")
-    run_one.add_argument("--queue", required=True, type=Path)
-    run_one.add_argument("--app", required=True, type=Path)
-    run_one.add_argument("--public", required=True, type=Path)
+    run_pending = subparsers.add_parser("run-pending")
+    run_pending.add_argument("--queue", required=True, type=Path)
+    run_pending.add_argument("--app", required=True, type=Path)
+    run_pending.add_argument("--public", required=True, type=Path)
 
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--queue", required=True, type=Path)
@@ -389,6 +442,8 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.command in {"run-pending", "finalize"}:
+            require_cios_user()
         with RunQueue(args.queue) as queue:
             if args.command == "enqueue":
                 print(
@@ -407,8 +462,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if code is None:
                     return 3
                 print(code)
-            elif args.command == "run-one":
-                queue.run_one(args.app, args.public)
+            elif args.command == "run-pending":
+                queue.run_pending(args.app, args.public)
             elif args.command == "finalize":
                 queue.finalize(args.public, args.service_result)
     except (OSError, UnicodeError, ValueError) as exc:

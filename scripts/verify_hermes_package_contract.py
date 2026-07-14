@@ -105,10 +105,11 @@ WRAPPER_INVARIANTS = {
     "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
     "wrapper missing fixed cios identity gate": '"$current_user" = "cios"',
-    "wrapper missing fixed systemd request queue": "CIOS_RUNNER_QUEUE_DIR:-/opt/cios/app/run-queue",
-    "wrapper wait must exceed systemd cleanup window": "CIOS_RUNNER_WAIT_SECONDS:-1800",
-    "wrapper missing secure queue enqueue": '"$queue_helper" enqueue',
-    "wrapper missing secure result read": '"$queue_helper" read-result',
+    "wrapper missing fixed systemd request queue": "QUEUE=/opt/cios/app/run-queue",
+    "wrapper wait must exceed systemd cleanup window": "WAIT_SECONDS=1800",
+    "wrapper missing secure queue enqueue": '"$HELPER" enqueue',
+    "wrapper missing secure result read": '"$HELPER" read-result',
+    "wrapper must sanitize the queue client environment": '"$ENV" -i PATH=/usr/bin:/bin',
     "wrapper missing marked-output cleanup": ".cios-output-dir",
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
@@ -116,15 +117,17 @@ WRAPPER_INVARIANTS = {
 }
 
 HOST_RUNNER_INVARIANTS = {
-    "host runner must default to /opt CI-OS app mount": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
-    "host runner must default to /opt CI-OS public mount": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
+    "host runner must fix the /opt CI-OS app mount": "APP=/opt/cios/app",
+    "host runner must fix the /opt CI-OS public mount": "PUB=/opt/cios/public",
     "host runner missing secure queue helper": "cios_run_queue.py",
-    "host runner must delegate one request to queue helper": '"$HELPER" run-one',
+    "host runner must require cios identity": '$(/usr/bin/id -un)" != "cios"',
+    "host runner must drain requests through queue helper": '"$HELPER" run-pending',
 }
 
 RUN_FINALIZER_INVARIANTS = {
     "run finalizer missing systemd result handling": "SERVICE_RESULT",
     "run finalizer missing secure queue helper": "cios_run_queue.py",
+    "run finalizer must require cios identity": '$(/usr/bin/id -un)" != "cios"',
     "run finalizer must delegate finalization": '"$HELPER" finalize',
 }
 
@@ -133,7 +136,10 @@ RUN_QUEUE_INVARIANTS = {
     "run queue missing atomic state replacement": "os.replace",
     "run queue missing private active state": '".state"',
     "run queue missing unguessable request ids": "uuid.uuid4",
-    "run queue missing one-request execution": "def run_one",
+    "run queue missing serial request draining": "def run_pending",
+    "run queue missing privileged cios identity check": "require_cios_user()",
+    "run queue raw logs must be cios-private": "_create_state_regular",
+    "run queue private files must use mode 0600": "0o600",
     "run queue missing timeout exit mapping": "124 if timed_out else 2",
     "run queue missing blocked timeout status": '"blocked_runtime_timeout"',
 }
@@ -164,9 +170,11 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
     "host permissions must protect Hermes CI-OS env file": 'chmod 640 "$ENV_FILE"',
     "host permissions must install host-readable CI-OS env file": 'install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"',
-    "host permissions must install executable run finalizer": 'chmod 755 "$APP/deploy/cios-run-finalize.sh"',
+    "host permissions must protect run finalizer for cios only": 'chmod 700 "$APP/deploy/cios-run-finalize.sh"',
     "host permissions must install executable secure queue helper": 'chmod 755 "$APP/scripts/cios_run_queue.py"',
     "host permissions must make app body cios-private": 'chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"',
+    "host permissions must make host runner cios-private": 'chmod 700 "$APP/deploy/cios-host-runner.sh"',
+    "host permissions must remove group write from code trees": 'chmod -R g-w,o-w "$code_dir"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
@@ -413,19 +421,27 @@ def collect_wrapper_errors(app_dir: Path) -> list[str]:
 
 
 def collect_host_runner_errors(app_dir: Path) -> list[str]:
-    return collect_text_invariant_errors(
+    errors = collect_text_invariant_errors(
         app_dir,
         rel_path="deploy/cios-host-runner.sh",
         invariants=HOST_RUNNER_INVARIANTS,
     )
+    path = app_dir / "deploy/cios-host-runner.sh"
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in ("CIOS_APP_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")):
+        errors.append("host runner permits caller-controlled execution paths")
+    return errors
 
 
 def collect_run_finalizer_errors(app_dir: Path) -> list[str]:
-    return collect_text_invariant_errors(
+    errors = collect_text_invariant_errors(
         app_dir,
         rel_path="deploy/cios-run-finalize.sh",
         invariants=RUN_FINALIZER_INVARIANTS,
     )
+    path = app_dir / "deploy/cios-run-finalize.sh"
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in ("CIOS_APP_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")):
+        errors.append("run finalizer permits caller-controlled execution paths")
+    return errors
 
 
 def collect_run_queue_errors(app_dir: Path) -> list[str]:

@@ -2,12 +2,17 @@
 # Finalize an interrupted CI-OS systemd run after its cgroup has been stopped.
 set -eu
 
-APP="${CIOS_APP_DIR:-/opt/cios/app}"
-PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
-QUEUE="${CIOS_RUNNER_QUEUE_DIR:-$APP/run-queue}"
+APP=/opt/cios/app
+PUB=/opt/cios/public
+QUEUE=/opt/cios/app/run-queue
 service_result="${SERVICE_RESULT:-unknown}"
-PYTHON="${CIOS_PYTHON_BIN:-$APP/.venv/bin/python}"
-HELPER="${CIOS_RUN_QUEUE_HELPER:-$APP/scripts/cios_run_queue.py}"
+PYTHON=/opt/cios/app/.venv/bin/python
+HELPER=/opt/cios/app/scripts/cios_run_queue.py
+
+if [ "$(/usr/bin/id -un)" != "cios" ]; then
+  echo "CI-OS run finalizer must run as cios" >&2
+  exit 2
+fi
 
 exec "$PYTHON" "$HELPER" finalize \
   --queue "$QUEUE" \
