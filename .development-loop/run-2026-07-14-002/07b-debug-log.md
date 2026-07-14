@@ -73,3 +73,18 @@ could not import the src-layout package after restart because its systemd unit
 omitted `PYTHONPATH=/opt/cios/app/src`. A localhost-only drop-in restored HTTP
 200. TDD reproduced all three package-contract failures; the versioned admin
 unit, executable archive mode, and preflight checks are being corrected.
+
+## Phase-order blocker resolved
+
+Arijit authorized read-only Looker Studio inspection and manual CSV export on
+2026-07-14. The current seven-day page export contains a directly mappable,
+nonzero `Agent Search` signal: `/products/ai-search` with 786 sessions from
+2026-07-07 through 2026-07-13. Raw analytics remain private and untracked. A
+prior landing-page pivot contains 751 sessions for the same path, but its chart
+dimension differs from the current page export, so no change percentage will
+be inferred from those two values.
+
+This is a changed hypothesis for the next staging attempt: preserve the failed
+candidate as evidence, validate and import the one-row real demand input, then
+build a fresh immutable candidate from the post-tag package fixes and rerun the
+complete Stage 12 matrix.

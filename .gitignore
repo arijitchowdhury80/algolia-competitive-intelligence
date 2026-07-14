@@ -8,6 +8,9 @@ __pycache__/
 .pytest_cache/
 .claude/worktrees/
 
+# Private tenant analytics and manual demand exports never belong in packages.
+data/
+
 # Generated local verification/runtime artifacts. Preserve when needed as
 # evidence, but do not mix into source commits.
 out/

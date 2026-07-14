@@ -1,6 +1,6 @@
 # Staging Report
 
-Status: FAILED AND ROLLED BACK; AWAITING PHASE-ORDER DECISION
+Status: FAILED CANDIDATE RETAINED; DEMAND-PATH REORDER AUTHORIZED
 
 Draft package PR #1 targets the dedicated `ci-os-package-main` source branch.
 Its GitHub static/unit and Postgres integration checks pass. The PR remains a
@@ -120,17 +120,70 @@ Candidate `47d3bd7` is not eligible for another staging attempt. Its immutable
 tag and files remain evidence; a new candidate must include the executable and
 admin import-path fixes and pass CI before use.
 
-## Required human decision
+## Human decision: bring the demand input forward
 
-The recommended choice is to amend the Phase 2 live gate so a fresh,
-run-bound blocked diagnostic plus the planted-defect matrix proves publication
-integrity, while the legacy decision surface remains live until Phase 4
-produces the first truthful decision generation. The alternative is to
-authorize and provide the GA4/Looker demand path now, explicitly reordering
-Phase 4 ahead of the Phase 2 decision-publication proof.
+On 2026-07-14 Arijit authorized read-only access to the private Algolia Looker
+Studio report and manual CSV export so the real demand input can be supplied
+before the final Phase 2 publication proof. This is an explicit, narrow
+reordering of the Phase 4 demand-input dependency. It does not authorize Scout,
+GA4 credential setup, report editing, production UI work, Caddy or firewall
+changes, or Hermes core changes.
 
-No Scout, GA4/Looker, Argus intelligence, production UI, Caddy, firewall, or
-Hermes core work began during this staging attempt.
+The authenticated report was inspected without editing it. The selected
+current window was 2026-07-07 through 2026-07-13 and the comparison window was
+2026-06-30 through 2026-07-06. Raw exports were saved only in the untracked
+`data/` directory of the separate local CI-OS checkout and must not be committed
+to GitHub. Verified raw evidence:
+
+- `algolia-looker-page-metrics_2026-07-07_2026-07-13.csv`: 100 parsed
+  data rows; SHA-256
+  `d61c96717f3cb3682baf0c7c2da47b6ca31a41989608c89ff42df8904c50149c`.
+- `algolia-looker-landing-page-metrics_2026-07-07_2026-07-13.csv`: 100
+  parsed data rows; SHA-256
+  `2d641d6071084a05b6a0cfb8a64b3b015f977278b24af429be9c24c097ce2cee`.
+- `algolia-looker-campaign-metrics_2026-07-07_2026-07-13.csv`: 100 parsed
+  data rows; SHA-256
+  `666783216400646be80d7f7a800a3d5db02f7881db9449d9a61652cc5094b48e`.
+- `algolia-looker-campaign-metrics_2026-06-30_2026-07-06.csv`: 100 parsed
+  data rows; SHA-256
+  `8b8444de3f8af844712f402167df30a785771d76555eff13356859368d019124`.
+- `algolia-looker-landing-page-device-sessions_2026-06-30_2026-07-06.csv`:
+  10,558 parsed data rows; SHA-256
+  `ad27f9db658c519035e9e6f6dfd969dba9559c9bd84668d1c4608ee62bbb0243`.
+
+The package `.gitignore` excludes `data/`; private tenant exports are not
+package inputs and cannot enter a release through a broad Git add.
+
+The eligible minimum intake row is the current `/products/ai-search` page:
+786 sessions in the selected seven-day window, mapped explicitly to the active
+Argus topic `Agent Search`. The prior landing-page export contains 751 sessions
+for the same path, but it uses a different chart dimension from the current
+page export. It is corroborating evidence only; CI-OS must not calculate or
+publish a synthetic week-over-week change from unlike dimensions. Coverage is
+therefore one directly mapped active topic with a real nonzero metric and
+explicit unknown coverage for the remaining topics.
+
+Package-owned local validation against the live Argus plan passed before any
+upload: `status=prepared`, `ready_count=1`, `normalized_row_count=1`,
+`skipped_row_count=0`, `duplicate_row_count=0`, coverage `covered`, one matched
+plan topic, zero missing topics, and zero off-plan rows. The normalized source
+fingerprint is
+`5ce535e8db8cce5d3decebd6c509706b065b60b6cc3f37ae1b1aba5bb6f79352`.
+The focused importer and demand fast-lane suite passed `32 passed`.
+
+Fresh-candidate local verification also passed: the default suite reported
+`1321 passed, 3 skipped, 23 deselected`; Ruff passed; Pyright reported zero
+errors, warnings, or information findings; strict MyPy passed; and the Hermes
+package contract passed. The workstation-wide `pip check` still reports two
+unrelated pre-existing `python-jobspy` constraints against the globally
+installed NumPy and regex versions. No package dependency changed in this
+slice; the clean GitHub Actions environment remains the authoritative package
+dependency gate before a new candidate can be tagged or installed.
+
+Candidate `47d3bd7` remains failed and ineligible. The next attempt must use a
+fresh immutable candidate containing the package fixes after that tag, import
+the verified demand row through the package-owned intake path, and rerun every
+remaining Stage 12 gate before public cutover.
 
 ## Proposed bounded staging sequence
 

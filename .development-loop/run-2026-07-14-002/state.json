@@ -3,7 +3,7 @@
   "run_id": "2026-07-14-002",
   "project": "CI-OS",
   "feature": "Phase 2 atomic run-bound publication integrity",
-  "status": "WAITING_FOR_HUMAN",
+  "status": "IN_PROGRESS",
   "current_stage": "STAGING",
   "builder": "module-builder",
   "retry_counts": {
@@ -44,7 +44,26 @@
     "validate": "PASSED_8_LAYERS_1318_TESTS",
     "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
     "github_ci": "PASSED_RUN_29326371217",
+    "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "47d3bd7_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "FAILED_ROLLED_BACK_AWAITING_PHASE_ORDER_DECISION"
+    "staging": "DEMAND_PATH_REORDER_AUTHORIZED_INPUT_VALIDATED_READY_FOR_FRESH_CANDIDATE"
+  },
+  "human_decisions": [
+    {
+      "date": "2026-07-14",
+      "decision": "AUTHORIZE_PRIVATE_LOOKER_MANUAL_EXPORT_AND_BRING_DEMAND_INPUT_FORWARD",
+      "scope": "READ_ONLY_REPORT_INSPECTION_MANUAL_CSV_EXPORT_NO_GA4_CREDENTIALS_NO_REPORT_EDITS"
+    }
+  ],
+  "staging_demand_evidence": {
+    "current_period": "2026-07-07/2026-07-13",
+    "previous_period": "2026-06-30/2026-07-06",
+    "eligible_topic": "Agent Search",
+    "eligible_metric": "sessions",
+    "eligible_value": 786,
+    "source_fingerprint": "5ce535e8db8cce5d3decebd6c509706b065b60b6cc3f37ae1b1aba5bb6f79352",
+    "prepare_status": "COVERED_READY_1_NORMALIZED_1_SKIPPED_0_OFF_PLAN_0",
+    "raw_exports_private_and_untracked": true,
+    "week_over_week_change": "UNKNOWN_UNLIKE_CHART_DIMENSIONS"
   }
 }
