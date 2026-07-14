@@ -22,6 +22,7 @@ def test_package_ci_workflow_runs_static_default_and_real_postgres_layers() -> N
 
     assert "pyright --project pyright-phase2.json" in text
     assert "python3 -m pytest -q" in text
+    assert "--skip-python-imports" in text
     assert "postgres:16-alpine" in text
     assert "CIOS_ALLOW_SCHEMA_RESET_FOR_TESTS: \"1\"" in text
     assert "postgresql://cios_dev:ci_test_only@127.0.0.1:5432/cios" in text

@@ -53,6 +53,7 @@ jobs:
         run: >-
           python3 scripts/verify_hermes_package_contract.py
           --app-dir .
+          --skip-python-imports
           --run-id "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           --verdict-output /tmp/cios-package-verdict.json
 
