@@ -233,6 +233,7 @@ PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
 PROCESS_SUPERVISOR_INVARIANTS = {
     "process supervisor missing process-group termination": "os.killpg",
     "process supervisor missing active-process shutdown": "terminate_all",
+    "process supervisor missing descendant-tree discovery": "_snapshot_descendants",
 }
 
 DAILY_RUNTIME_SECURITY_INVARIANTS = {
@@ -287,6 +288,65 @@ IMPORT_CHECKS = [
 TEST_DEPENDENCY_IMPORTS = [
     "pytest_asyncio",
 ]
+
+PROCESS_SUPERVISION_PROBE = r'''
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from cios.platform.process_supervisor import PROCESS_GROUPS
+
+child_code = r"""
+import signal
+import sys
+import time
+from pathlib import Path
+
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+time.sleep(0.8)
+Path(sys.argv[1]).write_text("survived", encoding="utf-8")
+"""
+
+parent_code = r"""
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+subprocess.Popen(
+    [sys.executable, "-c", sys.argv[1], sys.argv[2]],
+    start_new_session=True,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+Path(sys.argv[3]).write_text("ready", encoding="utf-8")
+time.sleep(10)
+"""
+
+with tempfile.TemporaryDirectory(prefix="cios-process-probe-") as temp_dir:
+    marker = Path(temp_dir) / "detached-survivor"
+    ready = Path(temp_dir) / "ready"
+    parent = subprocess.Popen(
+        [sys.executable, "-c", parent_code, child_code, str(marker), str(ready)],
+        start_new_session=True,
+    )
+    PROCESS_GROUPS.register(parent)
+    try:
+        deadline = time.monotonic() + 1.0
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if not ready.exists():
+            PROCESS_GROUPS.terminate(parent)
+            raise SystemExit(3)
+        PROCESS_GROUPS.terminate(parent)
+    finally:
+        PROCESS_GROUPS.unregister(parent)
+    time.sleep(1.0)
+    raise SystemExit(2 if marker.exists() else 0)
+'''
 
 
 def collect_path_errors(app_dir: Path) -> list[str]:
@@ -495,6 +555,31 @@ def collect_import_errors(app_dir: Path) -> list[str]:
     return [f"python import preflight failed: {detail}"]
 
 
+def collect_process_supervision_runtime_errors(app_dir: Path) -> list[str]:
+    python_bin = app_dir / ".venv" / "bin" / "python"
+    if not python_bin.exists():
+        return []
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(app_dir / "src")
+    try:
+        completed = subprocess.run(
+            [str(python_bin), "-c", PROCESS_SUPERVISION_PROBE],
+            text=True,
+            capture_output=True,
+            env=env,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return ["process supervision self-test failed: runtime probe timed out"]
+    if completed.returncode == 0:
+        return []
+    if completed.returncode == 2:
+        return ["process supervision self-test failed: detached descendant survived cleanup"]
+    return ["process supervision self-test failed: runtime probe error"]
+
+
 def collect_test_dependency_errors(app_dir: Path) -> list[str]:
     python_bin = app_dir / ".venv" / "bin" / "python"
     if not python_bin.exists():
@@ -569,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_admin_app_product_surface_extraction_errors(app_dir))
         if not args.skip_python_imports:
             errors.extend(collect_import_errors(app_dir))
+            errors.extend(collect_process_supervision_runtime_errors(app_dir))
         if args.require_scout:
             errors.extend(collect_scout_errors(args.scout_bin))
         if args.require_test_deps:

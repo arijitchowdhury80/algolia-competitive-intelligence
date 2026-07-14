@@ -108,3 +108,36 @@ the tests were moved to that boundary. No production behavior was weakened.
 - Affected runtime/deploy set: 234 passed.
 - Full suite: 1,221 passed, 1 skipped, 23 deselected.
 - Late descendant marker: absent after the timeout grace window.
+
+## Detached-Session Review Debug Cycle
+
+### Failure
+
+Independent review of `d5cc5d4` proved that a descendant calling `setsid()`
+could leave the original process group and write a late marker after both the
+daily and product-surface timeout handlers returned. The static package guard
+also accepted the incomplete supervisor.
+
+### Confirmed hypothesis
+
+Process-group cleanup is sufficient only while descendants remain in the
+group. Snapshotting the trusted command's descendant tree before termination,
+then signaling detached descendant groups and PIDs as well as the root group,
+closes the reproduced escape without changing Hermes or adding a dependency.
+
+### Resolution
+
+- The supervisor snapshots PID, parent PID, and process-group ID with a bounded
+  `ps` call before root termination.
+- Detached descendant groups and PIDs receive bounded TERM/KILL handling.
+- Daily and product-surface regressions now launch a real `setsid()` child and
+  prove no late marker is written.
+- Deployed package preflight now runs the same behavior as a runtime self-test;
+  an intentionally unsafe process-group-only supervisor is rejected.
+
+### Regression evidence
+
+- Five detached-session and preflight regressions: passed.
+- Affected runtime/deployment set: 239 passed.
+- Full suite: 1,226 passed, 1 skipped, 23 deselected.
+- Package contract, Python compilation, shell syntax, and diff checks: passed.

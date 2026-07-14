@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -299,6 +300,7 @@ install_shutdown_handlers()
 
 
 SAFE_PROCESS_SUPERVISOR = """
+descendants = self._snapshot_descendants(process.pid)
 os.killpg(process.pid, signal.SIGTERM)
 PROCESS_GROUPS.terminate_all()
 """
@@ -531,6 +533,26 @@ def _run_preflight(app: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
     )
+
+
+def _load_preflight_module():
+    spec = importlib.util.spec_from_file_location("verify_hermes_package_contract", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _make_runtime_supervisor_app(tmp_path: Path, supervisor_source: str) -> Path:
+    app = tmp_path / "runtime-supervisor-app"
+    module_path = app / "src/cios/platform/process_supervisor.py"
+    module_path.parent.mkdir(parents=True)
+    module_path.write_text(supervisor_source, encoding="utf-8")
+    (app / "src/cios/__init__.py").write_text("", encoding="utf-8")
+    (app / "src/cios/platform/__init__.py").write_text("", encoding="utf-8")
+    python_bin = app / ".venv/bin/python"
+    python_bin.parent.mkdir(parents=True)
+    python_bin.symlink_to(sys.executable)
+    return app
 
 
 def _run_preflight_with_scout(app: Path, scout_bin: str, *, path: str = "") -> subprocess.CompletedProcess[str]:
@@ -842,6 +864,56 @@ def test_preflight_fails_when_product_surface_executor_omits_batch_deadline_acco
 
     assert result.returncode == 2
     assert "product-surface executor missing batch deadline" in result.stderr
+
+
+def test_preflight_fails_when_process_supervisor_omits_detached_descendant_discovery(tmp_path):
+    app = _make_app(tmp_path)
+    supervisor = app / "src/cios/platform/process_supervisor.py"
+    supervisor.write_text(
+        SAFE_PROCESS_SUPERVISOR.replace("_snapshot_descendants", "_ignore_descendants"),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "process supervisor missing descendant-tree discovery" in result.stderr
+
+
+def test_process_supervision_runtime_self_test_passes_current_implementation(tmp_path):
+    module = _load_preflight_module()
+    supervisor_source = (ROOT / "src/cios/platform/process_supervisor.py").read_text(
+        encoding="utf-8"
+    )
+    app = _make_runtime_supervisor_app(tmp_path, supervisor_source)
+
+    assert module.collect_process_supervision_runtime_errors(app) == []
+
+
+def test_process_supervision_runtime_self_test_rejects_detached_descendant_escape(tmp_path):
+    module = _load_preflight_module()
+    unsafe_supervisor = """
+import os
+import signal
+
+class UnsafeRegistry:
+    def register(self, process):
+        pass
+
+    def unregister(self, process):
+        pass
+
+    def terminate(self, process):
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=1)
+
+PROCESS_GROUPS = UnsafeRegistry()
+"""
+    app = _make_runtime_supervisor_app(tmp_path, unsafe_supervisor)
+
+    assert module.collect_process_supervision_runtime_errors(app) == [
+        "process supervision self-test failed: detached descendant survived cleanup"
+    ]
 
 
 def test_preflight_fails_when_runtime_redaction_module_missing(tmp_path):

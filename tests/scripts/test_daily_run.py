@@ -2117,6 +2117,30 @@ def test_run_checked_timeout_kills_descendant_process_group(daily_run, tmp_path)
     assert not orphan_marker.exists()
 
 
+def test_run_checked_timeout_kills_detached_descendant(daily_run, tmp_path):
+    orphan_marker = tmp_path / "daily-detached-orphan.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]], start_new_session=True); "
+        "time.sleep(5)"
+    )
+
+    with pytest.raises(RuntimeError, match="timed out after 0.2s"):
+        daily_run._run_checked(
+            [sys.executable, "-c", parent_code, str(orphan_marker)],
+            timeout_seconds=0.2,
+        )
+    time.sleep(1.0)
+
+    assert not orphan_marker.exists()
+
+
 def test_run_main_redacts_uncaught_exception(daily_run, monkeypatch, capsys):
     monkeypatch.setenv("GEMINI_API_KEY", "phase-one-main-secret")
 

@@ -89,3 +89,32 @@ timeout diagnostic retention, and the corresponding package-preflight guard.
 - Shell syntax, Python compilation, and `git diff --check`: passed.
 
 Final security and code re-review remain mandatory before deployment.
+
+## Detached-Session Rectification
+
+### Red
+
+Three initial regressions failed against `d5cc5d4`: daily and product-surface
+detached descendants wrote late markers, and package preflight accepted a
+supervisor without descendant discovery. Two additional preflight tests were
+red because the dynamic runtime probe did not yet exist.
+
+### Green
+
+- Shared supervision now snapshots the descendant tree before termination and
+  signals detached groups/PIDs alongside the root process group.
+- Both execution paths kill a real detached, TERM-resistant descendant before
+  it can write after timeout.
+- Full package preflight executes a bounded detached-descendant cleanup probe.
+- The probe accepts the current implementation and rejects an intentionally
+  unsafe process-group-only supervisor.
+
+### Verification
+
+- Five exact regressions: 5 passed.
+- Affected test set: 239 passed in 32.00 seconds.
+- Full suite: 1,226 passed, 1 skipped, 23 deselected in 40.18 seconds.
+- Package preflight: passed.
+- Shell syntax, Python compilation, and `git diff --check`: passed.
+
+Final security and code re-review remain mandatory before deployment.

@@ -7,6 +7,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections import defaultdict
 
 
 class ProcessGroupRegistry:
@@ -23,15 +24,17 @@ class ProcessGroupRegistry:
             self._active.discard(process)
 
     def terminate(self, process: subprocess.Popen[str], *, grace_seconds: float = 0.5) -> None:
-        group_id = process.pid
+        descendants = self._snapshot_descendants(process.pid)
+        self._signal_descendants(descendants, signal.SIGTERM)
         try:
-            os.killpg(group_id, signal.SIGTERM)
+            os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
-            return
+            pass
         deadline = time.monotonic() + grace_seconds
-        while time.monotonic() < deadline and self._group_exists(process):
+        while time.monotonic() < deadline and self._tree_exists(process, descendants):
             time.sleep(0.05)
-        if self._group_exists(process):
+        if self._tree_exists(process, descendants):
+            self._signal_descendants(descendants, signal.SIGKILL)
             self._force_kill(process)
         self._reap(process, grace_seconds=grace_seconds)
 
@@ -50,6 +53,68 @@ class ProcessGroupRegistry:
         except PermissionError:
             return process.poll() is None
         return True
+
+    @classmethod
+    def _tree_exists(
+        cls,
+        process: subprocess.Popen[str],
+        descendants: list[tuple[int, int]],
+    ) -> bool:
+        return cls._group_exists(process) or any(cls._pid_exists(pid) for pid, _ in descendants)
+
+    @staticmethod
+    def _pid_exists(pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    @staticmethod
+    def _snapshot_descendants(root_pid: int) -> list[tuple[int, int]]:
+        try:
+            completed = subprocess.run(
+                ["ps", "-e", "-o", "pid=,ppid=,pgid="],
+                text=True,
+                capture_output=True,
+                timeout=1,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return []
+        children: dict[int, list[tuple[int, int]]] = defaultdict(list)
+        for line in completed.stdout.splitlines():
+            fields = line.split()
+            if len(fields) != 3:
+                continue
+            pid, parent_pid, group_id = (int(field) for field in fields)
+            children[parent_pid].append((pid, group_id))
+        descendants: list[tuple[int, int]] = []
+        pending = [root_pid]
+        while pending:
+            parent_pid = pending.pop()
+            for child in children.get(parent_pid, []):
+                descendants.append(child)
+                pending.append(child[0])
+        return list(reversed(descendants))
+
+    @classmethod
+    def _signal_descendants(cls, descendants: list[tuple[int, int]], signum: int) -> None:
+        current_group = os.getpgrp()
+        signaled_groups: set[int] = set()
+        for pid, group_id in descendants:
+            if group_id == pid and group_id != current_group and group_id not in signaled_groups:
+                try:
+                    os.killpg(group_id, signum)
+                except (ProcessLookupError, PermissionError):
+                    pass
+                signaled_groups.add(group_id)
+            try:
+                os.kill(pid, signum)
+            except (ProcessLookupError, PermissionError):
+                pass
 
     @staticmethod
     def _force_kill(process: subprocess.Popen[str]) -> None:

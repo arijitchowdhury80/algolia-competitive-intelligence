@@ -27,3 +27,15 @@ schema, and stay inside the autonomous Phase 1 recovery scope.
    supervision boundary.
 6. Run exact regressions, affected tests, package/syntax/compile checks, the
    full suite, then security and code re-review before deployment.
+
+## Detached-Session Review Actions
+
+1. Reproduce the escape in both execution paths with a descendant that calls
+   `setsid()`, ignores TERM, and writes a delayed marker.
+2. Extend the shared supervisor to snapshot and terminate detached descendants
+   within the same bounded cleanup window.
+3. Add a deployed-package runtime self-test that rejects a process-group-only
+   implementation, while retaining the fast static source contract.
+4. Rerun exact regressions, affected tests, package/syntax/compile checks, and
+   the full suite.
+5. Require converged security and code-review approval before deployment.

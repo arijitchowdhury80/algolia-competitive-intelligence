@@ -57,3 +57,26 @@ Verdict: CHANGES REQUIRED.
 All findings were reproduced or confirmed against the code. They are within
 the Phase 1 process-safety contract and were accepted for immediate TDD
 rectification. No deployment was attempted.
+
+## Detached-Session Re-review
+
+Reviewed commit: `d5cc5d49a613a26c805383ea7c0c26f7ed548aa8`
+
+Verdict: CHANGES REQUIRED.
+
+### Critical
+
+1. Both timeout paths killed only the original process group. A descendant that
+   created a new session survived cleanup and wrote a reproduced late marker.
+
+### Important
+
+1. Package preflight's source-text guard passed despite the detached-session
+   escape and therefore did not prove deployed cleanup behavior.
+
+### Disposition
+
+Both findings violate the Phase 1 no-orphan-work gate. They were reproduced,
+accepted for a second bounded rectification cycle, and resolved with real
+process regressions plus a dynamic deployed-package probe. No deployment was
+attempted.

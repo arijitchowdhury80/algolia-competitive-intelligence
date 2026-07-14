@@ -401,6 +401,37 @@ def test_execute_plan_item_timeout_kills_descendant_process_group(tmp_path) -> N
     assert not orphan_marker.exists()
 
 
+def test_execute_plan_item_timeout_kills_detached_descendant(tmp_path) -> None:
+    module = _load_module()
+    orphan_marker = tmp_path / "detached-orphan-wrote-after-timeout.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]], start_new_session=True); "
+        "time.sleep(5)"
+    )
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [sys.executable, "-c", parent_code, str(orphan_marker)],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=0.2, max_workers=1)
+    time.sleep(1.0)
+
+    assert summary["results"][0]["status"] == "timed_out"
+    assert not orphan_marker.exists()
+
+
 def test_execute_plan_batch_timeout_records_every_item_and_kills_active_groups(tmp_path) -> None:
     module = _load_module()
     items = []

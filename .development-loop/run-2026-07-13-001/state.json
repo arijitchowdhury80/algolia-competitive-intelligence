@@ -9,7 +9,7 @@
   "retry_counts": {
     "BUILD": 0,
     "DEBUG": 0,
-    "RECTIFY": 1,
+    "RECTIFY": 2,
     "STAGING": 0
   },
   "strike_log": [],
@@ -21,12 +21,12 @@
     "arch_review": "APPROVED_BY_GOAL_CHARTER",
     "plan": "APPROVED_BY_GOAL_CHARTER",
     "build": "PASSED",
-    "local_tests": "PASSED_1221_1_SKIPPED_23_DESELECTED",
+    "local_tests": "PASSED_1226_1_SKIPPED_23_DESELECTED",
     "package_contract": "PASSED",
     "code_health": "PASSED",
-    "security": "PENDING_FINAL_RECHECK_AFTER_REVIEW2",
-    "code_review": "PENDING_FINAL_REREVIEW_AFTER_CHANGES_REQUIRED",
-    "rectify": "PASSED_REVIEW2_RECTIFICATION",
+    "security": "PENDING_FINAL_RECHECK_AFTER_REVIEW3",
+    "code_review": "PENDING_FINAL_REREVIEW_AFTER_REVIEW3_RECTIFICATION",
+    "rectify": "PASSED_REVIEW3_RECTIFICATION",
     "phase_1_live": "PENDING"
   }
 }

@@ -10,8 +10,10 @@ their deployment preflight/test coverage.
 - `scripts/execute_product_surface_plan.py`: 47 lines; thin CLI only.
 - `src/cios/intelligence/product_surface_executor.py`: 294 lines; largest
   function 38 lines.
-- `src/cios/platform/process_supervisor.py`: 85 lines; largest method 12 lines.
+- `src/cios/platform/process_supervisor.py`: 150 lines; largest method 26 lines.
 - `src/cios/platform/redaction.py`: 43 lines; one focused diagnostic sanitizer.
+- The pre-existing package preflight remains a large 674-line contract module,
+  but the new runtime-check function is below the 50-line function threshold.
 - No new function exceeds the development-loop 50-line threshold.
 - No new module exceeds the 350-line threshold.
 
@@ -32,13 +34,13 @@ separate ownership boundaries.
 
 ## Evidence
 
-- Full tests after corrected-commit rectification: 1,221 passed, 1 skipped, 23 deselected.
-- Focused package preflight tests: 69 passed.
-- Affected runtime and deployment tests: 234 passed.
+- Full tests after detached-session rectification: 1,226 passed, 1 skipped, 23 deselected.
+- Focused detached-session and runtime-preflight regressions: 5 passed.
+- Affected runtime and deployment tests: 239 passed.
 - Package preflight on the working package: passed.
 - Shell syntax and diff whitespace checks: passed.
 
 ## Verdict
 
-GOOD. Advance to independent code review. Live Phase 1 verification remains
-required before the phase gate can pass.
+GOOD. Advance to final independent security and code re-review. Live Phase 1
+verification remains required before the phase gate can pass.
