@@ -32,9 +32,9 @@ separate ownership boundaries.
 
 ## Evidence
 
-- Full tests after security rectification: 1,215 passed, 1 skipped, 23 deselected.
-- Focused package preflight tests: 68 passed.
-- Affected runtime and deployment tests: 228 passed.
+- Full tests after corrected-commit rectification: 1,221 passed, 1 skipped, 23 deselected.
+- Focused package preflight tests: 69 passed.
+- Affected runtime and deployment tests: 234 passed.
 - Package preflight on the working package: passed.
 - Shell syntax and diff whitespace checks: passed.
 

@@ -21,12 +21,12 @@
     "arch_review": "APPROVED_BY_GOAL_CHARTER",
     "plan": "APPROVED_BY_GOAL_CHARTER",
     "build": "PASSED",
-    "local_tests": "PASSED_1215_1_SKIPPED_23_DESELECTED",
+    "local_tests": "PASSED_1221_1_SKIPPED_23_DESELECTED",
     "package_contract": "PASSED",
     "code_health": "PASSED",
-    "security": "PASSED_INDEPENDENT_GO",
-    "code_review": "PENDING_CORRECTED_COMMIT",
-    "rectify": "PASSED_SECURITY_RECTIFICATION",
+    "security": "PENDING_FINAL_RECHECK_AFTER_REVIEW2",
+    "code_review": "PENDING_FINAL_REREVIEW_AFTER_CHANGES_REQUIRED",
+    "rectify": "PASSED_REVIEW2_RECTIFICATION",
     "phase_1_live": "PENDING"
   }
 }

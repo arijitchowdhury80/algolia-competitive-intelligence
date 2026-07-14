@@ -6,6 +6,7 @@ import asyncio
 import importlib.util
 import json
 import sys
+import time
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from contextlib import nullcontext
@@ -655,7 +656,7 @@ def test_product_market_chain_blocks_empty_product_surface_outputs_before_synthe
             raise AssertionError(f"{script_name} should not run after empty product surface outputs")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1278,7 +1279,7 @@ def test_product_market_chain_passes_discovered_looker_drop_folder_exports(daily
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
     monkeypatch.setattr(daily_run, "SCRIPT_DIR", app_dir / "scripts")
 
     result = daily_run.run_product_market_chain_if_enabled(
@@ -1589,7 +1590,7 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1783,7 +1784,7 @@ def test_product_market_chain_refreshes_ledger_with_learning_plan_after_synthesi
             )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1862,7 +1863,7 @@ def test_product_market_chain_can_export_ga4_demand_before_payload_build(daily_r
             return SimpleNamespace(returncode=0, stdout='{"verdict":"watch"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1914,7 +1915,7 @@ def test_export_ga4_demand_if_enabled_uses_rolling_window_when_dates_are_omitted
         calls.append([str(part) for part in cmd])
         return SimpleNamespace(returncode=0, stdout='{"record_count":3,"status":"ok"}', stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     summary = daily_run.export_ga4_demand_if_enabled(
         env={
@@ -1966,7 +1967,7 @@ def test_product_market_chain_emits_hermes_stage_heartbeats(daily_run, tmp_path,
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -2092,6 +2093,44 @@ def test_run_checked_redacts_sensitive_environment_values(daily_run, monkeypatch
     assert "[redacted]" in str(exc_info.value)
 
 
+def test_run_checked_timeout_kills_descendant_process_group(daily_run, tmp_path):
+    orphan_marker = tmp_path / "daily-orphan-after-timeout.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]]); "
+        "time.sleep(5)"
+    )
+
+    with pytest.raises(RuntimeError, match="timed out after 0.2s"):
+        daily_run._run_checked(
+            [sys.executable, "-c", parent_code, str(orphan_marker)],
+            timeout_seconds=0.2,
+        )
+    time.sleep(1.0)
+
+    assert not orphan_marker.exists()
+
+
+def test_run_main_redacts_uncaught_exception(daily_run, monkeypatch, capsys):
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-main-secret")
+
+    async def fail_main():
+        raise RuntimeError("phase-one-main-secret")
+
+    monkeypatch.setattr(daily_run, "main", fail_main)
+
+    assert daily_run.run_main() == 2
+    captured = capsys.readouterr()
+    assert "phase-one-main-secret" not in captured.err
+    assert "[redacted]" in captured.err
+
+
 def test_product_market_chain_returns_failed_summary_with_stage_ledger(daily_run, tmp_path, monkeypatch):
     def fake_run(cmd, capture_output, text, timeout, check):
         del capture_output, text, timeout, check
@@ -2100,7 +2139,7 @@ def test_product_market_chain_returns_failed_summary_with_stage_ledger(daily_run
             return SimpleNamespace(returncode=1, stdout="", stderr="boom")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -2447,6 +2486,39 @@ def test_daily_run_stage_recorder_records_success_and_failure(daily_run):
     assert calls[4][1]["status"] == "failed"
     assert calls[4][1]["error_type"] == "RuntimeError"
     assert calls[4][1]["error"] == "boom"
+
+
+def test_daily_run_stage_recorder_redacts_sensitive_failure(daily_run, monkeypatch):
+    calls = []
+    monkeypatch.setenv("DATABASE_URL", "postgresql://phase-one-ledger-secret")
+
+    class FakeRunStageRepository:
+        def start_ledger(self, **kwargs):
+            return 999
+
+        def start_stage(self, **kwargs):
+            return 1000 + kwargs["stage_order"]
+
+        def finish_stage(self, **kwargs):
+            calls.append(kwargs)
+
+    recorder = daily_run.DailyRunStageRecorder(
+        FakeRunStageRepository(),
+        tenant_id=1,
+        run_id="daily-algolia-2026-07-14",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        recorder.run_stage(
+            stage="publish_gate",
+            stage_order=9,
+            action=lambda: (_ for _ in ()).throw(
+                RuntimeError("postgresql://phase-one-ledger-secret")
+            ),
+        )
+
+    assert calls[-1]["error"] == "[redacted]"
+    assert "phase-one-ledger-secret" not in str(exc_info.value)
 
 
 def test_daily_run_stage_recorder_exposes_explicit_start_and_finish(daily_run):

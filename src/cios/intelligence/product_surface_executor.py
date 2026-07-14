@@ -96,13 +96,24 @@ def _execute_item(
     timeout_seconds: float,
     cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
-    status, stdout, stderr, error, returncode = _run_item_command(
-        item,
-        timeout_seconds=timeout_seconds,
-        cancel_event=cancel_event,
-    )
+    try:
+        status, stdout, stderr, error, returncode = _run_item_command(
+            item,
+            timeout_seconds=timeout_seconds,
+            cancel_event=cancel_event,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _terminal_result(
+            item,
+            status="failed",
+            error=redact_sensitive_text(str(exc)),
+        )
     if status != "completed":
-        result = _terminal_result(item, status=status, error=str(error or status))
+        diagnostic = redact_sensitive_text(stderr.strip() or stdout.strip())
+        error_detail = str(error or status)
+        if diagnostic:
+            error_detail = f"{error_detail}: {diagnostic}"
+        result = _terminal_result(item, status=status, error=error_detail)
         result["returncode"] = returncode
         return result
     output_path = Path(item["output_path"])

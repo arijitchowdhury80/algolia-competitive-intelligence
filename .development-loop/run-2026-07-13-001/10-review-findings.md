@@ -26,3 +26,34 @@ None.
 
 All findings are technically applicable to the Phase 1 runtime and
 observability contracts. They were accepted for test-first rectification.
+
+## Corrected-Commit Review
+
+Reviewed commit: `46dc7781469bbb4f5fe8e4c67869f816293c7aa9`
+
+Verdict: CHANGES REQUIRED.
+
+### Critical
+
+1. The generic daily subprocess helper used direct-child timeout semantics and
+   left a reproduced grandchild alive after timeout.
+2. Generic daily stage ledgers, run error arrays, and output paths still had
+   raw exception formatting outside the product-market-specific redaction.
+
+### Important
+
+1. Product-surface executable spawn failures escaped the executor and aborted
+   complete terminal accounting.
+2. Item timeout paths discarded captured stdout/stderr instead of preserving
+   bounded redacted diagnostic evidence.
+
+### Minor
+
+1. Deployment preflight did not require process-group supervision in the
+   generic daily subprocess path.
+
+### Disposition
+
+All findings were reproduced or confirmed against the code. They are within
+the Phase 1 process-safety contract and were accepted for immediate TDD
+rectification. No deployment was attempted.

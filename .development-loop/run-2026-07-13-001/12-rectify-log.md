@@ -60,3 +60,32 @@ those regressions.
 
 Corrected-commit code review remains ahead of deployment. Phase 1 still requires
 two consecutive real Hermes-triggered runs before its gate can pass.
+
+## Corrected-Commit Review Rectification
+
+### Red
+
+Six regressions failed against `46dc778`: daily process-tree timeout cleanup,
+safe uncaught errors, generic ledger redaction, missing executable accounting,
+timeout diagnostic retention, and the corresponding package-preflight guard.
+
+### Green
+
+- Daily child commands now use registered process groups and bounded group
+  termination.
+- All explicit daily exception persistence/printing uses centralized redaction;
+  the process entrypoint catches and sanitizes any remaining uncaught error.
+- Product-surface spawn failures produce failed terminal results.
+- Timeout results include bounded redacted child diagnostics.
+- Package preflight requires daily process-group supervision.
+
+### Verification
+
+- Six exact review regressions: 6 passed.
+- Daily-run module: 112 passed.
+- Affected test set: 234 passed.
+- Full suite: 1,221 passed, 1 skipped, 23 deselected in 35.08 seconds.
+- Package preflight: passed.
+- Shell syntax, Python compilation, and `git diff --check`: passed.
+
+Final security and code re-review remain mandatory before deployment.

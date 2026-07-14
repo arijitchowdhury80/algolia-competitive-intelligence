@@ -237,6 +237,8 @@ PROCESS_SUPERVISOR_INVARIANTS = {
 
 DAILY_RUNTIME_SECURITY_INVARIANTS = {
     "daily runtime missing sensitive-error redaction": "redact_sensitive_text",
+    "daily runtime missing process-group supervision": "start_new_session=True",
+    "daily runtime missing process-group termination": "PROCESS_GROUPS.terminate",
 }
 
 PRODUCT_SURFACE_PLANNER_INVARIANTS = {

@@ -270,6 +270,9 @@ control.run("algolia", demand_plan=demand_plan)
 
 SAFE_DAILY_RUNTIME = """
 from cios.platform.redaction import redact_sensitive_text
+from cios.platform.process_supervisor import PROCESS_GROUPS
+process = subprocess.Popen(command, start_new_session=True)
+PROCESS_GROUPS.terminate(process)
 safe_error = redact_sensitive_text(stderr)
 """
 
@@ -885,6 +888,18 @@ def test_preflight_fails_when_daily_runtime_omits_error_redaction(tmp_path):
 
     assert result.returncode == 2
     assert "daily runtime missing sensitive-error redaction" in result.stderr
+
+
+def test_preflight_fails_when_daily_runtime_omits_process_group_supervision(tmp_path):
+    app = _make_app(
+        tmp_path,
+        daily_runtime=SAFE_DAILY_RUNTIME.replace("start_new_session=True", "start_new_session=False"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "daily runtime missing process-group supervision" in result.stderr
 
 
 def test_preflight_fails_when_product_surface_extraction_admin_control_missing(tmp_path):

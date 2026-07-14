@@ -225,6 +225,55 @@ def test_execute_plan_rejects_worker_count_above_hard_cap() -> None:
         module.execute_plan({"tenant_id": 1, "items": []}, timeout_seconds=5, max_workers=9)
 
 
+def test_execute_plan_records_missing_executable_as_terminal_failure(tmp_path) -> None:
+    module = _load_module()
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [str(tmp_path / "missing-scout-binary")],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=5)
+
+    assert summary["failed"] == 1
+    assert summary["results"][0]["status"] == "failed"
+    assert "No such file or directory" in summary["results"][0]["error"]
+
+
+def test_execute_plan_timeout_preserves_redacted_child_diagnostic(
+    tmp_path, monkeypatch
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-timeout-secret")
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import os, sys, time; "
+                        "print(os.environ['GEMINI_API_KEY'], file=sys.stderr, flush=True); "
+                        "time.sleep(5)"
+                    ),
+                ],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=0.2)
+
+    assert summary["results"][0]["status"] == "timed_out"
+    assert summary["results"][0]["error"] == "timed out after 0.2s: [redacted]"
+    assert "phase-one-timeout-secret" not in json.dumps(summary)
+
+
 def test_execute_product_surface_plan_marks_empty_outputs_without_treating_them_as_product_proof(tmp_path) -> None:
     module = _load_module()
     plan_path = tmp_path / "plan.json"

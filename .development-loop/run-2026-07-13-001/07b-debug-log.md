@@ -52,3 +52,59 @@ passes and no late marker is written.
 Local reproduction is resolved. The fix is not a Phase 1 pass until the exact
 reviewed commit completes two consecutive real Hermes cron executions without
 permission errors, timeout, orphan work, or stale-public fallback.
+
+## Corrected-Commit Review Debug Cycle
+
+### Failure
+
+Independent review of `46dc778` reproduced two remaining runtime failures:
+
+- `_run_checked()` timed out its direct child while a grandchild continued and
+  wrote a late marker;
+- a missing product-surface executable raised `FileNotFoundError` out of the
+  executor instead of producing a terminal item result.
+
+The review also found that timeout stderr was discarded and generic daily
+exception paths persisted or printed unredacted exception text.
+
+### Characterization and trace
+
+Category: process supervision, error-boundary consistency, and test harness.
+
+`_run_checked()` still used `subprocess.run(timeout=...)`, unlike the product
+executor's process-group path. Error formatting was distributed across daily
+stage catch blocks. The product executor called `Popen` before entering any
+exception-to-result boundary, and its timeout branch ignored returned output.
+
+### Confirmed hypothesis
+
+The direct-child timeout API was the source of the orphan. Centralizing daily
+subprocess execution behind `Popen(start_new_session=True)` plus the existing
+process-group registry would terminate descendants. Centralizing exception
+formatting would prevent individual catch blocks from bypassing redaction.
+
+### Resolution
+
+- Added a supervised daily command helper that registers a new process group,
+  terminates the group on timeout, captures bounded redacted diagnostics, and
+  unregisters it on every path.
+- Added a safe process entrypoint that redacts uncaught errors before service
+  logs receive them.
+- Routed explicit daily exception persistence and printing through centralized
+  redaction helpers.
+- Converted product-surface spawn failures into terminal failed results.
+- Preserved redacted child diagnostics on item and batch timeouts.
+- Extended deployment preflight to require daily process-group supervision.
+
+The first affected-suite retry exposed eight tests that mocked
+`subprocess.run` directly. Those tests were coupled to the old implementation,
+so the supervised executor was placed behind an injectable module boundary and
+the tests were moved to that boundary. No production behavior was weakened.
+
+### Regression evidence
+
+- Six exact review regressions: passed.
+- Daily-run test module: 112 passed.
+- Affected runtime/deploy set: 234 passed.
+- Full suite: 1,221 passed, 1 skipped, 23 deselected.
+- Late descendant marker: absent after the timeout grace window.
