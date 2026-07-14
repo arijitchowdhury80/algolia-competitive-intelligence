@@ -35,3 +35,11 @@ def test_host_permissions_create_app_owned_immutable_public_store() -> None:
     assert 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"' in text
     assert 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/releases"' in text
     assert 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/served"' in text
+
+
+def test_host_permissions_initialize_managed_output_marker() -> None:
+    text = HOST_PERMISSIONS.read_text(encoding="utf-8")
+
+    assert 'touch "$APP/out/.cios-output-dir"' in text
+    assert 'chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"' in text
+    assert 'chmod 660 "$APP/out/.cios-output-dir"' in text

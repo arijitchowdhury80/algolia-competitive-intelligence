@@ -10,7 +10,7 @@
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 2
+    "STAGING": 3
   },
   "strike_log": [
     {
@@ -27,6 +27,13 @@
       "run_id": "cios-20260714T135025Z-1989449",
       "outcome": "FAILED_PHASE_GATE_NO_DECISION_GENERATION",
       "blocker": "PHASE_2_REQUIRES_DECISION_WHILE_PHASE_4_DEMAND_IS_LOCKED"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 3,
+      "request_id": "332b3a51ef0a4c8ca4eb032a28d0f5b8",
+      "outcome": "FAILED_FRESH_RELEASE_OUTPUT_MARKER_MISSING",
+      "changed_hypothesis": "PACKAGE_ENFORCED_OUTPUT_MARKER_INITIALIZATION"
     }
   ],
   "gates": {
@@ -45,8 +52,8 @@
     "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
-    "release_candidate": "47d3bd7_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "DEMAND_PATH_REORDER_AUTHORIZED_INPUT_VALIDATED_READY_FOR_FRESH_CANDIDATE"
+    "release_candidate": "707fee5_FAILED_STAGING_RETAINED_AS_EVIDENCE",
+    "staging": "OUTPUT_MARKER_FIX_VERIFIED_READY_FOR_FRESH_CANDIDATE"
   },
   "human_decisions": [
     {

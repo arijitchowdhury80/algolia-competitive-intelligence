@@ -185,6 +185,33 @@ fresh immutable candidate containing the package fixes after that tag, import
 the verified demand row through the package-owned intake path, and rerun every
 remaining Stage 12 gate before public cutover.
 
+## Candidate 707fee5 staging result
+
+Candidate `707fee5` was built from commit
+`707fee54de33cf794e5dba2f0d4b1716b6371389`, tagged
+`ci-os-phase2-candidate-2026-07-14-r2`, and passed GitHub Actions run
+`29348949927`. Its archive SHA-256 was
+`176d003fb7abdc269ad88f5241c2a1fb924ebae739c35417d9037c009cda200b`.
+Off-route and mounted package preflights passed as `cios`. The real demand
+source prepared one ready and normalized `Agent Search` row with no skips or
+off-plan rows; against the complete 12-topic live Argus plan the accurate
+coverage state is `partial_coverage`, with the other 11 topics explicitly
+missing.
+
+The candidate app mount and Hermes-to-cios queue boundary were activated while
+`ci-dashboard-static.service` remained active and the public root retained its
+legacy hash. Hermes request `332b3a51ef0a4c8ca4eb032a28d0f5b8` then failed
+before run creation because the fresh `out/` directory lacked the
+`.cios-output-dir` safety marker. No decision pointer moved and no public route
+changed. Candidate `707fee5` is failed and ineligible for retry.
+
+TDD now requires `cios-host-permissions.sh` to initialize that marker with
+`cios:hermes` ownership and mode `0660`; the package verifier independently
+enforces all three invariants. Local verification passed `1322 passed, 3
+skipped, 23 deselected`, scoped Ruff, Pyright, strict MyPy, and package
+preflight. The next staging attempt requires a fresh immutable candidate from
+this post-`707fee5` fix and a clean GitHub CI run.
+
 ## Proposed bounded staging sequence
 
 1. Install immutable Phase 2 candidate `47d3bd7` under

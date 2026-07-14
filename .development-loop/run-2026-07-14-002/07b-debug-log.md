@@ -88,3 +88,29 @@ This is a changed hypothesis for the next staging attempt: preserve the failed
 candidate as evidence, validate and import the one-row real demand input, then
 build a fresh immutable candidate from the post-tag package fixes and rerun the
 complete Stage 12 matrix.
+
+## Fresh-release output marker failure
+
+Candidate `707fee5` passed GitHub CI, off-route package preflight, mounted
+package preflight, and demand preparation with one ready row, one normalized
+row, no skipped rows, and explicit partial coverage of the 12-topic live Argus
+plan. The app mount was activated while the legacy public service retained its
+exact root hash. A narrow bind exposed the existing Hermes-owned queue to the
+versioned candidate without moving application execution under Hermes.
+
+Real Hermes request `332b3a51ef0a4c8ca4eb032a28d0f5b8` crossed the queue
+boundary but exited 2 before a CI-OS run ID was created:
+`refusing to clean unmarked CIOS output directory: /opt/cios/app/out`.
+The release initializer created an empty writable `out/` directory but did not
+create the `.cios-output-dir` marker required by `cios-daily-app.sh` before any
+cleanup. No decision pointer moved and the legacy public service remained
+active with SHA-256
+`280b721bb5276394abac2d4ea1547c1883d1b2b6e94a993a919d4b316dff5db7`.
+
+The changed hypothesis is now package-enforced initialization: the host
+permissions script creates the marker with `cios:hermes` ownership and mode
+`0660`, and the package verifier rejects releases that omit that contract. The
+new regression test failed before the fix, then the focused suite passed 87
+tests. Full verification passed `1322 passed, 3 skipped, 23 deselected`, scoped
+Ruff, Pyright, strict MyPy, and the package contract. Candidate `707fee5` is
+retained as failed evidence and must not be mutated or retried.
