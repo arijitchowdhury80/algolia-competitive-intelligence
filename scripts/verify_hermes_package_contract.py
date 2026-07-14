@@ -107,6 +107,8 @@ WRAPPER_INVARIANTS = {
     "wrapper missing fixed cios identity gate": '"$current_user" = "cios"',
     "wrapper missing fixed host queue client root": "HOST_CLIENT_ROOT=/opt/cios/app",
     "wrapper missing fixed Hermes queue client root": "HERMES_CLIENT_ROOT=/opt/data/apps/cios",
+    "wrapper missing fixed host queue Python": "HOST_PYTHON=/opt/cios/app/.venv/bin/python",
+    "wrapper missing fixed Hermes queue Python": "HERMES_PYTHON=/opt/hermes/.venv/bin/python",
     "wrapper missing selected systemd request queue": 'QUEUE="$CLIENT_ROOT/run-queue"',
     "wrapper wait must exceed systemd cleanup window": "WAIT_SECONDS=1800",
     "wrapper missing secure queue enqueue": '"$HELPER" enqueue',
@@ -121,11 +123,13 @@ WRAPPER_INVARIANTS = {
 PUBLIC_WRAPPER_INVARIANTS = {
     "wrapper missing fixed host queue selection": (
         'if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then\n'
-        '  CLIENT_ROOT="$HOST_CLIENT_ROOT"'
+        '  CLIENT_ROOT="$HOST_CLIENT_ROOT"\n'
+        '  PYTHON="$HOST_PYTHON"'
     ),
     "wrapper missing Hermes container queue fallback": (
         'elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then\n'
-        '  CLIENT_ROOT="$HERMES_CLIENT_ROOT"'
+        '  CLIENT_ROOT="$HERMES_CLIENT_ROOT"\n'
+        '  PYTHON="$HERMES_PYTHON"'
     ),
 }
 

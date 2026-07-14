@@ -67,6 +67,7 @@ def _run_public_wrapper_with_fixed_roots(
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     host_root = tmp_path / "opt-cios-app"
     hermes_root = tmp_path / "opt-data-apps-cios"
+    hermes_runtime_python = tmp_path / "opt-hermes-venv" / "bin" / "python"
     marker = tmp_path / "queue-client-root.txt"
 
     for root, should_create in (
@@ -78,20 +79,23 @@ def _run_public_wrapper_with_fixed_roots(
         (root / "run-queue").mkdir(parents=True)
         (root / "scripts").mkdir(parents=True)
         (root / "scripts" / "cios_run_queue.py").write_text("# queue helper\n", encoding="utf-8")
-        _write_executable(
-            root / ".venv" / "bin" / "python",
-            f'''#!/bin/sh
-printf "%s" "{root}" > "{marker}"
+        _write_executable(root / ".venv" / "bin" / "python", "#!/bin/sh\nexit 91\n")
+
+    _write_executable(
+        hermes_runtime_python,
+        f'''#!/bin/sh
+printf "%s" "{hermes_root}" > "{marker}"
 case " $* " in
   *" enqueue "*) printf "%s\\n" "0123456789abcdef0123456789abcdef" ;;
   *" read-result "*) printf "%s\\n" "0" ;;
   *) exit 2 ;;
 esac
 ''',
-        )
+    )
 
     patched = tmp_path / "cios-daily.sh"
     text = WRAPPER.read_text(encoding="utf-8")
+    text = text.replace("/opt/hermes/.venv/bin/python", str(hermes_runtime_python))
     text = text.replace("/opt/data/apps/cios", str(hermes_root))
     text = text.replace("/opt/cios/app", str(host_root))
     text = text.replace("/opt/cios/public", str(tmp_path / "opt-cios-public"))
@@ -115,8 +119,10 @@ def test_hermes_wrapper_uses_fixed_cios_queue_client_paths():
     assert "PUB=/opt/cios/public" in text
     assert "HOST_CLIENT_ROOT=/opt/cios/app" in text
     assert "HERMES_CLIENT_ROOT=/opt/data/apps/cios" in text
+    assert "HOST_PYTHON=/opt/cios/app/.venv/bin/python" in text
+    assert "HERMES_PYTHON=/opt/hermes/.venv/bin/python" in text
     assert 'QUEUE="$CLIENT_ROOT/run-queue"' in text
-    assert 'PYTHON="$CLIENT_ROOT/.venv/bin/python"' in text
+    assert 'PYTHON="$HERMES_PYTHON"' in text
     assert 'HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"' in text
     assert '"$ENV" -i PATH=/usr/bin:/bin' in text
     assert '"$current_user" = "cios"' in text

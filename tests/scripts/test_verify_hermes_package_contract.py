@@ -133,15 +133,18 @@ APP=/opt/cios/app
 PUB=/opt/cios/public
 HOST_CLIENT_ROOT=/opt/cios/app
 HERMES_CLIENT_ROOT=/opt/data/apps/cios
+HOST_PYTHON=/opt/cios/app/.venv/bin/python
+HERMES_PYTHON=/opt/hermes/.venv/bin/python
 if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
   CLIENT_ROOT="$HOST_CLIENT_ROOT"
+  PYTHON="$HOST_PYTHON"
 elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
   CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+  PYTHON="$HERMES_PYTHON"
 else
   exit 2
 fi
 QUEUE="$CLIENT_ROOT/run-queue"
-PYTHON="$CLIENT_ROOT/.venv/bin/python"
 HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"
 WAIT_SECONDS=1800
 ENV=/usr/bin/env
@@ -685,8 +688,10 @@ def test_preflight_fails_when_public_wrapper_omits_hermes_client_root_fallback(t
     wrapper = wrapper_path.read_text(encoding="utf-8").replace(
         '''if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
   CLIENT_ROOT="$HOST_CLIENT_ROOT"
+  PYTHON="$HOST_PYTHON"
 elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
   CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+  PYTHON="$HERMES_PYTHON"
 else
   exit 2
 fi''',
