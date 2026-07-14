@@ -1,6 +1,6 @@
 # Staging Report
 
-Status: AWAITING HUMAN APPROVAL
+Status: FAILED AND ROLLED BACK; AWAITING PHASE-ORDER DECISION
 
 Draft package PR #1 targets the dedicated `ci-os-package-main` source branch.
 Its GitHub static/unit and Postgres integration checks pass. The PR remains a
@@ -44,6 +44,94 @@ A second read-only inspection at `2026-07-14T10:50Z` found no staging drift:
 The staging sequence therefore requires no Caddy edit or reload. Cutover and
 rollback change only which loopback static service owns port 8662.
 
+## Executed staging evidence
+
+Arijit approved the bounded Stage 12 sequence on 2026-07-14. Execution stopped
+before the static-service cutover because the sibling store never produced a
+complete decision generation.
+
+### Installation and rollback baseline
+
+- Root-only rollback snapshot:
+  `/opt/cios/staging-backups/20260714T134100Z`.
+- Legacy unit SHA-256:
+  `ef8ec58d139456b09c1cc7612263f91031b865bf5d4c5a35c8824ecf61a90f71`.
+- Legacy loopback and public root SHA-256:
+  `280b721bb5276394abac2d4ea1547c1883d1b2b6e94a993a919d4b316dff5db7`.
+- Candidate archive was reverified on the VPS before extraction and installed
+  at `/opt/cios/releases/47d3bd7`.
+- Off-route and mounted package preflights both passed in delegated systemd
+  cgroups.
+- `/opt/cios/public-store` was created as `cios:hermes` mode `2750`; the
+  release, store, backup, and diagnostic evidence remain retained.
+
+### Attempt 1: runtime dependency and package-mode failures
+
+- Queue request: `ea34d298445944edb8ab3cae9022b81c`.
+- Terminal result: exit code 2 before publication.
+- Sanitized cause: the localhost Claude shim was unhealthy because its shared
+  virtualenv executable was mode `0750` and inaccessible to `cios-shim`.
+- `ExecStopPost` also returned `203/EXEC` because
+  `deploy/cios-run-finalize.sh` was archived without an executable bit.
+- The shim was repaired with a dedicated `cios-shim` virtualenv while the old
+  link was preserved. Its real health check then returned `healthy=true` on
+  `127.0.0.1:8663`.
+- Candidate runtime scripts were corrected to their documented deployment
+  modes before the changed-hypothesis retry.
+
+### Attempt 2: healthy execution, truthful diagnostic publication
+
+- Queue request: `f9a040a200384c3799ce7fed233ecfd4`.
+- CI-OS run ID: `cios-20260714T135025Z-1989449`.
+- Hermes wrapper result, runner main process, and finalizer: exit code 0.
+- Package contract verdict: pass and run-bound.
+- Publication integrity verdict: pass and run-bound.
+- Demand source gate: fail, with zero processed demand rows and no ready GA4
+  or manual export.
+- Public run status: `blocked_on_evidence`, `publish_status=blocked`, and
+  `public_dashboard_updated=false`.
+- The immutable store correctly promoted only
+  `latest-diagnostics -> diagnostics/cios-20260714T135025Z-1989449`; it did not
+  create a `current` decision pointer.
+
+This is correct product behavior, but it cannot satisfy the Phase 2 exit gate
+or support the static-service cutover. The approved plan requires one fresh,
+complete decision run in Phase 2 while simultaneously locking GA4/Looker work
+until Phase 2 passes. Creating a false `published` status, migrating stale
+legacy bytes as fresh evidence, or serving a router with no `current` pointer
+would lower the gate and is prohibited.
+
+### Rollback result
+
+- `/opt/cios/app` is again the original
+  `/root/.hermes/apps/cios` bind mount.
+- The pre-staging `/etc/cios-env`, `/root/.hermes/cios-env`, and `/etc/fstab`
+  bytes were restored; publication-v2 flags are absent.
+- `ci-dashboard-static.service` was never stopped. Loopback and public hashes
+  remain the exact legacy baseline.
+- `cios-runner.path`, `cios-admin.service`, and the repaired
+  `cios-claude-shim.service` are active and localhost-only.
+- Restart exposed a second latent package defect: `cios-admin.service` lacked
+  `PYTHONPATH=/opt/cios/app/src`. A minimal systemd drop-in restored the admin
+  to HTTP 200. The versioned unit and preflight contract are being corrected
+  under TDD.
+
+Candidate `47d3bd7` is not eligible for another staging attempt. Its immutable
+tag and files remain evidence; a new candidate must include the executable and
+admin import-path fixes and pass CI before use.
+
+## Required human decision
+
+The recommended choice is to amend the Phase 2 live gate so a fresh,
+run-bound blocked diagnostic plus the planted-defect matrix proves publication
+integrity, while the legacy decision surface remains live until Phase 4
+produces the first truthful decision generation. The alternative is to
+authorize and provide the GA4/Looker demand path now, explicitly reordering
+Phase 4 ahead of the Phase 2 decision-publication proof.
+
+No Scout, GA4/Looker, Argus intelligence, production UI, Caddy, firewall, or
+Hermes core work began during this staging attempt.
+
 ## Proposed bounded staging sequence
 
 1. Install immutable Phase 2 candidate `47d3bd7` under
@@ -82,7 +170,7 @@ or process-limit check:
 5. Leave the failed immutable release and sibling store intact for diagnosis;
    do not delete evidence during rollback.
 
-## Human gate
+## Original human gate
 
 Approval authorizes the bounded staging sequence, including backing up the
 legacy service, creating the sibling store, one real Hermes CI-OS run, the

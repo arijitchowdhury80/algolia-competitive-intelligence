@@ -10,9 +10,25 @@
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 0
+    "STAGING": 2
   },
-  "strike_log": [],
+  "strike_log": [
+    {
+      "stage": "STAGING",
+      "attempt": 1,
+      "request_id": "ea34d298445944edb8ab3cae9022b81c",
+      "outcome": "FAILED_RUNTIME_DEPENDENCIES",
+      "changed_hypothesis": "DEDICATED_SHIM_VENV_AND_EXECUTABLE_FINALIZER"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 2,
+      "request_id": "f9a040a200384c3799ce7fed233ecfd4",
+      "run_id": "cios-20260714T135025Z-1989449",
+      "outcome": "FAILED_PHASE_GATE_NO_DECISION_GENERATION",
+      "blocker": "PHASE_2_REQUIRES_DECISION_WHILE_PHASE_4_DEMAND_IS_LOCKED"
+    }
+  ],
   "gates": {
     "discovery": "PASSED_INLINE_AGENT_LIMIT_RECORDED",
     "intake": "APPROVED_BY_GOAL_CHARTER",
@@ -28,7 +44,7 @@
     "validate": "PASSED_8_LAYERS_1318_TESTS",
     "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
     "github_ci": "PASSED_RUN_29326371217",
-    "release_candidate": "47d3bd7_SHA256_0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298",
-    "staging": "AWAITING_HUMAN_APPROVAL"
+    "release_candidate": "47d3bd7_FAILED_STAGING_RETAINED_AS_EVIDENCE",
+    "staging": "FAILED_ROLLED_BACK_AWAITING_PHASE_ORDER_DECISION"
   }
 }

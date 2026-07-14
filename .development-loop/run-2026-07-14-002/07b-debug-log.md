@@ -48,3 +48,28 @@ changed first and failed, then the CI-only verifier invocation added
 `--skip-python-imports`. Importability remains independently covered by `pip
 check`, Pyright, MyPy, and the full suite. GitHub run `29326371217` passed both
 jobs after the fix.
+
+## Stage 12 live failures
+
+The first approved staging run (`ea34d298445944edb8ab3cae9022b81c`)
+failed before publication. Secret-redacted evidence isolated two independent
+deployment defects:
+
+1. `cios-claude-shim.service` could not execute a mode-`0750` `uvicorn` from a
+   virtualenv shared with the `cios` account. A dedicated `cios-shim`
+   virtualenv restored least-privilege execution and returned a healthy live
+   Claude probe.
+2. `cios-runner.service` finalization returned `203/EXEC` because the release
+   archive stored `deploy/cios-run-finalize.sh` as non-executable.
+
+After those changes, the second Hermes request
+`f9a040a200384c3799ce7fed233ecfd4` completed with runner and finalizer exit
+code 0. Run `cios-20260714T135025Z-1989449` produced passing package and
+publication verdicts, but correctly emitted only a blocked diagnostic because
+the demand source gate had zero ready rows. No decision pointer was created.
+
+Rollback then exposed a third latent defect: the installed localhost admin
+could not import the src-layout package after restart because its systemd unit
+omitted `PYTHONPATH=/opt/cios/app/src`. A localhost-only drop-in restored HTTP
+200. TDD reproduced all three package-contract failures; the versioned admin
+unit, executable archive mode, and preflight checks are being corrected.
