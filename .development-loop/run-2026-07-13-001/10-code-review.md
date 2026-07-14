@@ -26,3 +26,17 @@ permissions, package preflight, and regressions.
 
 Linux delegated-cgroup execution is intentionally not claimed from macOS. It
 must pass through the installed `cios-runner.service` during staging.
+
+## Staging Corrections
+
+Two Linux-only failures were corrected after the initial review:
+
+- fixed host/container queue namespaces at `40add51`;
+- fixed the Hermes container queue-client interpreter at `1fa7ac5`.
+
+Each correction received a fresh independent review. Final verdict for the
+deployed chain through `1fa7ac5`: **APPROVE**, with no Critical, Important, or
+Minor findings.
+
+Final evidence: 1,251 passed, 3 skipped, 23 deselected; package preflight PASS;
+two real Hermes runs exited 0.

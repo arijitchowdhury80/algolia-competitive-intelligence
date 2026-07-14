@@ -175,3 +175,37 @@ replaces process discovery with containment before target execution:
 The affected selection passed 249 tests with two Linux-only integration skips.
 The complete local suite passed 1,237 tests, with three skips and 23 deselected.
 No deployment or push has occurred.
+
+## Linux Staging Namespace Debug Cycle
+
+### Failure 1: host-only queue path
+
+The first real Hermes trigger after deployment exited before enqueue with
+`CI-OS runner queue is unavailable`. The queue existed on the host at
+`/opt/cios/app/run-queue`; inside the Hermes container the same inode is visible
+at `/opt/data/apps/cios/run-queue`, and `/opt/cios/app` is absent.
+
+The red regression simulated a container with only the Hermes namespace and
+reproduced the exact failure. The wrapper now selects only between two fixed,
+non-symlinked trusted roots. Package preflight requires the actual fallback
+branch, not merely both path strings.
+
+### Failure 2: private app virtual environment
+
+The next real trigger selected the correct queue but Python failed before
+enqueue with `PermissionError` on
+`/opt/data/apps/cios/.venv/pyvenv.cfg`. This was expected least-privilege
+behavior: `hermes` may traverse the shared package but may not read the private
+`cios` virtual environment.
+
+The red regression made the simulated CI-OS interpreter exit 91 and proved the
+wrapper must use the fixed Hermes runtime interpreter for queue-client work.
+Host application execution remains on the private CI-OS interpreter as `cios`.
+
+### Verification
+
+- Focused runtime/wrapper/package selection: 111 passed.
+- Full suite: 1,251 passed, 3 skipped, 23 deselected.
+- Package preflight, shell syntax, compilation, and diff checks: passed.
+- Independent re-review after each correction: APPROVE, no findings.
+- Two later real Hermes runs returned 0 and passed the Phase 1 live gate.

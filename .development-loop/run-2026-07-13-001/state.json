@@ -3,8 +3,8 @@
   "run_id": "2026-07-13-001",
   "project": "CI-OS",
   "feature": "Phase 1 Hermes-owned execution recovery",
-  "status": "IN_PROGRESS",
-  "current_stage": "STAGING",
+  "status": "FINISHED",
+  "current_stage": "FEEDBACK",
   "builder": "module-builder",
   "retry_counts": {
     "BUILD": 0,
@@ -38,13 +38,17 @@
     "arch_review": "APPROVED_CGROUP_RESET_2026_07_14",
     "plan": "APPROVED_BY_GOAL_CHARTER",
     "build": "PASSED",
-    "local_tests": "PASSED_1249_3_SKIPPED_23_DESELECTED",
+    "local_tests": "PASSED_1251_3_SKIPPED_23_DESELECTED",
     "package_contract": "PASSED",
     "code_health": "PASSED",
-    "security": "GO_E68E7B9",
-    "code_review": "APPROVED_E68E7B9",
-    "rectify": "PASSED_QUEUE_BOUNDARY_LOCAL",
-    "validate": "PASSED_LOCAL_LINUX_PROOF_PENDING_STAGING",
-    "phase_1_live": "PENDING"
+    "security": "GO_1FA7AC5",
+    "code_review": "APPROVED_1FA7AC5",
+    "rectify": "PASSED_NAMESPACE_AND_INTERPRETER_REGRESSIONS",
+    "validate": "PASSED_ALL_8_LAYERS",
+    "staging": "PASSED_TWO_REAL_HERMES_RUNS",
+    "rollback_drill": "PASSED_1FA7AC5",
+    "phase_1_live": "PASSED_2026_07_14",
+    "finish": "GO_1FA7AC5",
+    "feedback": "MONITORING_PLAN_ACTIVE"
   }
 }

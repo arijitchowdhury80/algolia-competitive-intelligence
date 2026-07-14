@@ -1,12 +1,11 @@
 # CI-OS TODO
 
-Active TODO:
+Active TODO, Phase 2:
 
-- Correct the product-surface stage timeout budget and kill the whole process
-  group on timeout.
-- Preserve a structured diagnostic summary when a bounded export is stopped.
-- Prove that product-readiness blockage does not masquerade as runtime failure.
-- Run two consecutive real Hermes cron executions without permission errors,
-  timeout, orphan work, or stale-public fallback.
-- Keep Phase 2 publication work, Scout completion, GA4/Looker, Argus
-  intelligence, and production UI locked until predecessor gates pass.
+- Introduce a shared run ID across cron, stages, artifacts, and launch results.
+- Stage and validate the complete public artifact set before atomic publish.
+- Write final public status last and keep blocked diagnostics current.
+- Replace substring/self-attested launch checks with structured evidence.
+- Reject stale, mismatched, spoofed, partial-copy, and path-leaking fixtures.
+- Keep Scout completion, GA4/Looker, Argus intelligence, and production UI
+  locked until predecessor gates pass.

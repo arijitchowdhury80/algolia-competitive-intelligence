@@ -90,6 +90,36 @@ timeout diagnostic retention, and the corresponding package-preflight guard.
 
 Final security and code re-review remain mandatory before deployment.
 
+## Hermes Container Namespace Rectification
+
+### Red
+
+- Real Hermes execution could not see the host-only `/opt/cios/app` queue.
+- After fixed-root fallback, Hermes could not start the private `cios` virtual
+  environment and failed before enqueue.
+- Package preflight initially accepted a fixture that named both roots but did
+  not implement the fallback branch.
+
+### Green
+
+- Added fixed host and Hermes queue-client roots with symlink rejection.
+- Added branch-local fixed interpreters: CI-OS Python on the host and Hermes
+  Python in the container.
+- Kept queue/helper paths in the shared CI-OS tree and application execution on
+  the private `cios` runtime.
+- Required the exact namespace and interpreter branches in package preflight.
+- Added red-green regressions for container namespace selection, unreadable app
+  venv, and missing preflight fallback.
+
+### Verification
+
+- Focused suite: 111 passed.
+- Full suite: 1,251 passed, 3 skipped, 23 deselected.
+- Independent review: APPROVE, no findings.
+- Linux package preflight: PASS.
+- Counted Hermes requests `a70f4e219d294280a26703962c9be4e9` and
+  `1b938c9de92f4568a059bdb84d3f9e6b`: both result 0 with clean containment.
+
 ## App-user Queue Boundary Rectification
 
 ### Red
