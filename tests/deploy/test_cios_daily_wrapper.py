@@ -59,16 +59,78 @@ def _run_wrapper(
     )
 
 
+def _run_public_wrapper_with_fixed_roots(
+    tmp_path: Path,
+    *,
+    create_host_root: bool,
+    create_hermes_root: bool,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    host_root = tmp_path / "opt-cios-app"
+    hermes_root = tmp_path / "opt-data-apps-cios"
+    marker = tmp_path / "queue-client-root.txt"
+
+    for root, should_create in (
+        (host_root, create_host_root),
+        (hermes_root, create_hermes_root),
+    ):
+        if not should_create:
+            continue
+        (root / "run-queue").mkdir(parents=True)
+        (root / "scripts").mkdir(parents=True)
+        (root / "scripts" / "cios_run_queue.py").write_text("# queue helper\n", encoding="utf-8")
+        _write_executable(
+            root / ".venv" / "bin" / "python",
+            f'''#!/bin/sh
+printf "%s" "{root}" > "{marker}"
+case " $* " in
+  *" enqueue "*) printf "%s\\n" "0123456789abcdef0123456789abcdef" ;;
+  *" read-result "*) printf "%s\\n" "0" ;;
+  *) exit 2 ;;
+esac
+''',
+        )
+
+    patched = tmp_path / "cios-daily.sh"
+    text = WRAPPER.read_text(encoding="utf-8")
+    text = text.replace("/opt/data/apps/cios", str(hermes_root))
+    text = text.replace("/opt/cios/app", str(host_root))
+    text = text.replace("/opt/cios/public", str(tmp_path / "opt-cios-public"))
+    _write_executable(patched, text)
+
+    result = subprocess.run(
+        ["sh", str(patched)],
+        cwd=str(ROOT),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result, marker
+
+
 def test_hermes_wrapper_uses_fixed_cios_queue_client_paths():
     text = WRAPPER.read_text(encoding="utf-8")
 
     assert "APP=/opt/cios/app" in text
     assert "PUB=/opt/cios/public" in text
-    assert "QUEUE=/opt/cios/app/run-queue" in text
-    assert "PYTHON=/opt/cios/app/.venv/bin/python" in text
-    assert "HELPER=/opt/cios/app/scripts/cios_run_queue.py" in text
+    assert "HOST_CLIENT_ROOT=/opt/cios/app" in text
+    assert "HERMES_CLIENT_ROOT=/opt/data/apps/cios" in text
+    assert 'QUEUE="$CLIENT_ROOT/run-queue"' in text
+    assert 'PYTHON="$CLIENT_ROOT/.venv/bin/python"' in text
+    assert 'HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"' in text
     assert '"$ENV" -i PATH=/usr/bin:/bin' in text
     assert '"$current_user" = "cios"' in text
+
+
+def test_hermes_wrapper_uses_container_client_root_when_host_root_is_not_visible(tmp_path):
+    result, marker = _run_public_wrapper_with_fixed_roots(
+        tmp_path,
+        create_host_root=False,
+        create_hermes_root=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert marker.read_text(encoding="utf-8") == str(tmp_path / "opt-data-apps-cios")
 
 
 def test_hermes_wrapper_has_no_caller_controlled_execution_paths():

@@ -131,9 +131,18 @@ mkdir -p "$STAGE"
 SAFE_HANDOFF_WRAPPER = """#!/bin/sh
 APP=/opt/cios/app
 PUB=/opt/cios/public
-QUEUE=/opt/cios/app/run-queue
-PYTHON=/opt/cios/app/.venv/bin/python
-HELPER=/opt/cios/app/scripts/cios_run_queue.py
+HOST_CLIENT_ROOT=/opt/cios/app
+HERMES_CLIENT_ROOT=/opt/data/apps/cios
+if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HOST_CLIENT_ROOT"
+elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+else
+  exit 2
+fi
+QUEUE="$CLIENT_ROOT/run-queue"
+PYTHON="$CLIENT_ROOT/.venv/bin/python"
+HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"
 WAIT_SECONDS=1800
 ENV=/usr/bin/env
 current_user="$(/usr/bin/id -un)"
@@ -668,6 +677,29 @@ def test_preflight_passes_complete_hermes_package_contract(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "PASS: CI-OS Hermes package contract satisfied" in result.stdout
+
+
+def test_preflight_fails_when_public_wrapper_omits_hermes_client_root_fallback(tmp_path):
+    app = _make_app(tmp_path)
+    wrapper_path = app / "deploy" / "cios-daily.sh"
+    wrapper = wrapper_path.read_text(encoding="utf-8").replace(
+        '''if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HOST_CLIENT_ROOT"
+elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+else
+  exit 2
+fi''',
+        'CLIENT_ROOT="$HOST_CLIENT_ROOT"',
+    )
+    wrapper_path.write_text(wrapper, encoding="utf-8")
+    assert 'CLIENT_ROOT="$HOST_CLIENT_ROOT"' in wrapper
+    assert 'CLIENT_ROOT="$HERMES_CLIENT_ROOT"' not in wrapper
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing Hermes container queue fallback" in result.stderr
 
 
 def test_preflight_fails_when_intelligence_package_missing(tmp_path):

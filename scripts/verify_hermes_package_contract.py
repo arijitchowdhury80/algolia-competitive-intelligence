@@ -105,7 +105,9 @@ WRAPPER_INVARIANTS = {
     "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
     "wrapper missing fixed cios identity gate": '"$current_user" = "cios"',
-    "wrapper missing fixed systemd request queue": "QUEUE=/opt/cios/app/run-queue",
+    "wrapper missing fixed host queue client root": "HOST_CLIENT_ROOT=/opt/cios/app",
+    "wrapper missing fixed Hermes queue client root": "HERMES_CLIENT_ROOT=/opt/data/apps/cios",
+    "wrapper missing selected systemd request queue": 'QUEUE="$CLIENT_ROOT/run-queue"',
     "wrapper wait must exceed systemd cleanup window": "WAIT_SECONDS=1800",
     "wrapper missing secure queue enqueue": '"$HELPER" enqueue',
     "wrapper missing secure result read": '"$HELPER" read-result',
@@ -114,6 +116,17 @@ WRAPPER_INVARIANTS = {
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
+}
+
+PUBLIC_WRAPPER_INVARIANTS = {
+    "wrapper missing fixed host queue selection": (
+        'if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then\n'
+        '  CLIENT_ROOT="$HOST_CLIENT_ROOT"'
+    ),
+    "wrapper missing Hermes container queue fallback": (
+        'elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then\n'
+        '  CLIENT_ROOT="$HERMES_CLIENT_ROOT"'
+    ),
 }
 
 HOST_RUNNER_INVARIANTS = {
@@ -414,6 +427,9 @@ def collect_wrapper_errors(app_dir: Path) -> list[str]:
     public_text = wrapper_path.read_text(encoding="utf-8")
     text = public_text + "\n" + app_wrapper_path.read_text(encoding="utf-8")
     errors = [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+    errors.extend(
+        message for message, needle in PUBLIC_WRAPPER_INVARIANTS.items() if needle not in public_text
+    )
     forbidden = (
         "CIOS_APP_DIR",
         "CIOS_PUBLIC_DIR",

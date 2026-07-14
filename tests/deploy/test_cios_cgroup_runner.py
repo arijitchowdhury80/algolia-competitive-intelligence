@@ -46,7 +46,9 @@ def test_daily_wrapper_has_no_pid_tree_watchdog():
 def test_daily_wrapper_defaults_to_systemd_queue_and_waits_past_service_cleanup():
     text = DAILY_WRAPPER.read_text(encoding="utf-8")
 
-    assert "QUEUE=/opt/cios/app/run-queue" in text
+    assert "HOST_CLIENT_ROOT=/opt/cios/app" in text
+    assert "HERMES_CLIENT_ROOT=/opt/data/apps/cios" in text
+    assert 'QUEUE="$CLIENT_ROOT/run-queue"' in text
     assert "WAIT_SECONDS=1800" in text
     assert "CIOS_RUNNER_HANDOFF" not in text
     assert "CIOS_DISABLE_RUNNER_HANDOFF" not in text

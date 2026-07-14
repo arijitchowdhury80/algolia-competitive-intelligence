@@ -4,9 +4,8 @@ set -eu
 
 APP=/opt/cios/app
 PUB=/opt/cios/public
-QUEUE=/opt/cios/app/run-queue
-PYTHON=/opt/cios/app/.venv/bin/python
-HELPER=/opt/cios/app/scripts/cios_run_queue.py
+HOST_CLIENT_ROOT=/opt/cios/app
+HERMES_CLIENT_ROOT=/opt/data/apps/cios
 WAIT_SECONDS=1800
 ENV=/usr/bin/env
 
@@ -14,6 +13,19 @@ current_user="$(/usr/bin/id -un 2>/dev/null || printf unknown)"
 if [ "$current_user" = "cios" ]; then
   exec "$APP/deploy/cios-daily-app.sh"
 fi
+
+if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HOST_CLIENT_ROOT"
+elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+else
+  echo "CI-OS runner client is unavailable" >&2
+  exit 2
+fi
+
+QUEUE="$CLIENT_ROOT/run-queue"
+PYTHON="$CLIENT_ROOT/.venv/bin/python"
+HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"
 
 if [ ! -d "$QUEUE" ] || [ -L "$QUEUE" ]; then
   echo "CI-OS runner queue is unavailable" >&2
