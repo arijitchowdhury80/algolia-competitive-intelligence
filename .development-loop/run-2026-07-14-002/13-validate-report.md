@@ -51,6 +51,11 @@ and exact manifest digest binding.
 Package preflight on this checkout passed and wrote a structured run-bound
 verdict. Dashboard Playwright dependencies also passed their executable check.
 
+The immutable release candidate is Git commit `47d3bd7` with tree
+`ef09b04cfe9a0e4d5b3cf5f7008693a10b3a14eb`. Its extracted archive passed
+package preflight; `/private/tmp/cios-47d3bd7.tar.gz` has SHA-256
+`0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298`.
+
 ## 5. End to end: PASS LOCALLY
 
 A localhost static server read the stable `served/` router while Chromium and
@@ -118,7 +123,7 @@ Warnings:
 | Security | Known Phase 2 threats and planted defects remain mitigated | Unknown transitive CVEs without a lock file |
 
 Remaining risk is deliberately owned by Stage 12: install the immutable
-package, run as `cios`, seed the sibling store with one real Hermes run, verify
+`47d3bd7` package, run as `cios`, seed the sibling store with one real Hermes run, verify
 the live route and clicks, execute the planted-defect matrix, and prove service
 rollback on the VPS.
 

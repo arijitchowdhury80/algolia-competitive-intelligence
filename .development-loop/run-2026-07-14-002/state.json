@@ -26,6 +26,7 @@
     "code_review": "ONE_IMPORTANT_ACTION_APPROVED_BY_GOAL_CHARTER",
     "rectify": "PASSED_1316_TESTS",
     "validate": "PASSED_8_LAYERS",
+    "release_candidate": "47d3bd7_SHA256_0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298",
     "staging": "AWAITING_HUMAN_APPROVAL"
   }
 }

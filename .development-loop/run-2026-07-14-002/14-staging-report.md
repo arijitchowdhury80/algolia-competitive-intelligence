@@ -19,8 +19,10 @@ Hermes core file, or public response changed during inspection.
 
 ## Proposed bounded staging sequence
 
-1. Publish and install the immutable Phase 2 Git release under
-   `/opt/cios/releases/<commit>` and point `/opt/cios/app` at it as `cios`.
+1. Install immutable Phase 2 candidate `47d3bd7` under
+   `/opt/cios/releases/47d3bd7` after verifying archive SHA-256
+   `0e83a836fe75689e5ceac1f89fe02337458dc7e65f87e94031e452a6a7ee9298`,
+   then point `/opt/cios/app` at it as `cios`.
 2. Back up the exact legacy `ci-dashboard-static.service` unit and record the
    legacy root plus public response hashes. Do not remove either rollback target.
 3. Create `/opt/cios/public-store` as `cios:hermes` mode `2750` and run package
