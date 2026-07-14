@@ -56,3 +56,22 @@ findings. The two prior Medium findings are closed.
 The goal charter authorizes autonomous continuation when no explicit human
 decision boundary remains. Security may advance to corrected-commit review;
 live deployment and two Hermes-triggered runs are still required for Phase 1.
+
+## Cgroup And Queue Boundary Re-review
+
+The earlier verdict above was superseded while the cgroup architecture was
+implemented. Review of `adadc84` and `56708ec` found fail-open app-user
+handoff, caller-controlled executable paths, shared raw logs, queue symlink
+risk, an active-state crash window, and group-writable fixed-path parents.
+
+All findings are closed in the reviewed chain through `e68e7b9`:
+
+- Hermes uses fixed `/opt/cios` queue-client paths under a sanitized environment.
+- Privileged queue commands and their shell entrypoints require Unix user `cios`.
+- `/opt/cios` is root-owned mode `0755`; code trees are not group-writable.
+- Raw logs are mode `0600` inside the `cios`-private `.state` directory.
+- Active state is durable before request rename; the service drains pending requests serially.
+- Package preflight rejects all caller-controlled path regressions and enforces the ownership contract.
+
+Final independent security verdict: **GO**. The Linux delegated-cgroup runtime
+probe and two real Hermes-triggered executions remain mandatory staging gates.

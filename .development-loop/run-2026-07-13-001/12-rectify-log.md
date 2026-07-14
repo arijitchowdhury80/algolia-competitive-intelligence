@@ -90,6 +90,35 @@ timeout diagnostic retention, and the corresponding package-preflight guard.
 
 Final security and code re-review remain mandatory before deployment.
 
+## App-user Queue Boundary Rectification
+
+### Red
+
+Independent reviews of `adadc84`, `56708ec`, and `2a331b2` found that the
+Hermes-facing wrapper could accept executable-path overrides, raw logs were
+Hermes-readable, queue requests could starve, active state followed request
+rename, privileged helpers lacked a direct user assertion, and `/opt/cios`
+parent hardening was not enforced by preflight.
+
+### Green
+
+- Split the public Hermes handoff wrapper from the `cios`-only application body.
+- Fixed and sanitized queue-client paths; removed caller-controlled path overrides.
+- Added a no-follow, dirfd-based atomic queue helper with private logs and durable active state.
+- Drained pending requests serially and made process cleanup idempotent.
+- Hardened `/opt/cios`, code parents, privileged scripts, queue, and private state modes.
+- Extended package preflight and regression coverage for every review finding.
+
+### Verification
+
+- Focused boundary and package-contract selection: 115 passed before the final coverage-only commit.
+- Final package-contract module: 79 passed.
+- Full suite: 1,249 passed, 3 skipped, 23 deselected in 32.75 seconds.
+- Package contract, Python compilation, shell syntax, and `git diff --check`: passed.
+- Final independent verdicts: security GO; code review APPROVE.
+
+No deployment has occurred. The candidate may advance to Linux staging only.
+
 ### Review-three failure
 
 The final code review ran a wider focused selection and reproduced a timing

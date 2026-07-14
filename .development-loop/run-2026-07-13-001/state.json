@@ -4,7 +4,7 @@
   "project": "CI-OS",
   "feature": "Phase 1 Hermes-owned execution recovery",
   "status": "IN_PROGRESS",
-  "current_stage": "CODE_REVIEW",
+  "current_stage": "STAGING",
   "builder": "module-builder",
   "retry_counts": {
     "BUILD": 0,
@@ -38,12 +38,13 @@
     "arch_review": "APPROVED_CGROUP_RESET_2026_07_14",
     "plan": "APPROVED_BY_GOAL_CHARTER",
     "build": "PASSED",
-    "local_tests": "PASSED_1237_3_SKIPPED_23_DESELECTED",
+    "local_tests": "PASSED_1249_3_SKIPPED_23_DESELECTED",
     "package_contract": "PASSED",
     "code_health": "PASSED",
-    "security": "PENDING_CGROUP_RESET_REVIEW",
-    "code_review": "PENDING_CGROUP_RESET_REVIEW",
-    "rectify": "PASSED_CGROUP_RESET_LOCAL",
+    "security": "GO_E68E7B9",
+    "code_review": "APPROVED_E68E7B9",
+    "rectify": "PASSED_QUEUE_BOUNDARY_LOCAL",
+    "validate": "PASSED_LOCAL_LINUX_PROOF_PENDING_STAGING",
     "phase_1_live": "PENDING"
   }
 }
