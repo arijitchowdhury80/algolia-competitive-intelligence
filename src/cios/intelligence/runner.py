@@ -216,6 +216,11 @@ def run_product_market_payload(
         learning_instructions=payload.learning_instructions,
     )
     feature_positions = derive_feature_positions_from_product_events(batch.product_events)
+    movement_as_of = _product_market_as_of(
+        product_events=batch.product_events,
+        conversation_themes=batch.conversation_themes,
+        demand_signals=batch.demand_signals,
+    )
     learning_instruction_improvement_ids = sorted(
         {
             int(improvement_id)
@@ -227,6 +232,7 @@ def run_product_market_payload(
     movement_map = build_market_movement_map(
         current_patterns=result.patterns,
         historical_patterns=_load_pattern_history(repository, payload.tenant_id),
+        as_of=movement_as_of,
     )
     conversion_diagnostics = build_product_market_conversion_diagnostics(
         scout_record_count=len(payload.scout_records),
@@ -373,9 +379,15 @@ def run_product_market_ledger_refresh(
         )
 
     feature_positions = derive_feature_positions_from_product_events(product_events)
+    movement_as_of = _product_market_as_of(
+        product_events=product_events,
+        conversation_themes=conversation_themes,
+        demand_signals=demand_signals,
+    )
     movement_map = build_market_movement_map(
         current_patterns=result.patterns,
         historical_patterns=_load_pattern_history(repository, tenant_id),
+        as_of=movement_as_of,
     )
     conversion_diagnostics = build_product_market_conversion_diagnostics(
         scout_record_count=len(product_events),
@@ -1141,6 +1153,24 @@ def build_product_market_window_comparison(
         windows=slices,
         confidence_limits=confidence_limits,
     )
+
+
+def _product_market_as_of(
+    *,
+    product_events: list[Any],
+    conversation_themes: list[Any],
+    demand_signals: list[Any],
+) -> datetime | None:
+    timestamps = [
+        timestamp
+        for timestamp in [
+            *(_evidence_timestamp(event, "observed_at") for event in product_events),
+            *(_evidence_timestamp(theme, "observed_at") for theme in conversation_themes),
+            *(_evidence_timestamp(signal, "period_end") for signal in demand_signals),
+        ]
+        if timestamp is not None
+    ]
+    return max(timestamps) if timestamps else None
 
 
 def _build_window_slice(

@@ -504,6 +504,7 @@ write_public_run_status published
 
 case "$(printf '%s' "$PUBLICATION_V2" | tr '[:upper:]' '[:lower:]')" in
   1|true|yes|on)
+    set +e
     .venv/bin/python scripts/publish_generation.py \
       --store-root "$PUBLIC_STORE" \
       --run-id "$CIOS_RUN_ID" \
@@ -519,6 +520,18 @@ case "$(printf '%s' "$PUBLICATION_V2" | tr '[:upper:]' '[:lower:]')" in
       --demand-work-order-guide "$OUT/argus-demand-work-order-guide.json" \
       --package-verdict "$OUT/hermes-package-contract-verdict.json" \
       --output "$OUT/publication-integrity-verdict.json"
+    PUBLISH_CODE=$?
+    set -e
+    if [ "$PUBLISH_CODE" -ne 0 ]; then
+      set +e
+      write_public_run_status blocked
+      STATUS_REWRITE_CODE=$?
+      set -e
+      if [ "$STATUS_REWRITE_CODE" -ne 0 ]; then
+        echo "failed to rewrite public run status after publication failure" >&2
+      fi
+      exit "$PUBLISH_CODE"
+    fi
     echo "immutable dashboard generation published from $APP"
     exit 0
     ;;

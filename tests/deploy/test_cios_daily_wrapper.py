@@ -203,6 +203,124 @@ def test_app_wrapper_requires_named_package_for_publication_v2(tmp_path):
     assert "CIOS_PACKAGE_VERSION is required" in result.stderr
 
 
+def test_app_wrapper_rewrites_status_blocked_when_publication_v2_fails(tmp_path):
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        """#!/bin/sh
+set -eu
+OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
+printf "%s\\n" "$1" >> "$OUT/calls.txt"
+case "$1" in
+  *verify_hermes_package_contract.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --verdict-output) shift; printf '{"status":"pass","run_id":"test-run"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *audit_learning_policies.py|*apply_product_market_schema.py)
+    ;;
+  *daily_production_run.py)
+    printf "current cockpit" > "$CIOS_DASHBOARD_OUT"
+    printf "current brief" > "$OUT/brief.html"
+    printf '{"schema_version":11,"generated_at":"2026-07-14T09:00:00+00:00"}' > "$OUT/argus-dashboard.json"
+    mkdir -p "$OUT/briefs/algolia"
+    printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
+    ;;
+  *execute_product_muscle_gap_discovery.py|*promote_product_surface_candidates.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"completed"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_demand_readiness.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"ready"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_demand_plan_template.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; printf 'Page title,Page path,Engaged sessions\\n' > "$1";;
+        --guide-output) shift; printf '{"status":"ready","topic_count":1}' > "$1";;
+      esac
+      shift
+    done
+    ;;
+  *run_argus_demand_intake.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"covered","exit_code":0}' > "$1";; esac
+      shift
+    done
+    ;;
+  *attach_post_run_summaries.py|*rerender_dashboard.py|*attach_operator_handoff_to_dashboard.py)
+    ;;
+  *export_argus_evidence_work_queue.py|*export_argus_product_muscle_work_queue.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"work_item_count":0,"items":[]}' > "$1";; esac
+      shift
+    done
+    ;;
+  *build_argus_operator_handoff.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"ready_for_operator_review"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_data_plane_manifest.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"schema_version":1,"status":"ready_for_operator_review","run_id":"test-run"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_public_run_status.py)
+    status="published"
+    output=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --publish-status) shift; status="$1";;
+        --output) shift; output="$1";;
+      esac
+      shift
+    done
+    if [ "$status" = "published" ]; then
+      printf '{"schema_version":2,"publish_status":"published","status":"ready_for_operator_review","public_dashboard_updated":true}' > "$output"
+    else
+      printf '{"schema_version":2,"publish_status":"blocked","status":"blocked_on_evidence","public_dashboard_updated":false}' > "$output"
+    fi
+    ;;
+  *publish_generation.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"fail","checks":{"generation_validated":false,"pointer_promoted":false,"status_committed":false}}' > "$1";; esac
+      shift
+    done
+    exit 2
+    ;;
+  *)
+    echo "unexpected python target: $1" >&2
+    exit 97
+    ;;
+esac
+""",
+    )
+    (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
+
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_PUBLICATION_V2": "1", "CIOS_PACKAGE_VERSION": "test-package"},
+    )
+
+    assert result.returncode == 2
+    status_path = app / "out" / "argus-public-run-status.json"
+    assert status_path.exists(), result.stderr + result.stdout
+    status = status_path.read_text(encoding="utf-8")
+    assert '"publish_status":"blocked"' in status
+    assert '"public_dashboard_updated":false' in status
+    assert not (public / "index.html").exists()
+
+
 def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_same_run_artifacts(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,
