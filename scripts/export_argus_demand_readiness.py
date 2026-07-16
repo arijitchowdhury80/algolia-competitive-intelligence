@@ -329,6 +329,21 @@ def _demand_read_topics(dashboard: dict[str, Any] | None) -> list[dict[str, Any]
     return [topic for topic in _list_value(demand_read.get("top_topics")) if isinstance(topic, dict)]
 
 
+def _demand_read_has_processed_non_rising_demand(dashboard: dict[str, Any] | None) -> bool:
+    run = _dashboard_run(dashboard)
+    brief = run.get("intelligence_brief")
+    if not isinstance(brief, dict):
+        return False
+    demand_read = brief.get("demand_read")
+    if not isinstance(demand_read, dict):
+        return False
+    return (
+        _int_value(demand_read.get("demand_signal_count")) > 0
+        and _int_value(demand_read.get("rising_topic_count")) == 0
+        and not _list_value(demand_read.get("top_topics"))
+    )
+
+
 def _actual_demand_topic(topic: dict[str, Any]) -> dict[str, Any] | None:
     label = _text_value(topic.get("topic") or topic.get("capability_key"))
     key = _capability_key(topic.get("capability_key") or label)
@@ -370,18 +385,25 @@ def _demand_plan_coverage(
     planned_keys = set(planned_by_key)
     actual_keys = set(actual_by_key)
     covered_keys = planned_keys & actual_keys
-    missing_keys = planned_keys - actual_keys
     off_plan_keys = actual_keys - planned_keys
     planned_count = len(planned_keys)
     covered_count = len(covered_keys)
     demand_rows = _int_value(demand_plane.get("looker_normalized_row_count")) + _int_value(
         demand_plane.get("demand_signal_count")
     )
+    processed_non_rising_demand = (
+        demand_rows > 0
+        and not actual_keys
+        and _demand_read_has_processed_non_rising_demand(dashboard)
+    )
+    missing_keys = set() if processed_non_rising_demand else planned_keys - actual_keys
 
     if planned_count == 0:
         status = "no_planned_topics"
     elif demand_rows <= 0:
         status = "not_evaluated"
+    elif processed_non_rising_demand:
+        status = "processed_no_rising_demand"
     elif not actual_keys:
         status = "unmapped_demand"
     elif covered_count == planned_count:

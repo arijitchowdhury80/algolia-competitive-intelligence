@@ -114,11 +114,20 @@ def _product_reality_present(public_status: Mapping[str, Any]) -> bool:
     product = _dict_value(planes.get("product_reality"))
     run = _dict_value(public_status.get("product_market_run"))
     status = str(product.get("status") or "").strip().lower()
+    counts = _dict_value(product.get("counts"))
     product_event_count = _int_value(
-        _dict_value(product.get("counts")).get("product_event_count"),
+        counts.get("product_event_count"),
         _int_value(run.get("product_event_count")),
     )
-    return status in {"present", "processed", "ready"} and product_event_count > 0
+    extracted_row_count = _int_value(counts.get("product_surface_extracted_row_count"))
+    has_product_proof = product_event_count > 0 or extracted_row_count > 0
+    if status in {"present", "processed", "ready"}:
+        return has_product_proof
+    return (
+        status == "limited_by_product_surface_evidence"
+        and product.get("blocks_action") is False
+        and has_product_proof
+    )
 
 
 def _public_safety_ok(public_status: Mapping[str, Any]) -> bool:

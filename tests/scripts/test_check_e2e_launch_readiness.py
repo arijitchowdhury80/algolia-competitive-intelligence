@@ -214,6 +214,33 @@ def test_launch_readiness_fails_with_specific_blockers_for_current_blocked_run()
     assert result["demand_collection_plan"]["topic_count"] == 12
 
 
+def test_launch_readiness_accepts_limited_nonblocking_product_reality() -> None:
+    module = _load_module()
+    status = _published_status()
+    status["planes"]["product_reality"] = {
+        "status": "limited_by_product_surface_evidence",
+        "blocks_action": False,
+        "counts": {
+            "product_event_count": 500,
+            "product_surface_extracted_row_count": 522,
+            "product_surface_succeeded_count": 47,
+            "product_surface_failed_count": 3,
+        },
+    }
+    status["product_market_run"]["product_event_count"] = 500
+
+    result = module.evaluate_launch_readiness(
+        public_status=status,
+        click_verdict=_verdict("dashboard_click_validation"),
+        package_verdict=_verdict("hermes_package_contract"),
+        **_required_publication_args(),
+        now=NOW,
+    )
+
+    assert result["checks"]["product_reality_present"] is True
+    assert result["status"] == "pass"
+
+
 def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> None:
     module = _load_module()
     status_path = tmp_path / "argus-latest-run-status.json"

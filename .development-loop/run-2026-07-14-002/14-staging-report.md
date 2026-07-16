@@ -277,6 +277,56 @@ or process-limit check:
 5. Leave the failed immutable release and sibling store intact for diagnosis;
    do not delete evidence during rollback.
 
+## 2026-07-16 Stage 12 replay addendum
+
+Candidate `1cdc816` was installed as the active `/opt/cios/app` bind mount and
+one Hermes-owned run completed as `cios-20260716T054431Z-3718076`. Package and
+publication integrity verdicts both passed with exit code `0`; publication
+store `current` points at that run. The public route was not cut over:
+`ci-dashboard-static.service` stayed active and `cios-static.service` stayed
+inactive.
+
+Two launch-readiness false negatives were isolated with live artifacts and fixed
+locally under TDD:
+
+- Processed demand with zero rising topics is now classified as
+  `processed_no_rising_demand` coverage while the demand plane remains
+  `processed`, instead of incorrectly blocking as `processed_unmapped_demand`.
+- `limited_by_product_surface_evidence` now satisfies product-reality presence
+  when the plane has product proof and explicitly does not block action.
+
+Verification:
+
+- Targeted red/green regressions passed.
+- Focused readiness/data-plane/launch tests: `35 passed`.
+- Ruff over changed scripts/tests: pass.
+- Full suite: `1325 passed, 3 skipped, 23 deselected`.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- Strict MyPy over `src/cios/publication`: success.
+
+Local replay of the live run after the fixes shows these gates passing:
+audience demand processed, product reality present, product extraction
+complete, dashboard click validation passed against copied publication bytes,
+Hermes package contract passed, publication integrity passed, publication
+manifest bound, public safety passed, source coverage complete.
+
+The replay still fails launch readiness for two remaining reasons:
+
+1. Public status is `limited_by_evidence`, not `published`, because the product
+   muscle queue still has confidence-limiting matrix cells. This belongs to the
+   documented Phase 3 product muscle scope unless the Phase 2 gate is amended to
+   accept a limited diagnostic decision surface.
+2. Source failure budget is `1` while the launch gate allows `0`. The failed
+   active source is Community forum RSS
+   `https://old.reddit.com/r/ecommerce/.rss`; read-only probes showed Reddit
+   can alternate between HTTP 200 and HTTP 429 depending on rate limiting, so
+   this requires either source repair/retry policy or an explicit degradation
+   decision.
+
+Phase 2 still cannot be called passed. The corrected publication boundary is
+working, but final launch readiness remains blocked by a real source-degradation
+decision and a phase-order conflict with Phase 3 product muscle confidence.
+
 ## Original human gate
 
 Approval authorizes the bounded staging sequence, including backing up the
