@@ -4,6 +4,7 @@ set -eu
 SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
 SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
+MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
@@ -40,16 +41,27 @@ install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/diagnostics"
 install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/.staging"
 install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/served"
 mkdir -p "$APP" "$PUB"
-if ! mountpoint -q "$APP"; then
-  mount --bind "$SOURCE_APP" "$APP"
+APP_SOURCE_FOR_SETUP="$SOURCE_APP"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
+  if ! mountpoint -q "$APP"; then
+    mount --bind "$SOURCE_APP" "$APP"
+  fi
+else
+  if ! mountpoint -q "$APP"; then
+    echo "pre-mounted CI-OS app is required when CIOS_MANAGE_APP_BIND=0: $APP" >&2
+    exit 1
+  fi
+  APP_SOURCE_FOR_SETUP="$APP"
 fi
 if ! mountpoint -q "$PUB"; then
   mount --bind "$SOURCE_PUB" "$PUB"
 fi
 
-app_fstab="$SOURCE_APP $APP none bind 0 0"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
+  app_fstab="$SOURCE_APP $APP none bind 0 0"
+  grep -Fqx "$app_fstab" /etc/fstab || printf '%s\n' "$app_fstab" >> /etc/fstab
+fi
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
-grep -Fqx "$app_fstab" /etc/fstab || printf '%s\n' "$app_fstab" >> /etc/fstab
 grep -Fqx "$pub_fstab" /etc/fstab || printf '%s\n' "$pub_fstab" >> /etc/fstab
 
 # CI-OS is hosted under the Hermes home as an extension. The app user needs
@@ -64,8 +76,8 @@ else
   chmod 711 /root/.hermes /root/.hermes/apps
 fi
 
-mkdir -p "$SOURCE_APP/run-queue/.state" "$SOURCE_APP/out" "$SOURCE_APP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
-chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
+mkdir -p "$APP_SOURCE_FOR_SETUP/run-queue/.state" "$APP_SOURCE_FOR_SETUP/out" "$APP_SOURCE_FOR_SETUP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
+chown -R "$APP_USER:$HERMES_GROUP" "$APP_SOURCE_FOR_SETUP" "$SOURCE_PUB"
 chown "$APP_USER:$APP_USER" "$APP"
 chmod 755 "$APP"
 for code_dir in "$APP/deploy" "$APP/scripts" "$APP/src" "$APP/.venv"; do
@@ -76,6 +88,7 @@ for code_dir in "$APP/deploy" "$APP/scripts" "$APP/src" "$APP/.venv"; do
   fi
 done
 chmod 2775 "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"
 chmod 3770 "$APP/run-queue"
 chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
 chmod 700 "$APP/run-queue/.state"

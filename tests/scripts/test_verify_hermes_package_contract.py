@@ -213,6 +213,7 @@ SAFE_HOST_PERMISSIONS = """#!/bin/sh
 SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
 SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
+MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
 PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
@@ -226,16 +227,22 @@ usermod -aG "$HERMES_GROUP" "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
 setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
+APP_SOURCE_FOR_SETUP="$SOURCE_APP"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
 mount --bind "$SOURCE_APP" "$APP"
+else
+APP_SOURCE_FOR_SETUP="$APP"
+fi
 mount --bind "$SOURCE_PUB" "$PUB"
 install -d -o root -g root -m 0755 /opt/cios
 install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"
 app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
-chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
+chown -R "$APP_USER:$HERMES_GROUP" "$APP_SOURCE_FOR_SETUP" "$SOURCE_PUB"
 code_dir="$APP/scripts"
 chmod -R g-w,o-w "$code_dir"
+chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"
 chmod 3770 "$APP/run-queue"
 chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
 chmod 700 "$APP/run-queue/.state"

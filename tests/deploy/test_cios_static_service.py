@@ -43,3 +43,20 @@ def test_host_permissions_initialize_managed_output_marker() -> None:
     assert 'touch "$APP/out/.cios-output-dir"' in text
     assert 'chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"' in text
     assert 'chmod 660 "$APP/out/.cios-output-dir"' in text
+
+
+def test_host_permissions_support_pre_mounted_release_without_rewriting_app_fstab() -> None:
+    text = HOST_PERMISSIONS.read_text(encoding="utf-8")
+
+    assert 'MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"' in text
+    assert 'if [ "$MANAGE_APP_BIND" = "1" ]; then' in text
+    assert 'app_fstab="$SOURCE_APP $APP none bind 0 0"' in text
+
+
+def test_host_permissions_preserve_hermes_enqueue_and_private_cios_state_boundary() -> None:
+    text = HOST_PERMISSIONS.read_text(encoding="utf-8")
+
+    assert 'chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"' in text
+    assert 'chmod 3770 "$APP/run-queue"' in text
+    assert 'chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"' in text
+    assert 'chmod 700 "$APP/run-queue/.state"' in text
