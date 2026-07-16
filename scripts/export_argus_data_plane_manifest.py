@@ -876,13 +876,8 @@ def _overall_status(
     ):
         return "blocked_on_evidence"
     handoff_status = str(operator_handoff.get("status") or "")
-    if handoff_status:
+    if handoff_status and handoff_status != "limited_by_evidence":
         return handoff_status
-    if (
-        _int_value(evidence_work_queue.get("limiting_count")) > 0
-        or _int_value(product_muscle_work_queue.get("limiting_count")) > 0
-    ):
-        return "limited_by_evidence"
     return "ready_for_operator_review"
 
 

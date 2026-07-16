@@ -7,8 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "export_argus_data_plane_manifest.py"
 
@@ -421,6 +419,7 @@ def test_data_plane_manifest_exposes_product_muscle_work_order_for_limiting_item
     )
 
     product_plane = payload["planes"]["product_reality"]
+    assert payload["status"] == "ready_for_operator_review"
     assert product_plane["status"] == "limited_by_product_surface_evidence"
     assert product_plane["blocks_action"] is False
     assert product_plane["details"]["product_muscle_work_queue"] == {
@@ -450,6 +449,50 @@ def test_data_plane_manifest_exposes_product_muscle_work_order_for_limiting_item
             }
         ],
     }
+
+
+def test_data_plane_manifest_keeps_nonblocking_limited_handoff_publishable() -> None:
+    module = _load_module()
+    dashboard = _dashboard_payload()
+    dashboard["source_health"]["failed_source_count"] = 0
+    dashboard["product_market_run"]["demand_signal_count"] = 3
+    dashboard["product_market_run"]["demand_plane_status"] = "processed"
+    dashboard["product_market_run"]["recommendation_count"] = 1
+
+    payload = module.build_data_plane_manifest_payload(
+        tenant_slug="algolia",
+        dashboard=dashboard,
+        demand_readiness={"status": "processed"},
+        evidence_work_queue={"work_item_count": 0, "blocking_count": 0, "limiting_count": 0, "items": []},
+        product_muscle_work_queue={
+            "work_item_count": 39,
+            "blocking_count": 0,
+            "limiting_count": 39,
+            "items": [
+                {
+                    "work_item_id": "product-muscle:competitor:9:capability:agent-search",
+                    "severity": "limits_confidence",
+                    "title": "Klevu has no product proof for Agent Search",
+                    "next_step": "Run product-surface extraction for Klevu.",
+                    "company_name": "Klevu",
+                }
+            ],
+        },
+        operator_handoff={
+            "status": "limited_by_evidence",
+            "argus_readiness": "needs_operator_review",
+            "next_operator_action": "review_argus_evidence_queue",
+        },
+        generated_at="2026-07-16T08:05:00Z",
+    )
+
+    assert payload["status"] == "ready_for_operator_review"
+    assert payload["blockers"] == []
+    assert payload["next_hermes_action"] == "review_argus_evidence_queue"
+    product_plane = payload["planes"]["product_reality"]
+    assert product_plane["status"] == "limited_by_product_surface_evidence"
+    assert product_plane["blocks_action"] is False
+    assert product_plane["counts"]["product_muscle_limiting_count"] == 39
 
 
 def test_data_plane_manifest_uses_product_surface_execution_summary_as_product_reality_truth() -> None:

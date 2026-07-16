@@ -409,6 +409,105 @@ human decision is whether to keep Phase 2 strict and repair the product/source
 evidence blockers before cutover, or amend the Phase 2 gate to accept a
 limited diagnostic decision surface and a documented source degradation budget.
 
+## 2026-07-16 candidates f365d8b and bb79963 staging result
+
+Candidate `f365d8b`, commit
+`f365d8bbc408ed01878bdb83326e08d68a9d6db2`, fixed the run-health source
+coverage accounting defect exposed by `cbff41b`: checked platform-policy
+dispositions now count as disposed rather than failed. Verification:
+
+- Focused source-coverage regressions: `6 passed, 118 deselected`.
+- Phase 2 readiness/export suite: `159 passed, 1 skipped`.
+- Full local suite: `1331 passed, 3 skipped, 23 deselected`.
+- Ruff: pass.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- GitHub Actions run `29480125505`: success.
+- Archive SHA-256:
+  `4d172a5a11495581e66912d21d96bd648d33450a17af28d4aee1e96dfea9824b`.
+
+The `f365d8b` staging run used queue request
+`fa248c4e66ed4c50b4bb5356078ec5c0` and run ID
+`cios-20260716T074225Z-3816412`. The main daily runner completed source
+coverage and product-market execution, but the post-run readiness export failed
+when `export_argus_demand_readiness.py` attempted to create
+`/opt/cios/app/data/looker/algolia` under a root-owned immutable release. This
+was a release-permission contract gap, not a data-source or model failure.
+
+Candidate `bb79963`, commit
+`bb799633bfb47c960b6ebed47c7dca4c3be57edf`, fixes that gap by making
+`deploy/cios-host-permissions.sh` provision `$APP/data` and `$APP/data/looker`
+as `cios:hermes` mode `2775`, and by adding package-contract coverage so the
+defect cannot recur silently. Verification:
+
+- Targeted package/deploy tests: `3 passed, 88 deselected`.
+- Package/deploy test suite: `91 passed`.
+- Phase 2 readiness plus package-contract suite: `250 passed, 1 skipped`.
+- Full local suite: `1333 passed, 3 skipped, 23 deselected`.
+- Shell syntax: `bash -n deploy/cios-host-permissions.sh` passed.
+- Ruff over changed Python tests/scripts: pass.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- GitHub Actions run `29481810029`: success.
+- Archive SHA-256:
+  `813bf5a2d236dc82953751ca13f2ff0ceddabc3f3a567d8894194c0ed7200940`.
+
+VPS staging for `bb79963`:
+
+- `/opt/cios/app` is bound to `/opt/cios/releases/bb79963`.
+- `/opt/cios/app/run-queue` is bound to
+  `/root/.hermes/apps/cios/run-queue`.
+- `/etc/fstab` points `/opt/cios/app` at `/opt/cios/releases/bb79963`.
+- `cios-admin.service` is active and `http://127.0.0.1:8765/health` returned
+  `{"status":"ok"}`.
+- `cios-runner.path` is active.
+- `ci-dashboard-static.service` remains active and `cios-static.service`
+  remains inactive; no public route cutover occurred.
+
+Hermes-owned `bb79963` staging run:
+
+- Queue request: `f4dd3566cd4e4fdb9757d9494c124bfa`.
+- CI-OS run ID: `cios-20260716T080213Z-3835332`.
+- Queue result: `0`; `.state/active-run` cleared.
+- Package contract verdict: pass.
+- Publication integrity verdict: pass.
+- Source coverage: `active_source_count=42`, `checked_source_count=42`,
+  `failed_source_count=0`, `disposed_source_count=0`.
+- Product extraction: complete.
+- Audience demand: processed.
+- Product reality: present.
+- Public status: `publish_status=published`,
+  `status=limited_by_evidence`, `public_dashboard_updated=true`.
+- Product-muscle work queue: `work_item_count=39`, `blocking_count=0`,
+  `limiting_count=39`.
+- Product-muscle gap discovery: `candidate_url_count=89`,
+  `validated_count=0`, `rejected_count=89`, `stored_candidate_count=0`.
+
+Dashboard click validation was run locally against an SSH-copied tarball of the
+exact generated `bb79963` run output. The generated cockpit was served as
+`index.html` on localhost because the validator canonicalizes the supplied URL
+as a route root. The click verdict is run-bound to
+`cios-20260716T080213Z-3835332` and passed structure, nav targets, timeline,
+semantic layer, quiet-run priority selection, brief routing, appendices, and
+390px, 768px, and 1280px viewports.
+
+Strict launch readiness for `bb79963` still fails:
+
+- `public_status_publishable=false` because status is
+  `publish_status=published status=limited_by_evidence`.
+- `publication_manifest_bound=false` because the served manifest is not a final
+  decision manifest while the run remains limited by evidence.
+
+All other strict readiness checks pass after the refreshed package verdict and
+click verdict: current public status, source coverage, source failure budget,
+audience demand, product reality, product extraction, dashboard clicks, package
+contract, publication integrity, and public safety.
+
+Phase 2 remains blocked, but the blocker has narrowed. The earlier Reddit RSS
+source failure is fixed. The immutable-release Looker data-root permission
+failure is fixed. The remaining boundary is a human/product policy decision:
+whether Phase 2 requires zero `limits_confidence` product-muscle work items
+before cutover, or whether a controlled monitored pilot may publish with zero
+blocking items and disclosed confidence-limiting follow-up work.
+
 ## Original human gate
 
 Approval authorizes the bounded staging sequence, including backing up the

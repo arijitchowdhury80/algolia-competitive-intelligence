@@ -10,7 +10,7 @@
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 5
+    "STAGING": 7
   },
   "strike_log": [
     {
@@ -50,6 +50,22 @@
       "run_id": "cios-20260716T064031Z-3761895",
       "outcome": "FAILED_LIMITED_EVIDENCE_AND_SOURCE_FAILURE_BUDGET",
       "changed_hypothesis": "IMMUTABLE_RELEASE_PREMOUNT_AND_HERMES_QUEUE_BOUNDARY"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 6,
+      "request_id": "fa248c4e66ed4c50b4bb5356078ec5c0",
+      "run_id": "cios-20260716T074225Z-3816412",
+      "outcome": "FAILED_POST_RUN_LOOKER_DATA_ROOT_PERMISSION",
+      "changed_hypothesis": "RUN_HEALTH_SOURCE_DISPOSITIONS_AND_RELEASE_DATA_ROOT_PERMISSION"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 7,
+      "request_id": "f4dd3566cd4e4fdb9757d9494c124bfa",
+      "run_id": "cios-20260716T080213Z-3835332",
+      "outcome": "FAILED_LIMITED_EVIDENCE_POLICY_GATE",
+      "changed_hypothesis": "SOURCE_FAILURE_FIXED_AND_LOOKER_DATA_ROOT_PROVISIONED"
     }
   ],
   "gates": {
@@ -69,7 +85,7 @@
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "CANDIDATE_12DFB08_RUN_VERIFIED_BUT_LAUNCH_READINESS_BLOCKED_LIMITED_EVIDENCE_AND_SOURCE_FAILURE"
+    "staging": "CANDIDATE_BB79963_RUN_VERIFIED_BUT_LAUNCH_READINESS_BLOCKED_LIMITED_EVIDENCE_POLICY"
   },
   "human_decisions": [
     {
