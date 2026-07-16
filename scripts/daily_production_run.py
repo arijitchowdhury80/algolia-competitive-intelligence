@@ -3043,13 +3043,14 @@ def current_source_coverage(result: TenantResult, *, run_id: str) -> dict[str, A
     disposed = [
         item
         for item in result.sources_skipped
-        if isinstance(item, dict) and item.get("checked") is False
+        if isinstance(item, dict) and source_skip_is_disposition(item)
     ]
     checked_failures = [
         item
         for item in result.sources_skipped
-        if isinstance(item, dict) and item.get("checked") is True
+        if isinstance(item, dict) and item.get("checked") is True and not source_skip_is_disposition(item)
     ]
+    checked_disposition_count = sum(1 for item in disposed if item.get("checked") is True)
     dispositions = []
     for index, item in enumerate(disposed):
         reason = str(item.get("reason") or "unspecified")[:120]
@@ -3070,11 +3071,18 @@ def current_source_coverage(result: TenantResult, *, run_id: str) -> dict[str, A
     return {
         "run_id": run_id,
         "active_source_count": int(result.sources_planned_count),
-        "checked_source_count": int(result.sources_attempted_count),
+        "checked_source_count": max(int(result.sources_attempted_count) - checked_disposition_count, 0),
         "failed_source_count": len(result.sources_failed) + len(checked_failures),
         "disposed_source_count": len(disposed),
         "dispositions": dispositions,
     }
+
+
+def source_skip_is_disposition(item: dict[str, Any]) -> bool:
+    if item.get("checked") is False:
+        return True
+    reason = str(item.get("reason") or "")
+    return reason == BLOCKED_BY_WAF_ERROR or reason.startswith("blocked_by_platform_policy:")
 
 
 def format_tenant_run_summary(r: TenantResult) -> str:

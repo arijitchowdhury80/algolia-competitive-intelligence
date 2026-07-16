@@ -3377,6 +3377,38 @@ def test_current_source_coverage_accounts_for_checked_and_disposed_sources(daily
     }
 
 
+def test_current_source_coverage_treats_platform_blocks_as_dispositions(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.sources_planned_count = 3
+    result.sources_attempted_count = 3
+    result.sources_failed = []
+    result.sources_skipped = [
+        {
+            "name": "Community",
+            "url": "https://old.reddit.com/r/ecommerce/.rss",
+            "reason": "blocked_by_platform_policy:reddit_http_403",
+            "checked": True,
+        }
+    ]
+
+    coverage = daily_run.current_source_coverage(
+        result,
+        run_id="cios-20260716T071110Z-3789138",
+    )
+
+    assert coverage["active_source_count"] == 3
+    assert coverage["checked_source_count"] == 2
+    assert coverage["failed_source_count"] == 0
+    assert coverage["disposed_source_count"] == 1
+    assert coverage["dispositions"] == [
+        {
+            "source_ref": "824834493b2dec02",
+            "competitor_name": "Community",
+            "reason": "blocked_by_platform_policy:reddit_http_403",
+        }
+    ]
+
+
 def test_write_dashboard_artifacts_publishes_competitor_briefs_and_stamped_cockpit(daily_run, tmp_path):
     from cios.dashboard.types import AttentionLevel, CompetitorSignalCard, DashboardState, MonitoredCompetitor
 
