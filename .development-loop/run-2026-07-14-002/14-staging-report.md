@@ -327,6 +327,88 @@ Phase 2 still cannot be called passed. The corrected publication boundary is
 working, but final launch readiness remains blocked by a real source-degradation
 decision and a phase-order conflict with Phase 3 product muscle confidence.
 
+## 2026-07-16 candidate 12dfb08 staging result
+
+Candidate `12dfb08`, commit
+`12dfb0855f2dd0fc41d34273c2dc81e794ba8c63`, was created after the `ec6ad5e`
+staging mount exposed a real host-permissions defect. The candidate fixes the
+immutable-release staging path by adding `CIOS_MANAGE_APP_BIND=0`, preventing
+the host permissions script from re-adding the stale `/root/.hermes/apps/cios`
+app bind when `/opt/cios/app` is already mounted to a release. It also
+explicitly restores the queue boundary: `/opt/cios/app/run-queue` is
+`cios:hermes` mode `3770`, while `.state` remains `cios:cios` mode `0700`.
+
+Verification before staging:
+
+- Focused deploy/package tests first failed red, then passed: `89 passed`.
+- Expanded deploy/package/cgroup suite: `101 passed`.
+- Full local suite: `1327 passed, 3 skipped, 23 deselected`.
+- Ruff over changed Python files: pass.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- Strict MyPy over `scripts/verify_hermes_package_contract.py`: success.
+- Local archive SHA-256:
+  `064d714e6fdd01c91ed6752f8b6def4690c57d092326369e77c9d2e8a3bf263f`.
+- Local archive package preflight: pass.
+- GitHub Actions run `29477068248`: success.
+
+VPS staging:
+
+- Uploaded archive SHA-256 matched
+  `064d714e6fdd01c91ed6752f8b6def4690c57d092326369e77c9d2e8a3bf263f`.
+- Installed off-route at `/opt/cios/releases/12dfb08`; off-route package
+  preflight passed as `cios`.
+- Flattened the prior stacked `/opt/cios/app` bind mounts and mounted only
+  `/opt/cios/releases/12dfb08` plus the run-queue bind.
+- Cleaned `/etc/fstab` to the three expected CI-OS entries:
+  `/opt/cios/releases/12dfb08 /opt/cios/app`,
+  dashboard public bind, and
+  `/root/.hermes/apps/cios/run-queue /opt/cios/app/run-queue`.
+- Mounted preflight passed, `cios-admin` health returned `{"status":"ok"}`,
+  `cios-runner.path` was active, `ci-dashboard-static` remained active, and
+  `cios-static` remained inactive.
+- A direct `hermes` write probe to `/opt/cios/app/run-queue` succeeded.
+
+Hermes-owned staging run:
+
+- Queue request: `2652fb61a28848f2afc71ecd01e2d692`.
+- CI-OS run ID: `cios-20260716T064031Z-3761895`.
+- Queue result: `0`; `.state/active-run` cleared.
+- Package contract verdict: pass.
+- Publication integrity verdict: pass.
+- Public-store `current` points to
+  `/opt/cios/public-store/releases/cios-20260716T064031Z-3761895`.
+- Public status in the sibling store is `publish_status=published`,
+  `status=limited_by_evidence`, and `public_dashboard_updated=true`.
+- Legacy public loopback on `127.0.0.1:8662` remained HTTP 200 with SHA-256
+  `280b721bb5276394abac2d4ea1547c1883d1b2b6e94a993a919d4b316dff5db7`;
+  no public route cutover occurred.
+
+Click validation was run locally against an SSH-copied tarball of the exact
+staged sibling-store `current` bytes. Bundle SHA-256 was
+`83a7a92c5b92b3ef7ade73a3dea32ab961607af30b90b6452f99c4eb6bec85be`.
+The validator passed structure, nav targets, timeline, semantic layer,
+priority selection, brief routing, appendices, and 390px, 768px, and 1280px
+viewports.
+
+Launch readiness still failed for two real blockers:
+
+- `public_status_publishable=false` because the public status is
+  `publish_status=published status=limited_by_evidence`.
+- `source_failure_budget_ok=false` because `failed_source_count=1` and the
+  gate currently allows `max_failed_sources=0`; the failing active source in
+  this run was Community forum RSS
+  `https://old.reddit.com/r/ecommerce/.rss`, returning HTTP `403`.
+
+All other launch-readiness checks passed: audience demand processed, product
+reality present, product extraction complete, dashboard click validation
+passed, package contract passed, publication integrity passed, manifest bound,
+public safety passed, current-run status bound, and source coverage complete.
+
+Phase 2 remains blocked. Public cutover is not authorized. The next explicit
+human decision is whether to keep Phase 2 strict and repair the product/source
+evidence blockers before cutover, or amend the Phase 2 gate to accept a
+limited diagnostic decision surface and a documented source degradation budget.
+
 ## Original human gate
 
 Approval authorizes the bounded staging sequence, including backing up the

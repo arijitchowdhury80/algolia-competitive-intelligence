@@ -10,7 +10,7 @@
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 4
+    "STAGING": 5
   },
   "strike_log": [
     {
@@ -42,6 +42,14 @@
       "run_id": "cios-20260714T164836Z-2116876",
       "outcome": "FAILED_PUBLIC_ARTIFACT_LOCAL_PATH_VALIDATION",
       "changed_hypothesis": "TEMPORARY_PUBLIC_JSON_REDACTION_ADAPTER"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 5,
+      "request_id": "2652fb61a28848f2afc71ecd01e2d692",
+      "run_id": "cios-20260716T064031Z-3761895",
+      "outcome": "FAILED_LIMITED_EVIDENCE_AND_SOURCE_FAILURE_BUDGET",
+      "changed_hypothesis": "IMMUTABLE_RELEASE_PREMOUNT_AND_HERMES_QUEUE_BOUNDARY"
     }
   ],
   "gates": {
@@ -61,7 +69,7 @@
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "PUBLIC_JSON_REDACTION_FIX_VERIFIED_READY_FOR_FRESH_CANDIDATE"
+    "staging": "CANDIDATE_12DFB08_RUN_VERIFIED_BUT_LAUNCH_READINESS_BLOCKED_LIMITED_EVIDENCE_AND_SOURCE_FAILURE"
   },
   "human_decisions": [
     {
