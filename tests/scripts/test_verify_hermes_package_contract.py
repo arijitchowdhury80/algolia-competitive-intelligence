@@ -249,6 +249,7 @@ chmod 700 "$APP/run-queue/.state"
 touch "$APP/out/.cios-output-dir"
 chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"
 chmod 660 "$APP/out/.cios-output-dir"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
@@ -1668,6 +1669,21 @@ def test_preflight_fails_when_host_permissions_do_not_fix_cron_wrapper_owner(tmp
 
     assert result.returncode == 2
     assert "host permissions must make Hermes cron wrapper group executable" in result.stderr
+
+
+def test_preflight_fails_when_host_permissions_omit_looker_data_root(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace(
+            'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"',
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must create app-owned Looker data root" in result.stderr
 
 
 def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):

@@ -211,6 +211,7 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must initialize the managed output marker": 'touch "$APP/out/.cios-output-dir"',
     "host permissions must own the output marker for CI-OS": 'chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"',
     "host permissions must protect the output marker permissions": 'chmod 660 "$APP/out/.cios-output-dir"',
+    "host permissions must create app-owned Looker data root": 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"',
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',

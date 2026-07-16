@@ -45,6 +45,12 @@ def test_host_permissions_initialize_managed_output_marker() -> None:
     assert 'chmod 660 "$APP/out/.cios-output-dir"' in text
 
 
+def test_host_permissions_initialize_managed_looker_data_root() -> None:
+    text = HOST_PERMISSIONS.read_text(encoding="utf-8")
+
+    assert 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"' in text
+
+
 def test_host_permissions_support_pre_mounted_release_without_rewriting_app_fstab() -> None:
     text = HOST_PERMISSIONS.read_text(encoding="utf-8")
 

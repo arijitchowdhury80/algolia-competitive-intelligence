@@ -88,6 +88,7 @@ for code_dir in "$APP/deploy" "$APP/scripts" "$APP/src" "$APP/.venv"; do
   fi
 done
 chmod 2775 "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"
 chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"
 chmod 3770 "$APP/run-queue"
 chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
