@@ -366,6 +366,59 @@ def test_public_run_status_prefers_current_run_coverage_and_extraction_accountin
     }
 
 
+def test_public_run_status_publishes_ready_operator_manifest() -> None:
+    module = _load_module()
+    run_id = "cios-20260716T083956Z-3866870"
+
+    payload = module.build_public_run_status_payload(
+        tenant_slug="algolia",
+        manifest={
+            "run_id": run_id,
+            "status": "ready_for_operator_review",
+            "next_hermes_action": "review_argus_evidence_queue",
+            "planes": {
+                "product_reality": {
+                    "status": "limited_by_product_surface_evidence",
+                    "blocks_action": False,
+                    "counts": {
+                        "product_event_count": 500,
+                        "product_muscle_work_item_count": 39,
+                        "product_muscle_blocking_count": 0,
+                        "product_muscle_limiting_count": 39,
+                    },
+                }
+            },
+            "blockers": [],
+        },
+        dashboard={
+            "run_health": {
+                "source_coverage": {
+                    "run_id": run_id,
+                    "active_source_count": 42,
+                    "checked_source_count": 42,
+                    "failed_source_count": 0,
+                    "disposed_source_count": 0,
+                    "dispositions": [],
+                },
+            },
+            "product_market_run": {
+                "run_id": run_id,
+                "status": "ran",
+                "product_event_count": 500,
+                "demand_signal_count": 1,
+            },
+        },
+        publish_status="published",
+        run_id=run_id,
+        generated_at="2026-07-16T08:56:00Z",
+    )
+
+    assert payload["publish_status"] == "published"
+    assert payload["status"] == "published"
+    assert payload["planes"]["product_reality"]["status"] == "limited_by_product_surface_evidence"
+    assert payload["planes"]["product_reality"]["blocks_action"] is False
+
+
 def test_public_run_status_exposes_sanitized_demand_collection_plan() -> None:
     module = _load_module()
 

@@ -449,7 +449,8 @@ def build_public_run_status_payload(
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     dashboard = dashboard or {}
-    status = str(manifest.get("status") or "unknown")
+    manifest_status = str(manifest.get("status") or "unknown")
+    status = "published" if publish_status == "published" and manifest_status == "ready_for_operator_review" else manifest_status
     next_monitoring_actions = _public_next_monitoring_actions(
         manifest.get("next_monitoring_actions")
     )
