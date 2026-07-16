@@ -1,7 +1,7 @@
 # CI-OS Project Dossier
 
 Date: 2026-07-13
-Status: recovery required
+Status: Phase 2 staging verified; recovery still in progress
 Product owner: Arijit Chowdhury
 Operating agent: Argus
 Runtime: Hermes / MyOS-Core
@@ -11,7 +11,9 @@ First tenant: Algolia
 
 CI-OS is approximately 35 percent complete against the original product goal. The engineering scaffold is approximately 65 percent complete, but the product does not yet deliver a reliable, evidence-backed competitive decision loop.
 
-The system must not be called launch-ready. The latest real Hermes scheduled run failed, the latest public status is blocked, the inward demand plane has zero signals, the current product-surface status proves no extraction work, the live intelligence output contains zero recommendations, and the accepted Product Muscle IA remains a mockup rather than the production interface.
+2026-07-16 Phase 2 update: publication integrity is now verified in staging. Candidate `11dc7df631ac84a500c833eb21659b0a98ed5cf2` produced Hermes-owned run `cios-20260716T090552Z-3890353`; strict readiness passed with `status=pass`, `exit_code=0`, `public_status_publishable=true`, source coverage `42/42`, `failed_source_count=0`, and `blockers=[]`. This proves the Phase 2 publication gate, not the whole Algolia pilot. Phase 3 product muscle still has 39 nonblocking confidence-limiting work items, and later phases still own the accepted product IA, intelligence proof, release monitoring, and pilot usage.
+
+The system must not be called fully launch-ready for the Algolia pilot yet. Phase 2 now has a trustworthy, run-bound published decision surface, but Product Muscle, Argus intelligence proof, accepted IA, E2E UX/security validation, and the controlled pilot release remain ahead in the documented phase order.
 
 The project has real foundations worth preserving. It also has a large amount of uncommitted, partially validated work that must be recovered into a controlled release sequence before more feature expansion.
 

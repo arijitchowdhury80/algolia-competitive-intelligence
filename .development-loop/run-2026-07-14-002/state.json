@@ -3,14 +3,14 @@
   "run_id": "2026-07-14-002",
   "project": "CI-OS",
   "feature": "Phase 2 atomic run-bound publication integrity",
-  "status": "IN_PROGRESS",
+  "status": "AWAITING_STAGE_12_HUMAN_ACCEPTANCE",
   "current_stage": "STAGING",
   "builder": "module-builder",
   "retry_counts": {
     "BUILD": 0,
     "DEBUG": 1,
     "RECTIFY": 0,
-    "STAGING": 7
+    "STAGING": 9
   },
   "strike_log": [
     {
@@ -66,6 +66,22 @@
       "run_id": "cios-20260716T080213Z-3835332",
       "outcome": "FAILED_LIMITED_EVIDENCE_POLICY_GATE",
       "changed_hypothesis": "SOURCE_FAILURE_FIXED_AND_LOOKER_DATA_ROOT_PROVISIONED"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 8,
+      "request_id": "0f1377ba3e1c4a88bc7bf95a8bf4aa70",
+      "run_id": "cios-20260716T083956Z-3866870",
+      "outcome": "FAILED_PUBLIC_STATUS_READY_OPERATOR_MAPPING",
+      "changed_hypothesis": "NONBLOCKING_LIMITS_MUST_REMAIN_VISIBLE_WITH_PUBLISHABLE_PUBLIC_STATUS"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 9,
+      "request_id": "ff29631ea3694b768583e67b049cab6c",
+      "run_id": "cios-20260716T090552Z-3890353",
+      "outcome": "PASSED_STRICT_LAUNCH_READINESS",
+      "changed_hypothesis": "READY_OPERATOR_MANIFEST_MAPS_TO_PUBLIC_PUBLISHED_STATUS_WITH_PLANE_CAVEATS"
     }
   ],
   "gates": {
@@ -85,7 +101,7 @@
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "CANDIDATE_BB79963_RUN_VERIFIED_BUT_LAUNCH_READINESS_BLOCKED_LIMITED_EVIDENCE_POLICY"
+    "staging": "PASSED_11DC7DF_RUN_CIOS_20260716T090552Z_3890353_AWAITING_HUMAN_ACCEPTANCE"
   },
   "human_decisions": [
     {

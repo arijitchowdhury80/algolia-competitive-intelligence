@@ -508,6 +508,123 @@ whether Phase 2 requires zero `limits_confidence` product-muscle work items
 before cutover, or whether a controlled monitored pilot may publish with zero
 blocking items and disclosed confidence-limiting follow-up work.
 
+## 2026-07-16 candidates d0e9cdf and 11dc7df staging result
+
+Candidate `d0e9cdf`, commit
+`d0e9cdf1cc17ee97461cf62a7a0f5a24e1100c7e`, fixed the first remaining Phase 2
+policy-coupling defect: nonblocking product-muscle `limits_confidence` items
+remain visible in the product plane and work queue, but no longer downgrade the
+top-level data-plane manifest from `ready_for_operator_review`.
+
+Verification before staging:
+
+- Affected manifest/public-status/launch-readiness/operator-handoff suite:
+  `50 passed`.
+- Expanded Phase 2 package/deploy/readiness suite: `165 passed`.
+- Full local suite: `1334 passed, 3 skipped, 23 deselected`.
+- Ruff over touched publication/status surfaces: pass.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- GitHub Actions run `29483780082`: success.
+- Archive SHA-256:
+  `09584190cd95a4f875bd03f2368ffcdd245745a1d89c1c81edc73bf0932489f0`.
+
+The `d0e9cdf` staging run used queue request
+`0f1377ba3e1c4a88bc7bf95a8bf4aa70` and run ID
+`cios-20260716T083956Z-3866870`. It completed with queue result `0`,
+package/publication verdicts passed, source coverage was `42/42` with
+`failed_source_count=0`, and click validation passed against an SSH-copied
+bundle of the exact served release. Strict launch readiness still failed on
+one remaining blocker: public status exported
+`publish_status=published status=ready_for_operator_review`, while the launch
+gate intentionally requires the public-facing status to be literal
+`published`.
+
+Candidate `11dc7df`, commit
+`11dc7df631ac84a500c833eb21659b0a98ed5cf2`, fixed that final public-status
+mapping: a successfully published `ready_for_operator_review` internal
+manifest is exported publicly as `status=published`, while the product plane
+continues to disclose `limited_by_product_surface_evidence` and the product
+muscle queue continues to expose the 39 nonblocking limiter items.
+
+Verification before staging:
+
+- Focused public-status regression first failed red, then passed.
+- Affected manifest/public-status/launch-readiness/operator-handoff suite:
+  `51 passed`.
+- Full local suite: `1335 passed, 3 skipped, 23 deselected`.
+- Ruff over touched publication/status surfaces: pass.
+- Pyright phase-2 project: `0 errors, 0 warnings, 0 informations`.
+- GitHub Actions run `29485689946`: success.
+- Archive SHA-256:
+  `4df14be4b48ed726f608af7c77e762e28441def4e55de15b3deb6e21617a449e`.
+
+VPS staging for `11dc7df`:
+
+- `/opt/cios/app` is bound to `/opt/cios/releases/11dc7df`.
+- `/opt/cios/app/run-queue` is bound to
+  `/root/.hermes/apps/cios/run-queue`.
+- `/etc/fstab` points `/opt/cios/app` at `/opt/cios/releases/11dc7df`.
+- `/etc/cios-env` and `/root/.hermes/cios-env` have
+  `CIOS_PACKAGE_VERSION=11dc7df` and `CIOS_PUBLICATION_V2=1`.
+- Delegated systemd package preflight passed:
+  `PASS: CI-OS Hermes package contract satisfied`.
+- `cios-admin.service` is active and `http://127.0.0.1:8765/health` returned
+  `{"status":"ok"}`.
+- `cios-runner.path` is active.
+- `ci-dashboard-static.service` remains active and `cios-static.service`
+  remains inactive; no Caddy/firewall/public route cutover occurred.
+
+Hermes-owned `11dc7df` staging run:
+
+- Queue request: `ff29631ea3694b768583e67b049cab6c`.
+- CI-OS run ID: `cios-20260716T090552Z-3890353`.
+- Queue result: `0`; runner service exited successfully.
+- Runner service duration: `16min 49.225s`.
+- Package contract verdict: pass after delegated refresh.
+- Publication integrity verdict: pass.
+- Public status: `publish_status=published`, `status=published`,
+  `public_dashboard_updated=true`.
+- Source coverage: `active_source_count=42`, `checked_source_count=42`,
+  `failed_source_count=0`, `disposed_source_count=0`.
+- Product extraction: complete.
+- Audience demand: processed.
+- Product reality: present.
+- Product-market run: `status=ran`, `product_event_count=500`,
+  `demand_signal_count=1`, `recommendation_count=0`.
+- Product-muscle work queue: `work_item_count=39`, `blocking_count=0`,
+  `limiting_count=39`.
+- Product-muscle gap discovery: `candidate_url_count=104`,
+  `validated_count=0`, `rejected_count=104`, `stored_candidate_count=0`.
+
+Dashboard click validation was run locally against an SSH-copied tarball of the
+exact served `cios-20260716T090552Z-3890353` release. Bundle SHA-256 was
+`db187ebcf389aa57c652e9667192afdecaa5d1030bef88948cfe8e58b34a3f6b`.
+The click verdict is run-bound to `cios-20260716T090552Z-3890353` and passed
+structure, nav targets, timeline, semantic layer, quiet-run priority state,
+brief routing, appendices, and 390px, 768px, and 1280px viewports.
+
+Strict launch readiness for `11dc7df` passed:
+
+- `public_status_current_run=true`
+- `public_status_publishable=true`
+- `source_coverage_complete=true`
+- `source_failure_budget_ok=true`
+- `audience_demand_processed=true`
+- `product_reality_present=true`
+- `product_extraction_complete=true`
+- `dashboard_click_validation_passed=true`
+- `hermes_package_contract_passed=true`
+- `publication_integrity_passed=true`
+- `publication_manifest_bound=true`
+- `public_safety_ok=true`
+- `blockers=[]`
+
+Phase 2 staging is verified. The formal Development-Loop Stage 12 human gate is
+now awaiting acceptance before Stage 13 Finish. The Phase 3 product-muscle work
+queue remains real and visible: 39 confidence-limiting, nonblocking work items
+need product-muscle follow-up after this gate, but they no longer invalidate
+Phase 2 publication integrity.
+
 ## Original human gate
 
 Approval authorizes the bounded staging sequence, including backing up the
