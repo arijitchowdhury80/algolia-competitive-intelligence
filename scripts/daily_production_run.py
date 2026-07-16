@@ -63,6 +63,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from urllib.parse import urlsplit
 
 import psycopg
 import yaml
@@ -3309,7 +3310,7 @@ def build_runtime_source_plan_from_rows(seed_plan: list[dict], db_rows: list[dic
     return runtime_plan
 
 
-def source_block_reason_for_fetch_error(fetched: Any) -> str | None:
+def source_block_reason_for_fetch_error(fetched: Any, *, url: str = "") -> str | None:
     """Return a durable source-block reason for fetch failures that are not
     ordinary transient collection errors.
 
@@ -3320,7 +3321,35 @@ def source_block_reason_for_fetch_error(fetched: Any) -> str | None:
 
     if getattr(fetched, "error", None) == BLOCKED_BY_WAF_ERROR:
         return BLOCKED_BY_WAF_ERROR
+    reddit_block = reddit_rss_platform_block_reason(url, getattr(fetched, "http_status", None))
+    if reddit_block:
+        return reddit_block
     return None
+
+
+def reddit_rss_platform_block_reason(url: str, http_status: Any) -> str | None:
+    """Return a durable block reason for Reddit RSS platform access denials.
+
+    The Community Reddit RSS source is useful when available, but current VPS
+    probes return HTTP 403 with the runtime fetcher and HTTP 429 with more
+    feed-specific headers. Treat those as platform access/rate-limit policy
+    blocks for that specific feed family, not as market silence or a generic
+    source failure.
+    """
+
+    try:
+        status = int(http_status)
+    except (TypeError, ValueError):
+        return None
+    if status not in {403, 429}:
+        return None
+    parsed = urlsplit(url.strip())
+    host = parsed.netloc.lower()
+    if host not in {"old.reddit.com", "www.reddit.com", "reddit.com"}:
+        return None
+    if not parsed.path.lower().endswith(".rss"):
+        return None
+    return f"blocked_by_platform_policy:reddit_http_{status}"
 
 
 def block_source_after_fetch_challenge(
@@ -4074,7 +4103,7 @@ async def run_tenant(
         )
         fetched = content_fetcher.fetch_content(c["url"])
         if fetched.status != FetchStatus.OK or not fetched.text:
-            block_reason = source_block_reason_for_fetch_error(fetched)
+            block_reason = source_block_reason_for_fetch_error(fetched, url=c["url"])
             if block_reason:
                 block_source_after_fetch_challenge(
                     app_conn,

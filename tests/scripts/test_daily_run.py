@@ -161,6 +161,35 @@ def test_waf_challenge_fetch_result_is_source_blocking(daily_run):
     assert daily_run.source_block_reason_for_fetch_error(empty) is None
 
 
+@pytest.mark.parametrize("http_status", [403, 429])
+def test_reddit_rss_access_policy_fetch_result_is_source_blocking(daily_run, http_status):
+    fetched = ContentFetchResult(
+        status=FetchStatus.ERROR,
+        http_status=http_status,
+        text="",
+        error=f"http_error:{http_status}",
+    )
+
+    assert (
+        daily_run.source_block_reason_for_fetch_error(
+            fetched,
+            url="https://old.reddit.com/r/ecommerce/.rss",
+        )
+        == f"blocked_by_platform_policy:reddit_http_{http_status}"
+    )
+
+
+def test_non_reddit_http_access_error_remains_transient_source_failure(daily_run):
+    fetched = ContentFetchResult(
+        status=FetchStatus.ERROR,
+        http_status=403,
+        text="",
+        error="http_error:403",
+    )
+
+    assert daily_run.source_block_reason_for_fetch_error(fetched, url="https://example.com/feed") is None
+
+
 def test_block_source_after_fetch_challenge_marks_source_blocked(daily_run, monkeypatch):
     class FakeCursor:
         def __enter__(self):
