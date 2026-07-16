@@ -1,5 +1,15 @@
 # CI-OS Changelog
 
+## 2026-07-16
+
+- Passed Phase 2 staging for immutable candidate `11dc7df` with Hermes-owned
+  run `cios-20260716T090552Z-3890353`.
+- Verified strict launch readiness with all checks true and `blockers=[]`.
+- Preserved visible Phase 3 product-muscle caveats: 39 confidence-limiting,
+  nonblocking work items.
+- Added the Stage 13 controlled-pilot runbook and verdict. Production route
+  cutover remains blocked on the final human decision gate.
+
 ## 2026-07-14
 
 - Added delegated cgroup v2 containment and a dedicated `cios` runtime owner.

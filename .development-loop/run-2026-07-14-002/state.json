@@ -3,8 +3,8 @@
   "run_id": "2026-07-14-002",
   "project": "CI-OS",
   "feature": "Phase 2 atomic run-bound publication integrity",
-  "status": "AWAITING_STAGE_12_HUMAN_ACCEPTANCE",
-  "current_stage": "STAGING",
+  "status": "WAITING_FOR_HUMAN",
+  "current_stage": "FINISH",
   "builder": "module-builder",
   "retry_counts": {
     "BUILD": 0,
@@ -101,13 +101,19 @@
     "github_ci": "PASSED_RUN_29326371217",
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
-    "staging": "PASSED_11DC7DF_RUN_CIOS_20260716T090552Z_3890353_AWAITING_HUMAN_ACCEPTANCE"
+    "staging": "PASSED_11DC7DF_RUN_CIOS_20260716T090552Z_3890353_ACCEPTED_BY_CONTINUE",
+    "finish": "AWAITING_HUMAN_FINAL_PRODUCTION_DECISION"
   },
   "human_decisions": [
     {
       "date": "2026-07-14",
       "decision": "AUTHORIZE_PRIVATE_LOOKER_MANUAL_EXPORT_AND_BRING_DEMAND_INPUT_FORWARD",
       "scope": "READ_ONLY_REPORT_INSPECTION_MANUAL_CSV_EXPORT_NO_GA4_CREDENTIALS_NO_REPORT_EDITS"
+    },
+    {
+      "date": "2026-07-16",
+      "decision": "ACCEPT_STAGE_12_STAGING_EVIDENCE_AND_ADVANCE_TO_FINISH",
+      "scope": "PHASE_2_ONLY_NO_PHASE_3_NO_PUBLIC_CUTOVER"
     }
   ],
   "staging_demand_evidence": {

@@ -9,7 +9,13 @@ Phase 0 passed on 2026-07-13. The clean retained baseline is commit
 Phase 1 passed on 2026-07-14 at deployed commit `1fa7ac5` after two consecutive
 real Hermes cron executions completed as `cios` with clean containment.
 
-Current active phase: Phase 2, make publication and readiness trustworthy.
+Phase 2 staging passed on 2026-07-16 at package commit `11dc7df` after a
+Hermes-owned run completed as `cios-20260716T090552Z-3890353` and strict launch
+readiness returned all checks true with `blockers=[]`.
 
-Do not begin Phase 3 until planted publication defects fail and one fresh,
-complete, safe, run-bound Hermes publication passes the Phase 2 gate.
+Current active gate: Stage 13 final production decision for the Phase 2
+controlled monitored pilot.
+
+Do not begin Phase 3 until the Stage 13 human production decision is resolved.
+Phase 3 currently owns the 39 visible confidence-limiting, nonblocking
+product-muscle work items.

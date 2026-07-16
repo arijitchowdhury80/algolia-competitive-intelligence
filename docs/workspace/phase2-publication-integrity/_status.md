@@ -1,8 +1,9 @@
 # Phase 2 Publication Integrity Status
 
-Status: staging passed; awaiting Development-Loop Stage 12 human acceptance
+Status: Stage 13 finish complete; awaiting final human production decision
 Development-Loop run: `.development-loop/run-2026-07-14-002/`
-Current step: accept Stage 12 evidence, then advance to Stage 13 Finish
+Current step: review the Stage 13 runbook and verdict, then decide whether to
+approve the Phase 2 controlled monitored pilot route cutover
 
 All local validation layers, GitHub CI, live Hermes-owned staging execution,
 package/publication verdicts, Playwright dashboard click validation, and strict
@@ -27,3 +28,10 @@ The 39 product-muscle `limits_confidence` work items remain visible and are not
 papered over. They are Phase 3 follow-up, not Phase 2 publication-integrity
 blockers, because `blocking_count=0` and the product plane discloses the
 limitation.
+
+Stage 13 finish artifacts:
+
+- `.development-loop/run-2026-07-14-002/15-runbook.md`
+- `.development-loop/run-2026-07-14-002/16-verdict.md`
+
+No production Caddy/firewall route cutover has occurred.
