@@ -46,6 +46,12 @@ traffic increase:
   `publish_status=published`, `status=published`, and
   `public_dashboard_updated=true`.
 - Strict launch readiness reports all checks true and `blockers=[]`.
+- Strict launch readiness must use the served publication manifest, not the
+  data-plane manifest. Valid served manifest paths are
+  `/opt/cios/public-store/served/publication-manifest.json` and
+  `/opt/cios/public-store/served/v2/publication-manifest.json`; the manifest
+  SHA must match `manifest_sha256` in
+  `/opt/cios/app/out/publication-integrity-verdict.json`.
 - Dashboard click validation is run-bound to
   `cios-20260716T090552Z-3890353` and passed desktop/tablet/mobile viewports.
 - Product-muscle caveats are understood as nonblocking Phase 3 follow-up:
@@ -67,7 +73,8 @@ These steps are for the human-approved controlled monitored pilot only.
    - publication integrity pass
    - source coverage `checked=42`, `failed=0`
    - public status current-run and publishable
-   - strict launch readiness `blockers=[]`
+   - strict launch readiness `blockers=[]` using the served
+     `publication-manifest.json`
 6. If and only if the human production decision authorizes it, switch the
    public route to the staged dashboard service using the approved Caddy
    change plan.

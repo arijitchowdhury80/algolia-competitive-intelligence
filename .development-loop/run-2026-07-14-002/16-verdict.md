@@ -77,3 +77,40 @@ into Phase 2 completion work:
 Stage 13 Finish artifacts are complete locally. The workflow is now waiting for
 the final human production decision. Phase 3 must not start until this human
 gate is explicitly resolved.
+
+## Pre-Decision Verification Refresh
+
+Timestamp: 2026-07-16T05:43:06-0400
+
+Read-only VPS verification refreshed the Stage 13 evidence without changing
+services, routing, Caddy, firewall, or runtime files.
+
+Confirmed current staged state:
+
+- `/opt/cios/app` remains mounted from `/opt/cios/releases/11dc7df`.
+- `/opt/cios/app/run-queue` remains mounted from
+  `/root/.hermes/apps/cios/run-queue`.
+- `/etc/cios-env` and `/root/.hermes/cios-env` both set
+  `CIOS_PUBLICATION_V2=1` and `CIOS_PACKAGE_VERSION=11dc7df`.
+- `cios-admin.service`, `cios-runner.path`, and
+  `ci-dashboard-static.service` are active.
+- `cios-static.service` remains inactive.
+- `caddy.service` is not active on the VPS.
+- `http://127.0.0.1:8765/health` returned `{"status":"ok"}`.
+
+Verifier refresh:
+
+- `scripts/verify_hermes_package_contract.py --app-dir /opt/cios/app --run-id cios-20260716T090552Z-3890353`
+  returned `PASS: CI-OS Hermes package contract satisfied`.
+- `scripts/check_e2e_launch_readiness.py` returned `status=pass`,
+  `exit_code=0`, and `blockers=[]` when using the served publication manifest
+  at `/opt/cios/public-store/served/publication-manifest.json`.
+- Served publication manifest SHA:
+  `262d8ad95c251fb8609cf315f9cd46de9f966d4fb7db40e536e5ed15b6c7fa79`.
+- The served manifest SHA matches `manifest_sha256` in
+  `/opt/cios/app/out/publication-integrity-verdict.json`.
+
+Operator note: using `/opt/cios/app/out/argus-data-plane-manifest.json` as the
+`--publication-manifest` input correctly fails `publication_manifest_bound`.
+The readiness gate is intentionally bound to the served
+`publication-manifest.json` bytes, not the internal data-plane manifest.

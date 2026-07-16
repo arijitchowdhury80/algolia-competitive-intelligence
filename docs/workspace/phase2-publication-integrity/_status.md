@@ -35,3 +35,15 @@ Stage 13 finish artifacts:
 - `.development-loop/run-2026-07-14-002/16-verdict.md`
 
 No production Caddy/firewall route cutover has occurred.
+
+Pre-decision refresh on 2026-07-16 at 05:43 ET confirmed that the staged VPS
+state still passes the Phase 2 gate when the readiness checker is given the
+served publication manifest:
+
+- Package contract: pass.
+- Strict launch readiness: `status=pass`, `exit_code=0`, `blockers=[]`.
+- Served publication manifest:
+  `/opt/cios/public-store/served/publication-manifest.json`.
+- Served manifest SHA:
+  `262d8ad95c251fb8609cf315f9cd46de9f966d4fb7db40e536e5ed15b6c7fa79`,
+  matching `/opt/cios/app/out/publication-integrity-verdict.json`.
