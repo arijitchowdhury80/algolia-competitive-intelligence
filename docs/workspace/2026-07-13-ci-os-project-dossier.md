@@ -1,7 +1,7 @@
 # CI-OS Project Dossier
 
 Date: 2026-07-13
-Status: Phase 2 Stage 13 finish complete; final production decision pending
+Status: Phase 2 controlled monitored pilot live; Stage 14 monitoring active
 Product owner: Arijit Chowdhury
 Operating agent: Argus
 Runtime: Hermes / MyOS-Core
@@ -12,6 +12,8 @@ First tenant: Algolia
 CI-OS is approximately 35 percent complete against the original product goal. The engineering scaffold is approximately 65 percent complete, but the product does not yet deliver a reliable, evidence-backed competitive decision loop.
 
 2026-07-16 Phase 2 update: publication integrity is now verified in staging. Candidate `11dc7df631ac84a500c833eb21659b0a98ed5cf2` produced Hermes-owned run `cios-20260716T090552Z-3890353`; strict readiness passed with `status=pass`, `exit_code=0`, `public_status_publishable=true`, source coverage `42/42`, `failed_source_count=0`, and `blockers=[]`. Development-Loop Stage 13 finish artifacts are written in `.development-loop/run-2026-07-14-002/15-runbook.md` and `.development-loop/run-2026-07-14-002/16-verdict.md`. This proves the Phase 2 publication gate and prepares the controlled-pilot production decision; it does not complete the whole Algolia pilot. Phase 3 product muscle still has 39 nonblocking confidence-limiting work items, and later phases still own the accepted product IA, intelligence proof, release monitoring, and pilot usage.
+
+2026-07-17 Phase 2 cutover update: Arijit approved the controlled monitored pilot cutover. The public route `https://ci.chowmes.com/` now serves the current publication-store bundle for run `cios-20260717T130034Z-890867`. The cutover changed only `ci-dashboard-static.service`, repointing it to `/opt/cios/public-store/served`; Caddy listeners, firewall rules, Hermes core, and credentials were unchanged. Public dashboard click validation passed, source coverage is `42/42` with `failed_source_count=0`, and final strict readiness after the 15-minute validation window passed with `status=pass`, `exit_code=0`, and `blockers=[]`. Stage 14 monitoring is now active before Phase 3 starts.
 
 The system must not be called fully launch-ready for the Algolia pilot yet. Phase 2 now has a trustworthy, run-bound published decision surface, but Product Muscle, Argus intelligence proof, accepted IA, E2E UX/security validation, and the controlled pilot release remain ahead in the documented phase order.
 

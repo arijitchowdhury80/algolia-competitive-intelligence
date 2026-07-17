@@ -78,6 +78,42 @@ Stage 13 Finish artifacts are complete locally. The workflow is now waiting for
 the final human production decision. Phase 3 must not start until this human
 gate is explicitly resolved.
 
+## Production Decision And Cutover
+
+Timestamp: 2026-07-17T11:19:29-0400
+
+Decision: approved and executed for the Phase 2 controlled monitored pilot.
+
+Cutover action:
+
+- Repointed `ci-dashboard-static.service` to
+  `/opt/cios/public-store/served`.
+- Preserved Caddy listeners and public firewall rules unchanged.
+- Preserved Hermes core unchanged.
+- Preserved credentials unchanged.
+- Backed up the previous service unit to
+  `/opt/cios/staging-backups/phase2-cutover-20260717T150029Z/ci-dashboard-static.service.before`.
+
+Current public route:
+
+- `https://ci.chowmes.com/` returns HTTP 200 and serves the July 17 bundle.
+- `https://ci.chowmes.com/publication-manifest.json` returns HTTP 200.
+- `https://ci.chowmes.com/data/argus-latest-run-status.json` returns HTTP 200.
+- Public run ID: `cios-20260717T130034Z-890867`.
+- Public status: `publish_status=published`, `status=published`,
+  `public_dashboard_updated=true`.
+- Source coverage: 42 active, 42 checked, 0 failed.
+
+Post-cutover gates:
+
+- Public dashboard click validation: pass.
+- Package contract: pass.
+- Publication integrity: pass.
+- Strict launch readiness at 2026-07-17T15:19:08Z: `status=pass`,
+  `exit_code=0`, `blockers=[]`.
+
+Stage 13 is now passed. Stage 14 feedback monitoring is active.
+
 ## Pre-Decision Verification Refresh
 
 Timestamp: 2026-07-16T05:43:06-0400

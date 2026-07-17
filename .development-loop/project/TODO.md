@@ -1,13 +1,13 @@
 # CI-OS TODO
 
-Active TODO, Stage 13 human gate:
+Active TODO, Stage 14 feedback:
 
-- Review `.development-loop/run-2026-07-14-002/15-runbook.md`.
-- Review `.development-loop/run-2026-07-14-002/16-verdict.md`.
-- Decide whether to approve the Phase 2 controlled monitored pilot route
-  cutover.
-- If approved, run the 15-minute post-deploy validation window before Stage 14.
-- If not approved, record the decision and keep Phase 3 locked.
+- Monitor `https://ci.chowmes.com/` through at least 2026-07-19 11:00 ET.
+- Re-run strict readiness after the next Hermes-owned daily run.
+- Re-run dashboard click validation at 24h and 48h or after any dashboard
+  refresh.
+- Record rollback-triggering findings immediately if they appear.
+- Write `17b-iteration-input.md` with actual metrics before Phase 3 starts.
 
 Deferred TODO, Phase 3:
 

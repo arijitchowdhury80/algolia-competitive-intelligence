@@ -13,9 +13,13 @@ Phase 2 staging passed on 2026-07-16 at package commit `11dc7df` after a
 Hermes-owned run completed as `cios-20260716T090552Z-3890353` and strict launch
 readiness returned all checks true with `blockers=[]`.
 
-Current active gate: Stage 13 final production decision for the Phase 2
-controlled monitored pilot.
+Phase 2 controlled monitored pilot cutover passed on 2026-07-17 for public run
+`cios-20260717T130034Z-890867`. The 15-minute validation window passed and
+strict readiness ended with `status=pass`, `exit_code=0`, and `blockers=[]`.
 
-Do not begin Phase 3 until the Stage 13 human production decision is resolved.
-Phase 3 currently owns the 39 visible confidence-limiting, nonblocking
-product-muscle work items.
+Current active gate: Stage 14 feedback monitoring for the Phase 2 controlled
+pilot.
+
+Do not begin Phase 3 until the Stage 14 monitoring baseline is recorded or any
+post-cutover findings are explicitly accepted. Phase 3 currently owns the
+visible confidence-limiting, nonblocking product-muscle work items.

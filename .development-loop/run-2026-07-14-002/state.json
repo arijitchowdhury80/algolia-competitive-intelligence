@@ -3,8 +3,8 @@
   "run_id": "2026-07-14-002",
   "project": "CI-OS",
   "feature": "Phase 2 atomic run-bound publication integrity",
-  "status": "WAITING_FOR_HUMAN",
-  "current_stage": "FINISH",
+  "status": "IN_PROGRESS",
+  "current_stage": "FEEDBACK",
   "builder": "module-builder",
   "retry_counts": {
     "BUILD": 0,
@@ -102,7 +102,8 @@
     "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
     "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
     "staging": "PASSED_11DC7DF_RUN_CIOS_20260716T090552Z_3890353_ACCEPTED_BY_CONTINUE",
-    "finish": "AWAITING_HUMAN_FINAL_PRODUCTION_DECISION"
+    "finish": "PASSED_PHASE_2_CONTROLLED_MONITORED_PILOT_CUTOVER_20260717T150029Z",
+    "feedback": "IN_PROGRESS_MONITORING_20260717_20260720"
   },
   "human_decisions": [
     {
@@ -114,6 +115,11 @@
       "date": "2026-07-16",
       "decision": "ACCEPT_STAGE_12_STAGING_EVIDENCE_AND_ADVANCE_TO_FINISH",
       "scope": "PHASE_2_ONLY_NO_PHASE_3_NO_PUBLIC_CUTOVER"
+    },
+    {
+      "date": "2026-07-17",
+      "decision": "APPROVE_PHASE_2_CONTROLLED_MONITORED_PILOT_CUTOVER",
+      "scope": "REPOINT_CI_DASHBOARD_STATIC_TO_PUBLIC_STORE_SERVED_NO_FIREWALL_NO_CADDY_LISTENER_NO_HERMES_CORE"
     }
   ],
   "staging_demand_evidence": {

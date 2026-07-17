@@ -1,5 +1,16 @@
 # CI-OS Changelog
 
+## 2026-07-17
+
+- Executed the approved Phase 2 controlled monitored pilot cutover for
+  `https://ci.chowmes.com/` by repointing `ci-dashboard-static.service` to
+  `/opt/cios/public-store/served`.
+- Preserved Caddy listeners, firewall rules, Hermes core, and credentials
+  unchanged.
+- Passed the 15-minute post-cutover validation window for run
+  `cios-20260717T130034Z-890867`.
+- Opened Development-Loop Stage 14 feedback monitoring.
+
 ## 2026-07-16
 
 - Passed Phase 2 staging for immutable candidate `11dc7df` with Hermes-owned

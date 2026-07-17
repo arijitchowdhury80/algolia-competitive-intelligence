@@ -1,9 +1,8 @@
 # Phase 2 Publication Integrity Status
 
-Status: Stage 13 finish complete; awaiting final human production decision
+Status: controlled monitored pilot cutover complete; Stage 14 monitoring active
 Development-Loop run: `.development-loop/run-2026-07-14-002/`
-Current step: review the Stage 13 runbook and verdict, then decide whether to
-approve the Phase 2 controlled monitored pilot route cutover
+Current step: monitor the public pilot route and record Stage 14 feedback
 
 All local validation layers, GitHub CI, live Hermes-owned staging execution,
 package/publication verdicts, Playwright dashboard click validation, and strict
@@ -34,7 +33,9 @@ Stage 13 finish artifacts:
 - `.development-loop/run-2026-07-14-002/15-runbook.md`
 - `.development-loop/run-2026-07-14-002/16-verdict.md`
 
-No production Caddy/firewall route cutover has occurred.
+The approved production route cutover occurred on 2026-07-17. The cutover
+repointed `ci-dashboard-static.service` to `/opt/cios/public-store/served` and
+did not change Caddy listeners, firewall rules, Hermes core, or credentials.
 
 Pre-decision refresh on 2026-07-16 at 05:43 ET confirmed that the staged VPS
 state still passes the Phase 2 gate when the readiness checker is given the
@@ -47,3 +48,16 @@ served publication manifest:
 - Served manifest SHA:
   `262d8ad95c251fb8609cf315f9cd46de9f966d4fb7db40e536e5ed15b6c7fa79`,
   matching `/opt/cios/app/out/publication-integrity-verdict.json`.
+
+Post-cutover validation on 2026-07-17:
+
+- Public run: `cios-20260717T130034Z-890867`.
+- `https://ci.chowmes.com/`: HTTP 200, July 17 bundle, content length 405210.
+- `https://ci.chowmes.com/publication-manifest.json`: HTTP 200.
+- `https://ci.chowmes.com/data/argus-latest-run-status.json`: HTTP 200.
+- Public status: `publish_status=published`, `status=published`,
+  `public_dashboard_updated=true`.
+- Source coverage: 42 active, 42 checked, 0 failed.
+- Public dashboard click validation: pass.
+- 15-minute validation window: pass at minutes 0, 2, 4, 6, 8, 10, 12, and 15.
+- Final strict readiness: `status=pass`, `exit_code=0`, `blockers=[]`.
