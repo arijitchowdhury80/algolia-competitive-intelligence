@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -13,10 +15,13 @@ SCRIPT = ROOT / "scripts" / "verify_hermes_package_contract.py"
 
 REQUIRED_FILES = [
     "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/cios-static.service",
     "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
@@ -44,8 +49,10 @@ REQUIRED_FILES = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
+    "scripts/publish_generation.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
@@ -59,11 +66,16 @@ REQUIRED_FILES = [
     "src/cios/admin/demand_imports.py",
     "src/cios/admin/dashboard_refresh.py",
     "src/cios/db/repos/product_market.py",
+    "src/cios/intelligence/product_surface_executor.py",
+    "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/cgroup_launcher.py",
+    "src/cios/platform/redaction.py",
 ]
 
 REQUIRED_DIRS = [
     "src/cios/intelligence",
     "src/cios/admin",
+    "src/cios/publication",
 ]
 
 SAFE_ADMIN_SERVICE = """[Unit]
@@ -74,6 +86,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
+Environment=PYTHONPATH=/opt/cios/app/src
 User=cios
 Group=cios
 ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /etc/cios-env --host 127.0.0.1 --port 8765
@@ -86,16 +99,27 @@ PrivateTmp=false
 WantedBy=multi-user.target
 """
 
+SAFE_LAUNCH_READINESS = """
+parser.add_argument("--publication-verdict")
+parser.add_argument("--publication-manifest")
+expected_gate="publication_integrity"
+publication_manifest_sha256 = "digest"
+"""
+
 
 SAFE_WRAPPER = """#!/bin/sh
+CIOS_RUN_ID="cios-20260714T090000Z-1234"
+PUBLICATION_V2="${CIOS_PUBLICATION_V2:-0}"
+CIOS_PACKAGE_VERSION="${CIOS_PACKAGE_VERSION:-phase2-test-release}"
+echo "CIOS_PACKAGE_VERSION is required" >/dev/null
 export PYTHONPATH="$APP/src${PYTHONPATH:+:$PYTHONPATH}"
 export CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE="${CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1}"
-export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-900}"
-case "${CIOS_RUNNER_HANDOFF:-0}" in 1) request="$APP/run-queue/example.request"; result="$APP/run-queue/example.result"; CIOS_DISABLE_RUNNER_HANDOFF=1 ;; esac
+export CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS:-600}"
+export CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS="${CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS:-630}"
 export CIOS_PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 touch "$OUT/.cios-output-dir"
 find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
-.venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP"
+.venv/bin/python scripts/verify_hermes_package_contract.py --app-dir "$APP" --run-id "$CIOS_RUN_ID" --verdict-output "$OUT/hermes-package-contract-verdict.json"
 .venv/bin/python scripts/audit_learning_policies.py --package-root "$APP"
 .venv/bin/python scripts/apply_product_market_schema.py
 .venv/bin/python scripts/promote_product_surface_candidates.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/product-surface-candidate-promotion-summary.json"
@@ -110,6 +134,7 @@ find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/attach_operator_handoff_to_dashboard.py --dashboard "$OUT/argus-dashboard.json" --handoff "$OUT/argus-operator-handoff.json" --html "$CIOS_DASHBOARD_OUT"
 .venv/bin/python scripts/export_argus_data_plane_manifest.py --tenant "$CIOS_DELIVER_TENANT" --dashboard "$OUT/argus-dashboard.json" --demand-readiness "$OUT/argus-demand-readiness.json" --demand-plan-template "$OUT/argus-demand-plan-template.csv" --demand-intake "$OUT/argus-demand-intake.json" --evidence-work-queue "$OUT/argus-evidence-work-queue.json" --product-muscle-work-queue "$OUT/argus-product-muscle-work-queue.json" --operator-handoff "$OUT/argus-operator-handoff.json" --output "$OUT/argus-data-plane-manifest.json"
 .venv/bin/python scripts/export_public_run_status.py --tenant "$CIOS_DELIVER_TENANT" --manifest "$OUT/argus-data-plane-manifest.json" --dashboard "$OUT/argus-dashboard.json" --publish-status blocked --output "$OUT/argus-public-run-status.json"
+.venv/bin/python scripts/publish_generation.py --kind diagnostic --status "$OUT/argus-public-run-status.json"
 cp "$OUT/argus-public-run-status.json" "$PUB/data/argus-latest-run-status.json"
 if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
   echo "missing dashboard artifact from current run" >&2
@@ -120,25 +145,77 @@ mkdir -p "$STAGE"
 """
 
 
-SAFE_HOST_RUNNER = """#!/bin/sh
-APP="${CIOS_APP_DIR:-/opt/cios/app}"
-PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
-QUEUE="$APP/run-queue"
-for request in "$QUEUE"/*.request; do
-  base="${request%.request}"
-  log="$base.log"
-  result="$base.result"
-  CIOS_DISABLE_RUNNER_HANDOFF=1 CIOS_APP_DIR="$APP" CIOS_PUBLIC_DIR="$PUB" "$APP/deploy/cios-daily.sh" > "$log" 2>&1
-  printf "%s\\n" "$?" > "$result"
-done
+SAFE_HANDOFF_WRAPPER = """#!/bin/sh
+APP=/opt/cios/app
+PUB=/opt/cios/public
+HOST_CLIENT_ROOT=/opt/cios/app
+HERMES_CLIENT_ROOT=/opt/data/apps/cios
+HOST_PYTHON=/opt/cios/app/.venv/bin/python
+HERMES_PYTHON=/opt/hermes/.venv/bin/python
+if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HOST_CLIENT_ROOT"
+  PYTHON="$HOST_PYTHON"
+elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+  PYTHON="$HERMES_PYTHON"
+else
+  exit 2
+fi
+QUEUE="$CLIENT_ROOT/run-queue"
+HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"
+WAIT_SECONDS=1800
+ENV=/usr/bin/env
+current_user="$(/usr/bin/id -un)"
+if [ "$current_user" = "cios" ]; then
+  exec "$APP/deploy/cios-daily-app.sh"
+fi
+"$ENV" -i PATH=/usr/bin:/bin "$HELPER" enqueue
+"$ENV" -i PATH=/usr/bin:/bin "$HELPER" read-result
 """
+
+
+SAFE_HOST_RUNNER = """#!/bin/sh
+APP=/opt/cios/app
+PUB=/opt/cios/public
+HELPER="$APP/scripts/cios_run_queue.py"
+if [ "$(/usr/bin/id -un)" != "cios" ]; then exit 2; fi
+"$HELPER" run-pending
+"""
+
+SAFE_RUN_FINALIZER = """#!/bin/sh
+service_result="${SERVICE_RESULT:-unknown}"
+HELPER="$APP/scripts/cios_run_queue.py"
+if [ "$(/usr/bin/id -un)" != "cios" ]; then exit 2; fi
+"$HELPER" finalize
+"""
+
+
+SAFE_RUN_QUEUE = '''#!/usr/bin/env python3
+import os
+import uuid
+NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+os.replace
+state = ".state"
+request_id = uuid.uuid4().hex
+def require_cios_user():
+    pass
+require_cios_user()
+def _create_state_regular():
+    mode = 0o600
+def run_pending():
+    pass
+code = 124 if timed_out else 2
+status = "blocked_runtime_timeout"
+'''
 
 
 SAFE_HOST_PERMISSIONS = """#!/bin/sh
 SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
 SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
+MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
+PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
@@ -150,18 +227,38 @@ usermod -aG "$HERMES_GROUP" "$APP_USER"
 usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
 setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps
+APP_SOURCE_FOR_SETUP="$SOURCE_APP"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
 mount --bind "$SOURCE_APP" "$APP"
+else
+APP_SOURCE_FOR_SETUP="$APP"
+fi
 mount --bind "$SOURCE_PUB" "$PUB"
+install -d -o root -g root -m 0755 /opt/cios
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"
 app_fstab="$SOURCE_APP $APP none bind 0 0"
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
 chmod 711 /root/.hermes /root/.hermes/apps
-chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
-chmod 2775 "$APP" "$APP/run-queue"
+chown -R "$APP_USER:$HERMES_GROUP" "$APP_SOURCE_FOR_SETUP" "$SOURCE_PUB"
+code_dir="$APP/scripts"
+chmod -R g-w,o-w "$code_dir"
+chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"
+chmod 3770 "$APP/run-queue"
+chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
+chmod 700 "$APP/run-queue/.state"
+touch "$APP/out/.cios-output-dir"
+chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"
+chmod 660 "$APP/out/.cios-output-dir"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"
 chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
 chmod 640 "$ENV_FILE"
 install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"
+chmod 700 "$APP/deploy/cios-run-finalize.sh"
+chmod 700 "$APP/deploy/cios-host-runner.sh"
+chmod 755 "$APP/scripts/cios_run_queue.py"
+chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"
 """
 
 
@@ -169,7 +266,7 @@ SAFE_RUNNER_SERVICE = """[Unit]
 Description=CI-OS app-user daily runner
 
 [Service]
-Type=oneshot
+Type=exec
 User=cios
 Group=cios
 SupplementaryGroups=hermes
@@ -177,7 +274,15 @@ WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
 Environment=CIOS_PUBLIC_DIR=/opt/cios/public
 Environment=CIOS_ENV_FILE=/etc/cios-env
+Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1
+Environment=CIOS_CGROUP_SUPERVISOR_SUBGROUP=supervisor
 ExecStart=/opt/cios/app/deploy/cios-host-runner.sh
+ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh
+Delegate=yes
+DelegateSubgroup=supervisor
+KillMode=control-group
+RuntimeMaxSec=25min
+TimeoutStopSec=15s
 NoNewPrivileges=true
 UMask=0007
 """
@@ -189,6 +294,21 @@ Description=Watch for CI-OS app-user runner requests
 [Path]
 PathExistsGlob=/opt/cios/app/run-queue/*.request
 Unit=cios-runner.service
+"""
+
+
+SAFE_STATIC_SERVICE = """[Unit]
+Description=CI-OS immutable public dashboard
+
+[Service]
+User=cios
+Group=cios
+WorkingDirectory=/opt/cios/public-store/served
+ExecStart=/usr/bin/python3 -m http.server --bind 127.0.0.1 8662
+NoNewPrivileges=true
+MemoryMax=128M
+CPUQuota=20%
+TasksMax=32
 """
 
 
@@ -263,12 +383,44 @@ control.run("algolia", demand_plan=demand_plan)
 """
 
 
+SAFE_DAILY_RUNTIME = """
+from cios.platform.redaction import redact_sensitive_text
+from cios.platform.process_supervisor import PROCESS_GROUPS, install_shutdown_handlers
+process = PROCESS_GROUPS.spawn(command, start_new_session=True)
+PROCESS_GROUPS.terminate(process)
+install_shutdown_handlers()
+safe_error = redact_sensitive_text(stderr)
+"""
+
+
 SAFE_PRODUCT_SURFACE_EXECUTOR = """
+from cios.platform.redaction import redact_sensitive_text
+MAX_PRODUCT_SURFACE_WORKERS = 8
+process = PROCESS_GROUPS.spawn(command, start_new_session=True)
+batch_timeout_seconds = 600
+safe_error = redact_sensitive_text(stderr)
 summary = {
     "product_row_count": 1,
     "empty_scout_paths": [],
     "product_plane_status": "ready",
+    "not_started": 0,
 }
+"""
+
+
+SAFE_PRODUCT_SURFACE_EXECUTOR_CLI = """
+parser.add_argument("--batch-timeout-seconds")
+install_shutdown_handlers()
+"""
+
+
+SAFE_PROCESS_SUPERVISOR = """
+class CgroupV2Backend:
+    pass
+cgroup_kill = "cgroup.kill"
+cgroup_launcher = "cios.platform.cgroup_launcher"
+os.killpg(process.pid, signal.SIGTERM)
+PROCESS_GROUPS.terminate_all()
 """
 
 
@@ -360,21 +512,26 @@ def _make_app(
     host_permissions: str = SAFE_HOST_PERMISSIONS,
     runner_service: str = SAFE_RUNNER_SERVICE,
     runner_path: str = SAFE_RUNNER_PATH,
+    static_service: str = SAFE_STATIC_SERVICE,
     claude_shim_service: str = SAFE_CLAUDE_SHIM_SERVICE,
     demand_fast_lane: str = SAFE_DEMAND_FAST_LANE,
     admin_dashboard_refresh: str = SAFE_ADMIN_DASHBOARD_REFRESH,
     operator_handoff_builder: str = SAFE_OPERATOR_HANDOFF_BUILDER,
     ga4_export_script: str = SAFE_GA4_EXPORT_SCRIPT,
     demand_intake: str = SAFE_DEMAND_INTAKE,
+    daily_runtime: str = SAFE_DAILY_RUNTIME,
     product_surface_executor: str = SAFE_PRODUCT_SURFACE_EXECUTOR,
     product_surface_planner: str = SAFE_PRODUCT_SURFACE_PLANNER,
     product_surface_extraction_control: str = SAFE_PRODUCT_SURFACE_EXTRACTION_CONTROL,
     product_surface_candidate_promotion_control: str = SAFE_PRODUCT_SURFACE_CANDIDATE_PROMOTION_CONTROL,
     product_muscle_work_queue_admin: str = SAFE_PRODUCT_MUSCLE_WORK_QUEUE_ADMIN,
     admin_app: str = SAFE_ADMIN_APP,
+    launch_readiness: str = SAFE_LAUNCH_READINESS,
 ) -> Path:
     app = tmp_path / "cios"
     for rel in REQUIRED_FILES:
+        if rel == "src/cios/intelligence/product_surface_executor.py" and not include_intelligence:
+            continue
         if rel == "scripts/build_learning_apply_plan.py" and not include_learning_apply_plan:
             continue
         if rel == "scripts/execute_learning_apply_plan.py" and not include_learning_apply_executor:
@@ -410,7 +567,11 @@ def _make_app(
             continue
         if rel == "scripts/promote_product_surface_candidates.py" and not include_candidate_promotion:
             continue
-        if rel == "scripts/execute_product_surface_plan.py" and not include_product_surface_executor:
+        if rel in {
+            "scripts/execute_product_surface_plan.py",
+            "src/cios/intelligence/product_surface_executor.py",
+            "src/cios/platform/process_supervisor.py",
+        } and not include_product_surface_executor:
             continue
         if rel == "scripts/run_product_surface_repair.py" and not include_product_surface_repair_runner:
             continue
@@ -433,8 +594,16 @@ def _make_app(
             content = ga4_export_script
         elif rel == "scripts/run_argus_demand_intake.py":
             content = demand_intake
+        elif rel == "scripts/daily_production_run.py":
+            content = daily_runtime
         elif rel == "scripts/execute_product_surface_plan.py":
+            content = SAFE_PRODUCT_SURFACE_EXECUTOR_CLI
+        elif rel == "src/cios/intelligence/product_surface_executor.py":
             content = product_surface_executor
+        elif rel == "src/cios/platform/process_supervisor.py":
+            content = SAFE_PROCESS_SUPERVISOR
+        elif rel == "src/cios/platform/redaction.py":
+            content = "def redact_sensitive_text(text):\n    return text\n"
         elif rel == "scripts/plan_product_surface_exports.py":
             content = product_surface_planner
         elif rel == "scripts/build_argus_operator_handoff.py":
@@ -451,23 +620,47 @@ def _make_app(
             content = admin_app
         elif rel == "deploy/cios-host-runner.sh":
             content = host_runner
+        elif rel == "deploy/cios-daily.sh":
+            content = SAFE_HANDOFF_WRAPPER
+        elif rel == "deploy/cios-daily-app.sh":
+            content = wrapper
+        elif rel == "deploy/cios-run-finalize.sh":
+            content = SAFE_RUN_FINALIZER
+        elif rel == "scripts/cios_run_queue.py":
+            content = SAFE_RUN_QUEUE
         elif rel == "deploy/cios-host-permissions.sh":
             content = host_permissions
         elif rel == "deploy/cios-runner.service":
             content = runner_service
         elif rel == "deploy/cios-runner.path":
             content = runner_path
+        elif rel == "deploy/cios-static.service":
+            content = static_service
         elif rel == "deploy/claude-shim/cios-claude-shim.service":
             content = claude_shim_service
+        elif rel == "scripts/check_e2e_launch_readiness.py":
+            content = launch_readiness
         path.write_text(content, encoding="utf-8")
     for rel in REQUIRED_DIRS:
         if rel == "src/cios/intelligence" and not include_intelligence:
             continue
         (app / rel).mkdir(parents=True, exist_ok=True)
         (app / rel / "__init__.py").write_text("", encoding="utf-8")
-    (app / "deploy" / "cios-daily.sh").write_text(wrapper, encoding="utf-8")
+    (app / "deploy" / "cios-daily.sh").write_text(SAFE_HANDOFF_WRAPPER, encoding="utf-8")
+    (app / "deploy" / "cios-daily-app.sh").write_text(wrapper, encoding="utf-8")
     if include_admin_service:
         (app / "deploy" / "cios-admin.service").write_text(admin_service, encoding="utf-8")
+    for rel in (
+        "deploy/cios-daily.sh",
+        "deploy/cios-daily-app.sh",
+        "deploy/cios-host-runner.sh",
+        "deploy/cios-run-finalize.sh",
+        "scripts/cios_run_queue.py",
+        "scripts/scout_http_shim",
+    ):
+        path = app / rel
+        if path.is_file():
+            path.chmod(0o700)
     return app
 
 
@@ -484,6 +677,57 @@ def _run_preflight(app: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
     )
+
+
+def test_package_preflight_writes_run_bound_structured_failure_verdict(tmp_path: Path) -> None:
+    verdict = tmp_path / "package-verdict.json"
+    run_id = "cios-20260714T090000Z-1234"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--app-dir",
+            str(tmp_path / "missing-app"),
+            "--skip-python-imports",
+            "--run-id",
+            run_id,
+            "--verdict-output",
+            str(verdict),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    payload = json.loads(verdict.read_text(encoding="utf-8"))
+    assert result.returncode == 2
+    assert payload["schema_version"] == 1
+    assert payload["gate"] == "hermes_package_contract"
+    assert payload["run_id"] == run_id
+    assert payload["status"] == "fail"
+    assert payload["exit_code"] == 2
+    assert payload["checks"]["required_contract"] is False
+
+
+def _load_preflight_module():
+    spec = importlib.util.spec_from_file_location("verify_hermes_package_contract", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _make_runtime_supervisor_app(tmp_path: Path, supervisor_source: str) -> Path:
+    app = tmp_path / "runtime-supervisor-app"
+    module_path = app / "src/cios/platform/process_supervisor.py"
+    module_path.parent.mkdir(parents=True)
+    module_path.write_text(supervisor_source, encoding="utf-8")
+    (app / "src/cios/__init__.py").write_text("", encoding="utf-8")
+    (app / "src/cios/platform/__init__.py").write_text("", encoding="utf-8")
+    python_bin = app / ".venv/bin/python"
+    python_bin.parent.mkdir(parents=True)
+    python_bin.symlink_to(sys.executable)
+    return app
 
 
 def _run_preflight_with_scout(app: Path, scout_bin: str, *, path: str = "") -> subprocess.CompletedProcess[str]:
@@ -531,6 +775,31 @@ def test_preflight_passes_complete_hermes_package_contract(tmp_path):
     assert "PASS: CI-OS Hermes package contract satisfied" in result.stdout
 
 
+def test_preflight_fails_when_public_wrapper_omits_hermes_client_root_fallback(tmp_path):
+    app = _make_app(tmp_path)
+    wrapper_path = app / "deploy" / "cios-daily.sh"
+    wrapper = wrapper_path.read_text(encoding="utf-8").replace(
+        '''if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HOST_CLIENT_ROOT"
+  PYTHON="$HOST_PYTHON"
+elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then
+  CLIENT_ROOT="$HERMES_CLIENT_ROOT"
+  PYTHON="$HERMES_PYTHON"
+else
+  exit 2
+fi''',
+        'CLIENT_ROOT="$HOST_CLIENT_ROOT"',
+    )
+    wrapper_path.write_text(wrapper, encoding="utf-8")
+    assert 'CLIENT_ROOT="$HOST_CLIENT_ROOT"' in wrapper
+    assert 'CLIENT_ROOT="$HERMES_CLIENT_ROOT"' not in wrapper
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing Hermes container queue fallback" in result.stderr
+
+
 def test_preflight_fails_when_intelligence_package_missing(tmp_path):
     app = _make_app(tmp_path, include_intelligence=False)
 
@@ -566,6 +835,21 @@ def test_preflight_fails_when_launch_readiness_gate_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: scripts/check_e2e_launch_readiness.py" in result.stderr
+
+
+def test_preflight_fails_when_launch_readiness_omits_manifest_digest_binding(tmp_path):
+    app = _make_app(
+        tmp_path,
+        launch_readiness=SAFE_LAUNCH_READINESS.replace(
+            "publication_manifest_sha256",
+            "unbound_manifest",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "launch readiness missing exact manifest digest binding" in result.stderr
 
 
 def test_preflight_fails_when_e2e_validation_plan_missing(tmp_path):
@@ -680,6 +964,21 @@ def test_preflight_fails_when_admin_service_skips_env_file(tmp_path):
     assert "admin service must load host-readable CI-OS env file" in result.stderr
 
 
+def test_preflight_fails_when_admin_service_omits_src_pythonpath(tmp_path):
+    app = _make_app(
+        tmp_path,
+        admin_service=SAFE_ADMIN_SERVICE.replace(
+            "Environment=PYTHONPATH=/opt/cios/app/src\n",
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "admin service must import the src-layout package" in result.stderr
+
+
 def test_preflight_fails_when_admin_service_private_tmp_hides_hermes_artifacts(tmp_path):
     app = _make_app(
         tmp_path,
@@ -771,6 +1070,142 @@ def test_preflight_fails_when_product_surface_executor_omits_row_quality_summary
 
     assert result.returncode == 2
     assert "product-surface executor missing row-count summary" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_process_group_supervision(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("start_new_session=True", "start_new_session=False"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing process-group supervision" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_batch_deadline_accounting(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("batch_timeout_seconds", "batch_timeout_disabled"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing batch deadline" in result.stderr
+
+
+def test_preflight_fails_when_process_supervisor_omits_atomic_cgroup_kill(tmp_path):
+    app = _make_app(tmp_path)
+    supervisor = app / "src/cios/platform/process_supervisor.py"
+    supervisor.write_text(
+        SAFE_PROCESS_SUPERVISOR.replace("cgroup.kill", "unsafe_group_kill"),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "process supervisor missing atomic cgroup kill" in result.stderr
+
+
+def test_process_supervision_runtime_self_test_fails_closed_outside_delegated_service(tmp_path):
+    module = _load_preflight_module()
+    supervisor_source = (ROOT / "src/cios/platform/process_supervisor.py").read_text(
+        encoding="utf-8"
+    )
+    app = _make_runtime_supervisor_app(tmp_path, supervisor_source)
+
+    assert module.collect_process_supervision_runtime_errors(app) == [
+        "process supervision self-test failed: delegated cgroup v2 unavailable"
+    ]
+
+
+def test_process_supervision_runtime_self_test_rejects_detached_descendant_escape(tmp_path):
+    module = _load_preflight_module()
+    unsafe_supervisor = """
+import os
+import signal
+
+class UnsafeRegistry:
+    cgroup_enabled = True
+
+    def spawn(self, command, **kwargs):
+        return __import__("subprocess").Popen(command, **kwargs)
+
+    def unregister(self, process):
+        pass
+
+    def terminate(self, process):
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=1)
+
+PROCESS_GROUPS = UnsafeRegistry()
+"""
+    app = _make_runtime_supervisor_app(tmp_path, unsafe_supervisor)
+
+    assert module.collect_process_supervision_runtime_errors(app) == [
+        "process supervision self-test failed: detached descendant survived cleanup"
+    ]
+
+
+def test_preflight_fails_when_runtime_redaction_module_missing(tmp_path):
+    app = _make_app(tmp_path)
+    (app / "src/cios/platform/redaction.py").unlink()
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "missing required path: src/cios/platform/redaction.py" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_error_redaction(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("redact_sensitive_text", "unsafe_error_text"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing sensitive-error redaction" in result.stderr
+
+
+def test_preflight_fails_when_product_surface_executor_omits_worker_hard_cap(tmp_path):
+    app = _make_app(
+        tmp_path,
+        product_surface_executor=SAFE_PRODUCT_SURFACE_EXECUTOR.replace("MAX_PRODUCT_SURFACE_WORKERS", "UNBOUNDED_WORKERS"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "product-surface executor missing worker hard cap" in result.stderr
+
+
+def test_preflight_fails_when_daily_runtime_omits_error_redaction(tmp_path):
+    app = _make_app(
+        tmp_path,
+        daily_runtime=SAFE_DAILY_RUNTIME.replace("redact_sensitive_text", "unsafe_error_text"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "daily runtime missing sensitive-error redaction" in result.stderr
+
+
+def test_preflight_fails_when_daily_runtime_omits_contained_spawn(tmp_path):
+    app = _make_app(
+        tmp_path,
+        daily_runtime=SAFE_DAILY_RUNTIME.replace("PROCESS_GROUPS.spawn", "subprocess.Popen"),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "daily runtime missing contained process spawn" in result.stderr
 
 
 def test_preflight_fails_when_product_surface_extraction_admin_control_missing(tmp_path):
@@ -1049,47 +1484,143 @@ cp "$CIOS_DASHBOARD_OUT" "$PUB/index.html"
     assert "wrapper missing product muscle work queue export" in result.stderr
     assert "wrapper missing Argus operator handoff builder" in result.stderr
     assert "wrapper missing Argus data-plane manifest export" in result.stderr
-    assert "wrapper missing daily-run timeout guard" in result.stderr
     assert "wrapper missing marked-output cleanup" in result.stderr
     assert "wrapper missing scoped output cleanup" in result.stderr
     assert "wrapper missing current-run artifact validation" in result.stderr
     assert "wrapper missing staged publish directory" in result.stderr
 
 
-def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):
+def test_preflight_fails_when_runner_service_missing_runtime_ceiling(tmp_path):
     app = _make_app(
         tmp_path,
-        wrapper=SAFE_WRAPPER.replace("CIOS_DAILY_RUN_TIMEOUT_SECONDS", "CIOS_DAILY_RUN_TIMEOUT_DISABLED"),
+        runner_service=SAFE_RUNNER_SERVICE.replace("RuntimeMaxSec=25min", ""),
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "wrapper missing daily-run timeout guard" in result.stderr
+    assert "runner service must enforce a runtime ceiling" in result.stderr
+
+
+def test_preflight_fails_when_wrapper_missing_product_surface_stage_timeout_guard(tmp_path):
+    app = _make_app(
+        tmp_path,
+        wrapper=SAFE_WRAPPER.replace(
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_DISABLED",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing product-surface stage timeout guard" in result.stderr
 
 
 def test_preflight_fails_when_wrapper_missing_app_user_runner_handoff(tmp_path):
-    app = _make_app(
-        tmp_path,
-        wrapper=SAFE_WRAPPER.replace("CIOS_RUNNER_HANDOFF", "CIOS_RUNNER_DISABLED"),
+    app = _make_app(tmp_path)
+    handoff = app / "deploy/cios-daily.sh"
+    handoff.write_text(
+        SAFE_HANDOFF_WRAPPER.replace('"$current_user" = "cios"', '"$current_user" = "disabled"'),
+        encoding="utf-8",
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "wrapper missing app-user runner handoff switch" in result.stderr
+    assert "wrapper missing fixed cios identity gate" in result.stderr
 
 
-def test_preflight_fails_when_host_runner_does_not_disable_recursive_handoff(tmp_path):
-    app = _make_app(
-        tmp_path,
-        host_runner=SAFE_HOST_RUNNER.replace("CIOS_DISABLE_RUNNER_HANDOFF=1", "CIOS_DISABLE_RUNNER_HANDOFF=0"),
+def test_preflight_rejects_caller_controlled_paths_in_hermes_wrapper(tmp_path):
+    app = _make_app(tmp_path)
+    handoff = app / "deploy/cios-daily.sh"
+    handoff.write_text(
+        SAFE_HANDOFF_WRAPPER + '\nAPP="${CIOS_APP_DIR:-$APP}"\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+        encoding="utf-8",
     )
 
     result = _run_preflight(app)
 
     assert result.returncode == 2
-    assert "host runner missing handoff bypass" in result.stderr
+    assert "wrapper permits caller-controlled execution paths" in result.stderr
+
+
+def test_preflight_fails_when_host_runner_does_not_use_secure_queue_helper(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_runner=SAFE_HOST_RUNNER.replace('"$HELPER" run-pending', '"$HELPER" unsafe-run'),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host runner must drain requests through queue helper" in result.stderr
+
+
+def test_preflight_rejects_caller_controlled_public_path_in_host_runner(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_runner=SAFE_HOST_RUNNER + '\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host runner permits caller-controlled execution paths" in result.stderr
+
+
+def test_preflight_rejects_caller_controlled_public_path_in_finalizer(tmp_path):
+    app = _make_app(tmp_path)
+    finalizer = app / "deploy/cios-run-finalize.sh"
+    finalizer.write_text(
+        SAFE_RUN_FINALIZER + '\nPUB="${CIOS_PUBLIC_DIR:-$PUB}"\n',
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "run finalizer permits caller-controlled execution paths" in result.stderr
+
+
+def test_preflight_rejects_non_executable_run_finalizer(tmp_path):
+    app = _make_app(tmp_path)
+    finalizer = app / "deploy/cios-run-finalize.sh"
+    finalizer.chmod(0o600)
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "required executable is not executable: deploy/cios-run-finalize.sh" in result.stderr
+
+
+def test_preflight_requires_root_owned_opt_cios_parent(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace(
+            'install -d -o root -g root -m 0755 /opt/cios',
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must harden the /opt/cios parent" in result.stderr
+
+
+def test_preflight_fails_when_run_queue_omits_timeout_mapping(tmp_path):
+    app = _make_app(tmp_path)
+    helper = app / "scripts/cios_run_queue.py"
+    helper.write_text(
+        SAFE_RUN_QUEUE.replace("124 if timed_out else 2", "2 if timed_out else 2"),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "run queue missing timeout exit mapping" in result.stderr
 
 
 def test_preflight_fails_when_host_permissions_do_not_prefer_acl_traversal(tmp_path):
@@ -1140,6 +1671,21 @@ def test_preflight_fails_when_host_permissions_do_not_fix_cron_wrapper_owner(tmp
     assert "host permissions must make Hermes cron wrapper group executable" in result.stderr
 
 
+def test_preflight_fails_when_host_permissions_omit_looker_data_root(tmp_path):
+    app = _make_app(
+        tmp_path,
+        host_permissions=SAFE_HOST_PERMISSIONS.replace(
+            'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"',
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "host permissions must create app-owned Looker data root" in result.stderr
+
+
 def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):
     app = _make_app(
         tmp_path,
@@ -1151,6 +1697,33 @@ def test_preflight_fails_when_runner_service_does_not_run_as_cios(tmp_path):
     assert result.returncode == 2
     assert "runner service must run as cios user" in result.stderr
     assert "runner service must run as cios group" in result.stderr
+
+
+def test_preflight_fails_when_runner_service_does_not_delegate_cgroups(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_service=SAFE_RUNNER_SERVICE.replace("Delegate=yes\n", ""),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner service must delegate cgroup subtree" in result.stderr
+
+
+def test_preflight_fails_when_runner_service_allows_cgroup_fallback(tmp_path):
+    app = _make_app(
+        tmp_path,
+        runner_service=SAFE_RUNNER_SERVICE.replace(
+            "Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1\n",
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "runner service must require command cgroups" in result.stderr
 
 
 def test_preflight_fails_when_runner_path_does_not_watch_requests(tmp_path):

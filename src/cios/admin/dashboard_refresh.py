@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -38,6 +39,21 @@ def _default_work_root() -> Path:
     return Path("/tmp/cios-product-market")
 
 
+def _env_flag(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _dashboard_run_id(path: Path) -> str:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("dashboard refresh missing valid run identity") from exc
+    run_id = str((payload.get("run_health") or {}).get("run_id") or "").strip()
+    if not run_id:
+        raise RuntimeError("dashboard refresh missing valid run identity")
+    return run_id
+
+
 @dataclass
 class AdminDashboardRefreshRunner:
     """Rerender dashboard artifacts from DB state and optionally publish them.
@@ -57,6 +73,8 @@ class AdminDashboardRefreshRunner:
     public_dir: Path | None = None
     work_root: Path | None = None
     python_bin: str | None = None
+    public_store: Path | None = None
+    publication_v2: bool | None = None
 
     def __call__(self, *, tenant_slug: str) -> dict[str, Any]:
         app_dir = self.app_dir or _default_app_dir()
@@ -91,12 +109,15 @@ class AdminDashboardRefreshRunner:
             detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
             raise RuntimeError(f"dashboard rerender failed: {detail}")
 
+        use_publication_v2 = self.publication_v2 if self.publication_v2 is not None else _env_flag("CIOS_PUBLICATION_V2")
+        run_id = _dashboard_run_id(out_dir / "argus-dashboard.json") if use_publication_v2 else None
         sidecars = _refresh_argus_sidecars(
             tenant_slug=tenant_slug,
             app_dir=app_dir,
             out_dir=out_dir,
             work_root=work_root,
             python_bin=python_bin,
+            run_id=run_id,
         )
 
         result: dict[str, Any] = {
@@ -105,7 +126,36 @@ class AdminDashboardRefreshRunner:
             "sidecars": sidecars,
             "out_dir": str(out_dir),
         }
-        if public_dir:
+        if use_publication_v2:
+            store = self.public_store or Path(os.environ.get("CIOS_PUBLIC_STORE_DIR", "/opt/cios/public-store"))
+            publish_cmd = [
+                python_bin,
+                str(app_dir / "scripts" / "publish_generation.py"),
+                "--store-root",
+                str(store),
+                "--run-id",
+                str(run_id),
+                "--tenant",
+                tenant_slug,
+                "--kind",
+                "diagnostic",
+                "--status",
+                str(out_dir / "argus-public-run-status.json"),
+                "--demand-plan-template",
+                str(out_dir / "argus-demand-plan-template.csv"),
+                "--output",
+                str(out_dir / "publication-integrity-verdict.json"),
+            ]
+            guide = out_dir / "argus-demand-work-order-guide.json"
+            if guide.is_file():
+                publish_cmd.extend(["--demand-work-order-guide", str(guide)])
+            result["publish"] = _run_step(
+                name="immutable_diagnostic_publish",
+                cmd=publish_cmd,
+                cwd=app_dir,
+            )
+            result["status"] = "diagnostic_published"
+        elif public_dir:
             result["publish"] = publish_dashboard_artifacts(out_dir=out_dir, public_dir=public_dir)
             result["status"] = "published"
         return result
@@ -157,6 +207,7 @@ def _refresh_argus_sidecars(
     out_dir: Path,
     work_root: Path,
     python_bin: str,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     dashboard = out_dir / "argus-dashboard.json"
     html = out_dir / "argus-dashboard.html"
@@ -333,6 +384,10 @@ def _refresh_argus_sidecars(
             ],
         ),
     ]
+    if run_id:
+        for name, cmd in steps:
+            if name in {"data_plane_manifest", "public_run_status"}:
+                cmd.extend(["--run-id", run_id])
     results: dict[str, Any] = {}
     for name, cmd in steps:
         if name == "demand_intake":

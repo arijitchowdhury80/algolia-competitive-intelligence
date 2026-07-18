@@ -1,0 +1,136 @@
+{
+  "mode": "FULL",
+  "run_id": "2026-07-14-002",
+  "project": "CI-OS",
+  "feature": "Phase 2 atomic run-bound publication integrity",
+  "status": "IN_PROGRESS",
+  "current_stage": "FEEDBACK",
+  "builder": "module-builder",
+  "retry_counts": {
+    "BUILD": 0,
+    "DEBUG": 1,
+    "RECTIFY": 0,
+    "STAGING": 9
+  },
+  "strike_log": [
+    {
+      "stage": "STAGING",
+      "attempt": 1,
+      "request_id": "ea34d298445944edb8ab3cae9022b81c",
+      "outcome": "FAILED_RUNTIME_DEPENDENCIES",
+      "changed_hypothesis": "DEDICATED_SHIM_VENV_AND_EXECUTABLE_FINALIZER"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 2,
+      "request_id": "f9a040a200384c3799ce7fed233ecfd4",
+      "run_id": "cios-20260714T135025Z-1989449",
+      "outcome": "FAILED_PHASE_GATE_NO_DECISION_GENERATION",
+      "blocker": "PHASE_2_REQUIRES_DECISION_WHILE_PHASE_4_DEMAND_IS_LOCKED"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 3,
+      "request_id": "332b3a51ef0a4c8ca4eb032a28d0f5b8",
+      "outcome": "FAILED_FRESH_RELEASE_OUTPUT_MARKER_MISSING",
+      "changed_hypothesis": "PACKAGE_ENFORCED_OUTPUT_MARKER_INITIALIZATION"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 4,
+      "request_id": "db7adb02342f46c8968e88d99de79188",
+      "run_id": "cios-20260714T164836Z-2116876",
+      "outcome": "FAILED_PUBLIC_ARTIFACT_LOCAL_PATH_VALIDATION",
+      "changed_hypothesis": "TEMPORARY_PUBLIC_JSON_REDACTION_ADAPTER"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 5,
+      "request_id": "2652fb61a28848f2afc71ecd01e2d692",
+      "run_id": "cios-20260716T064031Z-3761895",
+      "outcome": "FAILED_LIMITED_EVIDENCE_AND_SOURCE_FAILURE_BUDGET",
+      "changed_hypothesis": "IMMUTABLE_RELEASE_PREMOUNT_AND_HERMES_QUEUE_BOUNDARY"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 6,
+      "request_id": "fa248c4e66ed4c50b4bb5356078ec5c0",
+      "run_id": "cios-20260716T074225Z-3816412",
+      "outcome": "FAILED_POST_RUN_LOOKER_DATA_ROOT_PERMISSION",
+      "changed_hypothesis": "RUN_HEALTH_SOURCE_DISPOSITIONS_AND_RELEASE_DATA_ROOT_PERMISSION"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 7,
+      "request_id": "f4dd3566cd4e4fdb9757d9494c124bfa",
+      "run_id": "cios-20260716T080213Z-3835332",
+      "outcome": "FAILED_LIMITED_EVIDENCE_POLICY_GATE",
+      "changed_hypothesis": "SOURCE_FAILURE_FIXED_AND_LOOKER_DATA_ROOT_PROVISIONED"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 8,
+      "request_id": "0f1377ba3e1c4a88bc7bf95a8bf4aa70",
+      "run_id": "cios-20260716T083956Z-3866870",
+      "outcome": "FAILED_PUBLIC_STATUS_READY_OPERATOR_MAPPING",
+      "changed_hypothesis": "NONBLOCKING_LIMITS_MUST_REMAIN_VISIBLE_WITH_PUBLISHABLE_PUBLIC_STATUS"
+    },
+    {
+      "stage": "STAGING",
+      "attempt": 9,
+      "request_id": "ff29631ea3694b768583e67b049cab6c",
+      "run_id": "cios-20260716T090552Z-3890353",
+      "outcome": "PASSED_STRICT_LAUNCH_READINESS",
+      "changed_hypothesis": "READY_OPERATOR_MANIFEST_MAPS_TO_PUBLIC_PUBLISHED_STATUS_WITH_PLANE_CAVEATS"
+    }
+  ],
+  "gates": {
+    "discovery": "PASSED_INLINE_AGENT_LIMIT_RECORDED",
+    "intake": "APPROVED_BY_GOAL_CHARTER",
+    "risk": "APPROVED_BY_GOAL_CHARTER",
+    "spec": "APPROVED_BY_GOAL_CHARTER",
+    "arch_review": "PASSED_INLINE_LIVE_BOUNDARY_VERIFIED",
+    "plan": "APPROVED_BY_GOAL_CHARTER",
+    "build": "PASSED_1312_TESTS",
+    "code_health": "ACCEPTABLE_INLINE_AGENT_LIMIT_RECORDED",
+    "security_review": "PASSED_STANDING_GOAL_AUTHORIZATION",
+    "code_review": "ONE_IMPORTANT_ACTION_APPROVED_BY_GOAL_CHARTER",
+    "rectify": "PASSED_1316_TESTS",
+    "validate": "PASSED_8_LAYERS_1318_TESTS",
+    "github_pr": "DRAFT_1_MERGEABLE_BASE_CI_OS_PACKAGE_MAIN",
+    "github_ci": "PASSED_RUN_29326371217",
+    "fresh_candidate_local": "PASSED_1321_TESTS_RUFF_PYRIGHT_MYPY_PACKAGE_CONTRACT",
+    "release_candidate": "1ea8c68_FAILED_STAGING_RETAINED_AS_EVIDENCE",
+    "staging": "PASSED_11DC7DF_RUN_CIOS_20260716T090552Z_3890353_ACCEPTED_BY_CONTINUE",
+    "finish": "PASSED_PHASE_2_CONTROLLED_MONITORED_PILOT_CUTOVER_20260717T150029Z",
+    "feedback": "IN_PROGRESS_MONITORING_20260717_20260720"
+  },
+  "human_decisions": [
+    {
+      "date": "2026-07-14",
+      "decision": "AUTHORIZE_PRIVATE_LOOKER_MANUAL_EXPORT_AND_BRING_DEMAND_INPUT_FORWARD",
+      "scope": "READ_ONLY_REPORT_INSPECTION_MANUAL_CSV_EXPORT_NO_GA4_CREDENTIALS_NO_REPORT_EDITS"
+    },
+    {
+      "date": "2026-07-16",
+      "decision": "ACCEPT_STAGE_12_STAGING_EVIDENCE_AND_ADVANCE_TO_FINISH",
+      "scope": "PHASE_2_ONLY_NO_PHASE_3_NO_PUBLIC_CUTOVER"
+    },
+    {
+      "date": "2026-07-17",
+      "decision": "APPROVE_PHASE_2_CONTROLLED_MONITORED_PILOT_CUTOVER",
+      "scope": "REPOINT_CI_DASHBOARD_STATIC_TO_PUBLIC_STORE_SERVED_NO_FIREWALL_NO_CADDY_LISTENER_NO_HERMES_CORE"
+    }
+  ],
+  "staging_demand_evidence": {
+    "current_period": "2026-07-07/2026-07-13",
+    "previous_period": "2026-06-30/2026-07-06",
+    "eligible_topic": "Agent Search",
+    "eligible_metric": "sessions",
+    "eligible_value": 786,
+    "source_fingerprint": "5ce535e8db8cce5d3decebd6c509706b065b60b6cc3f37ae1b1aba5bb6f79352",
+    "prepare_status": "COVERED_READY_1_NORMALIZED_1_SKIPPED_0_OFF_PLAN_0",
+    "raw_exports_private_and_untracked": true,
+    "week_over_week_change": "UNKNOWN_UNLIKE_CHART_DIMENSIONS"
+  }
+}

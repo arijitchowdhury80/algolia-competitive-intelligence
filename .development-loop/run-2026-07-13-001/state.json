@@ -1,0 +1,54 @@
+{
+  "mode": "FULL",
+  "run_id": "2026-07-13-001",
+  "project": "CI-OS",
+  "feature": "Phase 1 Hermes-owned execution recovery",
+  "status": "FINISHED",
+  "current_stage": "FEEDBACK",
+  "builder": "module-builder",
+  "retry_counts": {
+    "BUILD": 0,
+    "DEBUG": 0,
+    "RECTIFY": 0,
+    "STAGING": 0
+  },
+  "strike_log": [
+    {
+      "stage": "RECTIFY",
+      "attempt": 3,
+      "commit": "b8ee261",
+      "failure": "one-time process-tree snapshot races with late setsid descendant creation",
+      "evidence": "3 failed, 214 passed under independent review command",
+      "action": "HUMAN_ARCHITECTURE_DECISION_REQUIRED"
+    },
+    {
+      "stage": "ARCHITECTURE_GATE",
+      "attempt": 1,
+      "commit": null,
+      "failure": null,
+      "evidence": "user approved hierarchical cgroup design on 2026-07-14",
+      "action": "RESUME_RECTIFY_WITH_FRESH_AUDIT"
+    }
+  ],
+  "gates": {
+    "discovery": "PASSED",
+    "intake": "APPROVED_BY_GOAL_CHARTER",
+    "risk": "APPROVED_BY_GOAL_CHARTER",
+    "spec": "APPROVED_BY_GOAL_CHARTER",
+    "arch_review": "APPROVED_CGROUP_RESET_2026_07_14",
+    "plan": "APPROVED_BY_GOAL_CHARTER",
+    "build": "PASSED",
+    "local_tests": "PASSED_1251_3_SKIPPED_23_DESELECTED",
+    "package_contract": "PASSED",
+    "code_health": "PASSED",
+    "security": "GO_1FA7AC5",
+    "code_review": "APPROVED_1FA7AC5",
+    "rectify": "PASSED_NAMESPACE_AND_INTERPRETER_REGRESSIONS",
+    "validate": "PASSED_ALL_8_LAYERS",
+    "staging": "PASSED_TWO_REAL_HERMES_RUNS",
+    "rollback_drill": "PASSED_1FA7AC5",
+    "phase_1_live": "PASSED_2026_07_14",
+    "finish": "GO_1FA7AC5",
+    "feedback": "MONITORING_PLAN_ACTIVE"
+  }
+}

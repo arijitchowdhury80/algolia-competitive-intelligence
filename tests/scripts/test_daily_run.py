@@ -6,6 +6,7 @@ import asyncio
 import importlib.util
 import json
 import sys
+import time
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from contextlib import nullcontext
@@ -56,6 +57,53 @@ def test_config_loads_expected_shape():
 
     assert set(data["own_brand"].keys()) == {"algolia", "spryker", "amplitude"}
     assert "algolia" in data["product_surfaces"]
+
+
+def test_resolve_run_id_uses_valid_wrapper_identity(daily_run):
+    run_id = daily_run.resolve_run_id(
+        "algolia",
+        {"CIOS_RUN_ID": "cios-20260714T090000Z-12345"},
+        epoch_seconds=1784023200,
+    )
+
+    assert run_id == "cios-20260714T090000Z-12345"
+
+
+def test_resolve_run_id_rejects_unsafe_wrapper_identity(daily_run):
+    with pytest.raises(ValueError, match="unsafe CIOS_RUN_ID"):
+        daily_run.resolve_run_id(
+            "algolia",
+            {"CIOS_RUN_ID": "../escape"},
+            epoch_seconds=1784023200,
+        )
+
+
+def test_resolve_run_id_falls_back_for_local_execution(daily_run):
+    run_id = daily_run.resolve_run_id("algolia", {}, epoch_seconds=1784023200)
+
+    assert run_id == "daily-algolia-1784023200"
+
+
+def test_runtime_provenance_requires_named_package_for_publication_v2(daily_run):
+    with pytest.raises(ValueError, match="CIOS_PACKAGE_VERSION"):
+        daily_run.runtime_provenance(
+            {"CIOS_MODEL_ALIAS": "gemini-2.5-pro"},
+            require_package_version=True,
+        )
+
+
+def test_runtime_provenance_records_exact_private_package_and_model_route(daily_run):
+    assert daily_run.runtime_provenance(
+        {
+            "CIOS_PACKAGE_VERSION": "phase2-deadbeef",
+            "CIOS_MODEL_ALIAS": "gemini-2.5-pro",
+        },
+        require_package_version=True,
+    ) == {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
 
 
 def test_runtime_source_plan_uses_all_active_db_sources_not_yaml_cap(daily_run):
@@ -111,6 +159,35 @@ def test_waf_challenge_fetch_result_is_source_blocking(daily_run):
 
     assert daily_run.source_block_reason_for_fetch_error(blocked) == "blocked_by_waf:aws_waf_challenge"
     assert daily_run.source_block_reason_for_fetch_error(empty) is None
+
+
+@pytest.mark.parametrize("http_status", [403, 429])
+def test_reddit_rss_access_policy_fetch_result_is_source_blocking(daily_run, http_status):
+    fetched = ContentFetchResult(
+        status=FetchStatus.ERROR,
+        http_status=http_status,
+        text="",
+        error=f"http_error:{http_status}",
+    )
+
+    assert (
+        daily_run.source_block_reason_for_fetch_error(
+            fetched,
+            url="https://old.reddit.com/r/ecommerce/.rss",
+        )
+        == f"blocked_by_platform_policy:reddit_http_{http_status}"
+    )
+
+
+def test_non_reddit_http_access_error_remains_transient_source_failure(daily_run):
+    fetched = ContentFetchResult(
+        status=FetchStatus.ERROR,
+        http_status=403,
+        text="",
+        error="http_error:403",
+    )
+
+    assert daily_run.source_block_reason_for_fetch_error(fetched, url="https://example.com/feed") is None
 
 
 def test_block_source_after_fetch_challenge_marks_source_blocked(daily_run, monkeypatch):
@@ -360,6 +437,23 @@ def test_model_call_settings_are_cron_bounded_by_default(daily_run):
 
     assert timeout == 45.0
     assert attempts == 1
+
+
+def test_product_surface_timeout_settings_reject_tight_stage_cleanup_margin(daily_run):
+    with pytest.raises(ValueError, match="at least 30 seconds longer"):
+        daily_run.product_surface_timeout_settings(
+            {
+                "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS": "600",
+                "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS": "600.1",
+            }
+        )
+
+
+def test_product_surface_timeout_settings_reject_worker_count_above_hard_cap(daily_run):
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        daily_run.product_surface_timeout_settings(
+            {"CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS": "9"}
+        )
 
 
 def test_quality_timeout_defaults_separately_from_synthesis_timeout(daily_run):
@@ -638,7 +732,7 @@ def test_product_market_chain_blocks_empty_product_surface_outputs_before_synthe
             raise AssertionError(f"{script_name} should not run after empty product surface outputs")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1261,7 +1355,7 @@ def test_product_market_chain_passes_discovered_looker_drop_folder_exports(daily
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
     monkeypatch.setattr(daily_run, "SCRIPT_DIR", app_dir / "scripts")
 
     result = daily_run.run_product_market_chain_if_enabled(
@@ -1408,6 +1502,7 @@ def test_current_sweep_deltas_infer_capability_theme_from_statement_before_gener
 
 def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tmp_path, monkeypatch):
     calls = []
+    timeouts = {}
     scout_path = tmp_path / "surface-exports" / "000011-constructor-changelog.json"
     looker_path = tmp_path / "looker.csv"
     looker_path.write_text(
@@ -1417,9 +1512,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     )
 
     def fake_run(cmd, capture_output, text, timeout, check):
-        del capture_output, text, timeout, check
+        del capture_output, text, check
         calls.append(cmd)
         script_name = Path(cmd[1]).name
+        timeouts[script_name] = timeout
         if script_name == "build_next_sweep_learning_plan.py":
             plan_output = Path(cmd[cmd.index("--output") + 1])
             plan_output.parent.mkdir(parents=True, exist_ok=True)
@@ -1550,7 +1646,17 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             scout_path.write_text(json.dumps([{"company_name": "Constructor"}]), encoding="utf-8")
             summary_output = Path(cmd[cmd.index("--summary-output") + 1])
             summary_output.write_text(
-                json.dumps({"failed": 0, "succeeded": 1, "scout_paths": [str(scout_path)]}),
+                json.dumps(
+                    {
+                        "failed": 3,
+                        "succeeded": 1,
+                        "timed_out": 1,
+                        "not_started": 2,
+                        "batch_timed_out": True,
+                        "batch_timeout_seconds": 600,
+                        "scout_paths": [str(scout_path)],
+                    }
+                ),
                 encoding="utf-8",
             )
         elif script_name == "build_product_market_payload.py":
@@ -1560,7 +1666,7 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1573,6 +1679,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             "CIOS_PRODUCT_MARKET_USE_JS": "1",
             "CIOS_PRODUCT_MARKET_LOOKER_EXPORTS": str(looker_path),
             "CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS": "4",
+            "CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS": "240",
+            "CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS": "300",
+            "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS": "600",
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS": "630",
             "CIOS_PRODUCT_MARKET_DEMAND_CHANGE_FLOOR": "0.03",
             "CIOS_PRODUCT_MARKET_DEMAND_VALUE_FLOOR": "25",
         },
@@ -1647,6 +1757,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             }
         ],
     }
+    assert result["product_surface_execution_summary"]["timed_out"] == 1
+    assert result["product_surface_execution_summary"]["not_started"] == 2
+    assert result["product_surface_execution_summary"]["batch_timed_out"] is True
+    assert result["product_surface_execution_summary"]["batch_timeout_seconds"] == 600.0
     assert [Path(call[1]).name for call in calls] == [
         "build_next_sweep_learning_plan.py",
         "build_learning_apply_plan.py",
@@ -1669,6 +1783,9 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     assert "--approved-by" not in learning_execute_call
     assert plan_call[plan_call.index("--learning-plan") + 1].endswith("next-sweep-learning-plan.json")
     assert execute_call[execute_call.index("--max-workers") + 1] == "4"
+    assert execute_call[execute_call.index("--command-timeout-seconds") + 1] == "300"
+    assert execute_call[execute_call.index("--batch-timeout-seconds") + 1] == "600"
+    assert timeouts["execute_product_surface_plan.py"] == 630.0
     assert payload_call[payload_call.index("--scout") + 1] == str(scout_path)
     payload_looker_path = Path(payload_call[payload_call.index("--looker") + 1])
     assert payload_looker_path.name == "looker.normalized.json"
@@ -1743,7 +1860,7 @@ def test_product_market_chain_refreshes_ledger_with_learning_plan_after_synthesi
             )
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1822,7 +1939,7 @@ def test_product_market_chain_can_export_ga4_demand_before_payload_build(daily_r
             return SimpleNamespace(returncode=0, stdout='{"verdict":"watch"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -1874,7 +1991,7 @@ def test_export_ga4_demand_if_enabled_uses_rolling_window_when_dates_are_omitted
         calls.append([str(part) for part in cmd])
         return SimpleNamespace(returncode=0, stdout='{"record_count":3,"status":"ok"}', stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     summary = daily_run.export_ga4_demand_if_enabled(
         env={
@@ -1926,7 +2043,7 @@ def test_product_market_chain_emits_hermes_stage_heartbeats(daily_run, tmp_path,
             return SimpleNamespace(returncode=0, stdout='{"verdict":"quiet"}', stderr="")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -2016,6 +2133,106 @@ def test_product_market_stage_ledger_records_failed_stage(daily_run):
     assert entry["ended_at"].endswith("Z")
 
 
+def test_product_market_stage_redacts_sensitive_environment_values(
+    daily_run, monkeypatch, capsys
+):
+    stage_ledger = []
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-stage-secret")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        daily_run._run_product_market_stage(
+            slug="algolia",
+            stage="product_market_synthesis",
+            stage_ledger=stage_ledger,
+            action=lambda: (_ for _ in ()).throw(RuntimeError("phase-one-stage-secret")),
+        )
+
+    assert stage_ledger[0]["error"] == "[redacted]"
+    assert "phase-one-stage-secret" not in str(exc_info.value)
+    assert "phase-one-stage-secret" not in capsys.readouterr().out
+
+
+def test_run_checked_redacts_sensitive_environment_values(daily_run, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-command-secret")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        daily_run._run_checked(
+            [
+                sys.executable,
+                "-c",
+                "import os, sys; print(os.environ['GEMINI_API_KEY'], file=sys.stderr); sys.exit(1)",
+            ],
+            timeout_seconds=5,
+        )
+
+    assert "phase-one-command-secret" not in str(exc_info.value)
+    assert "[redacted]" in str(exc_info.value)
+
+
+def test_run_checked_timeout_kills_descendant_process_group(daily_run, tmp_path):
+    orphan_marker = tmp_path / "daily-orphan-after-timeout.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]]); "
+        "time.sleep(5)"
+    )
+
+    with pytest.raises(RuntimeError, match="timed out after 0.2s"):
+        daily_run._run_checked(
+            [sys.executable, "-c", parent_code, str(orphan_marker)],
+            timeout_seconds=0.2,
+        )
+    time.sleep(1.0)
+
+    assert not orphan_marker.exists()
+
+
+def test_run_checked_timeout_kills_detached_descendant(daily_run, tmp_path):
+    if not daily_run.PROCESS_GROUPS.cgroup_enabled:
+        pytest.skip("requires delegated cgroup v2 containment")
+    orphan_marker = tmp_path / "daily-detached-orphan.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]], start_new_session=True); "
+        "time.sleep(5)"
+    )
+
+    with pytest.raises(RuntimeError, match="timed out after 0.2s"):
+        daily_run._run_checked(
+            [sys.executable, "-c", parent_code, str(orphan_marker)],
+            timeout_seconds=0.2,
+        )
+    time.sleep(1.0)
+
+    assert not orphan_marker.exists()
+
+
+def test_run_main_redacts_uncaught_exception(daily_run, monkeypatch, capsys):
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-main-secret")
+
+    async def fail_main():
+        raise RuntimeError("phase-one-main-secret")
+
+    monkeypatch.setattr(daily_run, "main", fail_main)
+
+    assert daily_run.run_main() == 2
+    captured = capsys.readouterr()
+    assert "phase-one-main-secret" not in captured.err
+    assert "[redacted]" in captured.err
+
+
 def test_product_market_chain_returns_failed_summary_with_stage_ledger(daily_run, tmp_path, monkeypatch):
     def fake_run(cmd, capture_output, text, timeout, check):
         del capture_output, text, timeout, check
@@ -2024,7 +2241,7 @@ def test_product_market_chain_returns_failed_summary_with_stage_ledger(daily_run
             return SimpleNamespace(returncode=1, stdout="", stderr="boom")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(daily_run.subprocess, "run", fake_run)
+    monkeypatch.setattr(daily_run, "_run_process_group", fake_run)
 
     result = daily_run.run_product_market_chain_if_enabled(
         slug="algolia",
@@ -2373,6 +2590,39 @@ def test_daily_run_stage_recorder_records_success_and_failure(daily_run):
     assert calls[4][1]["error"] == "boom"
 
 
+def test_daily_run_stage_recorder_redacts_sensitive_failure(daily_run, monkeypatch):
+    calls = []
+    monkeypatch.setenv("DATABASE_URL", "postgresql://phase-one-ledger-secret")
+
+    class FakeRunStageRepository:
+        def start_ledger(self, **kwargs):
+            return 999
+
+        def start_stage(self, **kwargs):
+            return 1000 + kwargs["stage_order"]
+
+        def finish_stage(self, **kwargs):
+            calls.append(kwargs)
+
+    recorder = daily_run.DailyRunStageRecorder(
+        FakeRunStageRepository(),
+        tenant_id=1,
+        run_id="daily-algolia-2026-07-14",
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        recorder.run_stage(
+            stage="publish_gate",
+            stage_order=9,
+            action=lambda: (_ for _ in ()).throw(
+                RuntimeError("postgresql://phase-one-ledger-secret")
+            ),
+        )
+
+    assert calls[-1]["error"] == "[redacted]"
+    assert "phase-one-ledger-secret" not in str(exc_info.value)
+
+
 def test_daily_run_stage_recorder_exposes_explicit_start_and_finish(daily_run):
     calls = []
     recorded_orders = set()
@@ -2533,6 +2783,11 @@ def test_start_daily_run_stage_ledger_sets_result_id(daily_run, monkeypatch):
     calls = []
     fake_conn = object()
     result = daily_run.TenantResult("algolia")
+    result.runtime_provenance = {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
 
     class FakeRunStageRepository:
         def __init__(self, conn):
@@ -2559,9 +2814,26 @@ def test_start_daily_run_stage_ledger_sets_result_id(daily_run, monkeypatch):
             "tenant_id": 1,
             "run_id": "daily-algolia-2026-07-11",
             "package_name": "cios.daily",
-            "metadata": {"tenant": "algolia", "cadence": "daily"},
+            "metadata": {
+                "tenant": "algolia",
+                "cadence": "daily",
+                "runtime_provenance": result.runtime_provenance,
+            },
         }
     ]
+
+
+def test_daily_run_ledger_metadata_retains_private_runtime_provenance(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.runtime_provenance = {
+        "package_version": "phase2-deadbeef",
+        "model_provider": "claude-shim",
+        "model_route": "gemini-2.5-pro",
+    }
+
+    metadata = daily_run.daily_run_ledger_metadata(result)
+
+    assert metadata["runtime_provenance"] == result.runtime_provenance
 
 
 def test_run_tenant_starts_daily_stage_ledger_before_registry_work() -> None:
@@ -2926,6 +3198,20 @@ def test_dashboard_publish_blocks_product_market_run_without_demand_source(daily
 
     assert daily_run.should_publish_dashboard(result) is False
     assert daily_run.product_market_publish_block_reason(result).startswith("demand_source_status=missing")
+    assert daily_run.publish_gate_exit_code(result) == 3
+
+
+def test_publish_gate_exit_code_keeps_runtime_failure_distinct_from_readiness_block(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.dashboard_state = object()
+    result.quality_status = "passed"
+    result.synth_verdict = daily_run.Verdict.SIGNALS.value
+    result.product_market_summary = {
+        "status": "failed",
+        "error": "TimeoutExpired: command timed out",
+    }
+
+    assert daily_run.publish_gate_exit_code(result) == 2
 
 
 def test_dashboard_publish_allows_product_market_run_with_ledger_demand(daily_run):
@@ -3049,6 +3335,78 @@ def test_tenant_run_summary_separates_active_attempted_fetched_failed_and_skippe
     assert "failed=5" in summary
     assert "skipped=1" in summary
     assert "sources=42" not in summary
+
+
+def test_current_source_coverage_accounts_for_checked_and_disposed_sources(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.sources_planned_count = 3
+    result.sources_attempted_count = 2
+    result.sources_failed = [{"name": "Coveo", "error": "timeout"}]
+    result.sources_skipped = [
+        {
+            "name": "Klevu",
+            "url": "https://www.klevu.com/blog",
+            "reason": "source_id_missing",
+            "checked": False,
+        },
+        {
+            "name": "Constructor",
+            "reason": "blocked_by_challenge",
+            "checked": True,
+        },
+    ]
+
+    coverage = daily_run.current_source_coverage(
+        result,
+        run_id="cios-20260714T090000Z-1234",
+    )
+
+    assert coverage == {
+        "run_id": "cios-20260714T090000Z-1234",
+        "active_source_count": 3,
+        "checked_source_count": 2,
+        "failed_source_count": 2,
+        "disposed_source_count": 1,
+        "dispositions": [
+            {
+                "source_ref": "3995b87e38e234fe",
+                "competitor_name": "Klevu",
+                "reason": "source_id_missing",
+            }
+        ],
+    }
+
+
+def test_current_source_coverage_treats_platform_blocks_as_dispositions(daily_run):
+    result = daily_run.TenantResult("algolia")
+    result.sources_planned_count = 3
+    result.sources_attempted_count = 3
+    result.sources_failed = []
+    result.sources_skipped = [
+        {
+            "name": "Community",
+            "url": "https://old.reddit.com/r/ecommerce/.rss",
+            "reason": "blocked_by_platform_policy:reddit_http_403",
+            "checked": True,
+        }
+    ]
+
+    coverage = daily_run.current_source_coverage(
+        result,
+        run_id="cios-20260716T071110Z-3789138",
+    )
+
+    assert coverage["active_source_count"] == 3
+    assert coverage["checked_source_count"] == 2
+    assert coverage["failed_source_count"] == 0
+    assert coverage["disposed_source_count"] == 1
+    assert coverage["dispositions"] == [
+        {
+            "source_ref": "824834493b2dec02",
+            "competitor_name": "Community",
+            "reason": "blocked_by_platform_policy:reddit_http_403",
+        }
+    ]
 
 
 def test_write_dashboard_artifacts_publishes_competitor_briefs_and_stamped_cockpit(daily_run, tmp_path):

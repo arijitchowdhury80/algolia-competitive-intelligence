@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import signal
+import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
+
+import pytest
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "execute_product_surface_plan.py"
@@ -188,6 +193,87 @@ def test_execute_product_surface_plan_allows_partial_success_with_failures_recor
     assert summary["results"][1]["status"] == "failed"
 
 
+def test_execute_plan_redacts_sensitive_environment_values_from_child_errors(
+    tmp_path, monkeypatch
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-test-secret")
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [
+                    sys.executable,
+                    "-c",
+                    "import os, sys; print(os.environ['GEMINI_API_KEY'], file=sys.stderr); sys.exit(1)",
+                ],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=5)
+
+    assert summary["results"][0]["error"] == "[redacted]"
+    assert "phase-one-test-secret" not in json.dumps(summary)
+
+
+def test_execute_plan_rejects_worker_count_above_hard_cap() -> None:
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="between 1 and 8"):
+        module.execute_plan({"tenant_id": 1, "items": []}, timeout_seconds=5, max_workers=9)
+
+
+def test_execute_plan_records_missing_executable_as_terminal_failure(tmp_path) -> None:
+    module = _load_module()
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [str(tmp_path / "missing-scout-binary")],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=5)
+
+    assert summary["failed"] == 1
+    assert summary["results"][0]["status"] == "failed"
+    assert "No such file or directory" in summary["results"][0]["error"]
+
+
+def test_execute_plan_timeout_preserves_redacted_child_diagnostic(
+    tmp_path, monkeypatch
+) -> None:
+    module = _load_module()
+    monkeypatch.setenv("GEMINI_API_KEY", "phase-one-timeout-secret")
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import os, sys, time; "
+                        "print(os.environ['GEMINI_API_KEY'], file=sys.stderr, flush=True); "
+                        "time.sleep(5)"
+                    ),
+                ],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=0.2)
+
+    assert summary["results"][0]["status"] == "timed_out"
+    assert summary["results"][0]["error"] == "timed out after 0.2s: [redacted]"
+    assert "phase-one-timeout-secret" not in json.dumps(summary)
+
+
 def test_execute_product_surface_plan_marks_empty_outputs_without_treating_them_as_product_proof(tmp_path) -> None:
     module = _load_module()
     plan_path = tmp_path / "plan.json"
@@ -266,7 +352,7 @@ def test_execute_plan_uses_bounded_parallel_workers(monkeypatch) -> None:
             "returncode": 0,
         }
 
-    monkeypatch.setattr(module, "_execute_item", fake_execute_item)
+    monkeypatch.setattr(module.executor_module, "_execute_item", fake_execute_item)
     plan = {
         "tenant_id": 1,
         "items": [{"output_path": f"/tmp/surface-{index}.json", "command": ["true"]} for index in range(5)],
@@ -278,3 +364,178 @@ def test_execute_plan_uses_bounded_parallel_workers(monkeypatch) -> None:
     assert summary["succeeded"] == 5
     assert max_active == 2
     assert summary["scout_paths"] == [f"/tmp/surface-{index}.json" for index in range(5)]
+
+
+def test_execute_plan_item_timeout_kills_descendant_process_group(tmp_path) -> None:
+    module = _load_module()
+    orphan_marker = tmp_path / "orphan-wrote-after-timeout.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]]); "
+        "time.sleep(5)"
+    )
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [sys.executable, "-c", parent_code, str(orphan_marker)],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=0.2, max_workers=1)
+    time.sleep(1.0)
+
+    assert summary["failed"] == 1
+    assert summary["timed_out"] == 1
+    assert summary["not_started"] == 0
+    assert summary["results"][0]["status"] == "timed_out"
+    assert summary["results"][0]["error"] == "timed out after 0.2s"
+    assert not orphan_marker.exists()
+
+
+def test_execute_plan_item_timeout_kills_detached_descendant(tmp_path) -> None:
+    module = _load_module()
+    if not module.executor_module.PROCESS_GROUPS.cgroup_enabled:
+        pytest.skip("requires delegated cgroup v2 containment")
+    orphan_marker = tmp_path / "detached-orphan-wrote-after-timeout.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import subprocess, sys, time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[1]], start_new_session=True); "
+        "time.sleep(5)"
+    )
+    plan = {
+        "tenant_id": 1,
+        "items": [
+            {
+                "output_path": str(tmp_path / "never-created.json"),
+                "command": [sys.executable, "-c", parent_code, str(orphan_marker)],
+            }
+        ],
+    }
+
+    summary = module.execute_plan(plan, timeout_seconds=0.2, max_workers=1)
+    time.sleep(1.0)
+
+    assert summary["results"][0]["status"] == "timed_out"
+    assert not orphan_marker.exists()
+
+
+def test_execute_plan_batch_timeout_records_every_item_and_kills_active_groups(tmp_path) -> None:
+    module = _load_module()
+    items = []
+    for index in range(4):
+        marker = tmp_path / f"late-{index}.txt"
+        code = (
+            "import pathlib, sys, time; "
+            "time.sleep(1); "
+            "pathlib.Path(sys.argv[1]).write_text('late', encoding='utf-8')"
+        )
+        items.append(
+            {
+                "output_path": str(tmp_path / f"output-{index}.json"),
+                "command": [sys.executable, "-c", code, str(marker)],
+            }
+        )
+
+    started = time.monotonic()
+    summary = module.execute_plan(
+        {"tenant_id": 1, "items": items},
+        timeout_seconds=5,
+        batch_timeout_seconds=0.2,
+        max_workers=2,
+    )
+    elapsed = time.monotonic() - started
+    time.sleep(1.1)
+
+    assert elapsed < 1.0
+    assert len(summary["results"]) == 4
+    assert summary["batch_timed_out"] is True
+    assert summary["timed_out"] == 2
+    assert summary["not_started"] == 2
+    assert summary["failed"] == 4
+    assert [result["status"] for result in summary["results"]] == [
+        "timed_out",
+        "timed_out",
+        "not_started",
+        "not_started",
+    ]
+    assert not list(tmp_path.glob("late-*.txt"))
+
+
+def test_executor_sigterm_kills_active_item_process_group(tmp_path) -> None:
+    plan_path = tmp_path / "plan.json"
+    summary_path = tmp_path / "summary.json"
+    started_marker = tmp_path / "item-started.txt"
+    orphan_marker = tmp_path / "orphan-after-executor-sigterm.txt"
+    child_code = (
+        "import pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(0.8); "
+        "pathlib.Path(sys.argv[1]).write_text('orphan', encoding='utf-8')"
+    )
+    parent_code = (
+        "import pathlib, subprocess, sys, time; "
+        "pathlib.Path(sys.argv[1]).write_text('started', encoding='utf-8'); "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}, sys.argv[2]]); "
+        "time.sleep(5)"
+    )
+    plan_path.write_text(
+        json.dumps(
+            {
+                "tenant_id": 1,
+                "items": [
+                    {
+                        "output_path": str(tmp_path / "never-created.json"),
+                        "command": [
+                            sys.executable,
+                            "-c",
+                            parent_code,
+                            str(started_marker),
+                            str(orphan_marker),
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    executor = subprocess.Popen(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--plan",
+            str(plan_path),
+            "--summary-output",
+            str(summary_path),
+            "--command-timeout-seconds",
+            "5",
+            "--batch-timeout-seconds",
+            "4",
+        ],
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + 2
+    while not started_marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert started_marker.exists()
+
+    os.killpg(executor.pid, signal.SIGTERM)
+    executor.wait(timeout=3)
+    time.sleep(1.0)
+
+    assert executor.returncode != 0
+    assert not orphan_marker.exists()

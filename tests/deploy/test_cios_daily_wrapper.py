@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / "deploy" / "cios-daily.sh"
+APP_WRAPPER = ROOT / "deploy" / "cios-daily-app.sh"
+QUEUE_HELPER = ROOT / "scripts" / "cios_run_queue.py"
 
 
 def _write_executable(path: Path, body: str) -> None:
@@ -33,6 +38,7 @@ def _run_wrapper(
     public: Path,
     env_file: Path,
     extra_env: dict[str, str] | None = None,
+    entrypoint: Path = APP_WRAPPER,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env.update(
@@ -45,7 +51,7 @@ def _run_wrapper(
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
-        ["sh", str(WRAPPER)],
+        ["sh", str(entrypoint)],
         cwd=str(ROOT),
         env=env,
         text=True,
@@ -54,57 +60,265 @@ def _run_wrapper(
     )
 
 
-def test_hermes_wrapper_hands_off_to_app_user_runner_when_enabled(tmp_path):
+def _run_public_wrapper_with_fixed_roots(
+    tmp_path: Path,
+    *,
+    create_host_root: bool,
+    create_hermes_root: bool,
+) -> tuple[subprocess.CompletedProcess[str], Path]:
+    host_root = tmp_path / "opt-cios-app"
+    hermes_root = tmp_path / "opt-data-apps-cios"
+    hermes_runtime_python = tmp_path / "opt-hermes-venv" / "bin" / "python"
+    marker = tmp_path / "queue-client-root.txt"
+
+    for root, should_create in (
+        (host_root, create_host_root),
+        (hermes_root, create_hermes_root),
+    ):
+        if not should_create:
+            continue
+        (root / "run-queue").mkdir(parents=True)
+        (root / "scripts").mkdir(parents=True)
+        (root / "scripts" / "cios_run_queue.py").write_text("# queue helper\n", encoding="utf-8")
+        _write_executable(root / ".venv" / "bin" / "python", "#!/bin/sh\nexit 91\n")
+
+    _write_executable(
+        hermes_runtime_python,
+        f'''#!/bin/sh
+printf "%s" "{hermes_root}" > "{marker}"
+case " $* " in
+  *" enqueue "*) printf "%s\\n" "0123456789abcdef0123456789abcdef" ;;
+  *" read-result "*) printf "%s\\n" "0" ;;
+  *) exit 2 ;;
+esac
+''',
+    )
+
+    patched = tmp_path / "cios-daily.sh"
+    text = WRAPPER.read_text(encoding="utf-8")
+    text = text.replace("/opt/hermes/.venv/bin/python", str(hermes_runtime_python))
+    text = text.replace("/opt/data/apps/cios", str(hermes_root))
+    text = text.replace("/opt/cios/app", str(host_root))
+    text = text.replace("/opt/cios/public", str(tmp_path / "opt-cios-public"))
+    _write_executable(patched, text)
+
+    result = subprocess.run(
+        ["sh", str(patched)],
+        cwd=str(ROOT),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    return result, marker
+
+
+def test_hermes_wrapper_uses_fixed_cios_queue_client_paths():
+    text = WRAPPER.read_text(encoding="utf-8")
+
+    assert "APP=/opt/cios/app" in text
+    assert "PUB=/opt/cios/public" in text
+    assert "HOST_CLIENT_ROOT=/opt/cios/app" in text
+    assert "HERMES_CLIENT_ROOT=/opt/data/apps/cios" in text
+    assert "HOST_PYTHON=/opt/cios/app/.venv/bin/python" in text
+    assert "HERMES_PYTHON=/opt/hermes/.venv/bin/python" in text
+    assert 'QUEUE="$CLIENT_ROOT/run-queue"' in text
+    assert 'PYTHON="$HERMES_PYTHON"' in text
+    assert 'HELPER="$CLIENT_ROOT/scripts/cios_run_queue.py"' in text
+    assert '"$ENV" -i PATH=/usr/bin:/bin' in text
+    assert '"$current_user" = "cios"' in text
+
+
+def test_hermes_wrapper_uses_container_client_root_when_host_root_is_not_visible(tmp_path):
+    result, marker = _run_public_wrapper_with_fixed_roots(
+        tmp_path,
+        create_host_root=False,
+        create_hermes_root=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert marker.read_text(encoding="utf-8") == str(tmp_path / "opt-data-apps-cios")
+
+
+def test_hermes_wrapper_has_no_caller_controlled_execution_paths():
+    text = WRAPPER.read_text(encoding="utf-8")
+
+    assert "CIOS_APP_DIR" not in text
+    assert "CIOS_PUBLIC_DIR" not in text
+    assert "CIOS_RUNNER_QUEUE_DIR" not in text
+    assert "CIOS_PYTHON_BIN" not in text
+    assert "CIOS_RUN_QUEUE_HELPER" not in text
+    assert "CIOS_APP_USER" not in text
+    assert "CIOS_DISABLE_RUNNER_HANDOFF" not in text
+
+
+def test_app_wrapper_generates_safe_run_identity_before_preflight(tmp_path):
+    marker = tmp_path / "run-id.txt"
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        f'''#!/bin/sh
+printf "%s" "$CIOS_RUN_ID" > "{marker}"
+exit 42
+''',
+    )
+
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_RUN_ID": "../caller"},
+    )
+
+    assert result.returncode == 42
+    run_id = marker.read_text(encoding="utf-8")
+    assert re.fullmatch(r"cios-[0-9]{8}T[0-9]{6}Z-[0-9]+", run_id)
+    assert run_id != "../caller"
+
+
+def test_app_wrapper_has_flagged_immutable_publication_path() -> None:
+    text = APP_WRAPPER.read_text(encoding="utf-8")
+
+    assert 'CIOS_PUBLICATION_V2:-0' in text
+    assert 'CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store' in text
+    assert 'scripts/publish_generation.py' in text
+    assert '--kind diagnostic' in text
+    assert '--kind decision' in text
+    assert '--run-id "$CIOS_RUN_ID"' in text
+    assert '--package-verdict "$OUT/hermes-package-contract-verdict.json"' in text
+    assert '--output "$OUT/publication-integrity-verdict.json"' in text
+    assert "CIOS_PACKAGE_VERSION" in text
+
+
+def test_app_wrapper_requires_named_package_for_publication_v2(tmp_path):
+    app, public, env_file = _make_fake_app(tmp_path, "#!/bin/sh\nexit 0\n")
+
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_PUBLICATION_V2": "1", "CIOS_PACKAGE_VERSION": ""},
+    )
+
+    assert result.returncode == 2
+    assert "CIOS_PACKAGE_VERSION is required" in result.stderr
+
+
+def test_app_wrapper_rewrites_status_blocked_when_publication_v2_fails(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,
         """#!/bin/sh
-echo "daily body should not run before app-user handoff" >&2
-exit 99
+set -eu
+OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
+printf "%s\\n" "$1" >> "$OUT/calls.txt"
+case "$1" in
+  *verify_hermes_package_contract.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --verdict-output) shift; printf '{"status":"pass","run_id":"test-run"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *audit_learning_policies.py|*apply_product_market_schema.py)
+    ;;
+  *daily_production_run.py)
+    printf "current cockpit" > "$CIOS_DASHBOARD_OUT"
+    printf "current brief" > "$OUT/brief.html"
+    printf '{"schema_version":11,"generated_at":"2026-07-14T09:00:00+00:00"}' > "$OUT/argus-dashboard.json"
+    mkdir -p "$OUT/briefs/algolia"
+    printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
+    ;;
+  *execute_product_muscle_gap_discovery.py|*promote_product_surface_candidates.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"completed"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_demand_readiness.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"ready"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_demand_plan_template.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; printf 'Page title,Page path,Engaged sessions\\n' > "$1";;
+        --guide-output) shift; printf '{"status":"ready","topic_count":1}' > "$1";;
+      esac
+      shift
+    done
+    ;;
+  *run_argus_demand_intake.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"covered","exit_code":0}' > "$1";; esac
+      shift
+    done
+    ;;
+  *attach_post_run_summaries.py|*rerender_dashboard.py|*attach_operator_handoff_to_dashboard.py)
+    ;;
+  *export_argus_evidence_work_queue.py|*export_argus_product_muscle_work_queue.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"work_item_count":0,"items":[]}' > "$1";; esac
+      shift
+    done
+    ;;
+  *build_argus_operator_handoff.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"ready_for_operator_review"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_argus_data_plane_manifest.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"schema_version":1,"status":"ready_for_operator_review","run_id":"test-run"}' > "$1";; esac
+      shift
+    done
+    ;;
+  *export_public_run_status.py)
+    status="published"
+    output=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --publish-status) shift; status="$1";;
+        --output) shift; output="$1";;
+      esac
+      shift
+    done
+    if [ "$status" = "published" ]; then
+      printf '{"schema_version":2,"publish_status":"published","status":"ready_for_operator_review","public_dashboard_updated":true}' > "$output"
+    else
+      printf '{"schema_version":2,"publish_status":"blocked","status":"blocked_on_evidence","public_dashboard_updated":false}' > "$output"
+    fi
+    ;;
+  *publish_generation.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output) shift; printf '{"status":"fail","checks":{"generation_validated":false,"pointer_promoted":false,"status_committed":false}}' > "$1";; esac
+      shift
+    done
+    exit 2
+    ;;
+  *)
+    echo "unexpected python target: $1" >&2
+    exit 97
+    ;;
+esac
 """,
     )
-    queue = app / "run-queue"
-    watcher = subprocess.Popen(
-        [
-            "sh",
-            "-c",
-            (
-                "set -eu; "
-                f"queue={queue}; "
-                "while :; do "
-                'for request in "$queue"/*.request; do '
-                '[ -e "$request" ] || continue; '
-                'base="${request%.request}"; '
-                'printf "runner log\\n" > "$base.log"; '
-                'printf "17\\n" > "$base.result"; '
-                "exit 0; "
-                "done; "
-                "sleep 1; "
-                "done"
-            ),
-        ],
-        text=True,
-    )
-    try:
-        result = _run_wrapper(
-            app,
-            public,
-            env_file,
-            {
-                "CIOS_RUNNER_HANDOFF": "1",
-                "CIOS_RUNNER_QUEUE_DIR": str(queue),
-                "CIOS_RUNNER_WAIT_SECONDS": "8",
-            },
-        )
-    finally:
-        watcher.terminate()
-        watcher.wait(timeout=5)
+    (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
 
-    assert result.returncode == 17
-    assert result.stdout == "runner log\n"
-    assert "queued CI-OS runner handoff request" in result.stderr
-    assert "daily body should not run" not in result.stderr
-    assert list(queue.glob("*.request"))
-    assert list(queue.glob("*.result"))
+    result = _run_wrapper(
+        app,
+        public,
+        env_file,
+        extra_env={"CIOS_PUBLICATION_V2": "1", "CIOS_PACKAGE_VERSION": "test-package"},
+    )
+
+    assert result.returncode == 2
+    status_path = app / "out" / "argus-public-run-status.json"
+    assert status_path.exists(), result.stderr + result.stdout
+    status = status_path.read_text(encoding="utf-8")
+    assert '"publish_status":"blocked"' in status
+    assert '"public_dashboard_updated":false' in status
+    assert not (public / "index.html").exists()
 
 
 def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_same_run_artifacts(tmp_path):
@@ -236,7 +450,15 @@ exit 0
     assert (stale_out / "argus-dashboard.html").exists()
 
 
-def test_hermes_wrapper_writes_demand_source_gate_when_daily_blocks_publish(tmp_path):
+@pytest.mark.parametrize(
+    ("daily_exit_code", "expected_wrapper_code"),
+    [(2, 2), (3, 0)],
+)
+def test_hermes_wrapper_writes_demand_source_gate_when_daily_blocks_publish(
+    tmp_path,
+    daily_exit_code,
+    expected_wrapper_code,
+):
     app, public, env_file = _make_fake_app(
         tmp_path,
         """#!/bin/sh
@@ -254,7 +476,7 @@ case "$1" in
     mkdir -p "$OUT/briefs/algolia"
     printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     echo "ABORT: dashboard publish blocked for algolia" >&2
-    exit 2
+    exit DAILY_EXIT_CODE
     ;;
   *check_argus_demand_source_gate.py)
     echo "demand-source-gate" >> "$CALLS"
@@ -357,13 +579,15 @@ case "$1" in
     exit 97
     ;;
 esac
-""",
+""".replace("DAILY_EXIT_CODE", str(daily_exit_code)),
     )
     (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
 
     result = _run_wrapper(app, public, env_file)
 
-    assert result.returncode == 2
+    assert result.returncode == expected_wrapper_code
+    if daily_exit_code == 3:
+        assert "runtime completed with blocked evidence readiness" in result.stderr
     assert (app / "out" / "calls.txt").read_text(encoding="utf-8").splitlines() == [
         "daily",
         "demand-source-gate",
@@ -417,69 +641,6 @@ esac
         "Page title,Page path,Engaged sessions"
     )
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
-
-
-def test_hermes_wrapper_times_out_silent_daily_runner_and_publishes_latest_status(tmp_path):
-    app, public, env_file = _make_fake_app(
-        tmp_path,
-        """#!/bin/sh
-set -eu
-OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
-CALLS="$OUT/calls.txt"
-case "$1" in
-  *verify_hermes_package_contract.py|*audit_learning_policies.py|*apply_product_market_schema.py)
-    ;;
-  *daily_production_run.py)
-    echo "daily-start" >> "$CALLS"
-    printf "%s" "$$" > "$OUT/daily.pid"
-    sleep 5
-    echo "daily-finished" >> "$CALLS"
-    printf "stale cockpit should never publish" > "$CIOS_DASHBOARD_OUT"
-    ;;
-  *export_public_run_status.py)
-    echo "public-run-status" >> "$CALLS"
-    while [ "$#" -gt 0 ]; do
-      case "$1" in
-        --output)
-          shift
-          printf '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}' > "$1"
-          ;;
-      esac
-      shift
-    done
-    ;;
-  *)
-    echo "unexpected python target: $1" >&2
-    exit 97
-    ;;
-esac
-""",
-    )
-    (app / "scripts" / "export_public_run_status.py").write_text("", encoding="utf-8")
-
-    result = _run_wrapper(
-        app,
-        public,
-        env_file,
-        {"CIOS_DAILY_RUN_TIMEOUT_SECONDS": "1"},
-    )
-
-    assert result.returncode == 124
-    assert "daily production runner timed out after 1s" in result.stderr
-    assert (app / "out" / "calls.txt").read_text(encoding="utf-8").splitlines() == [
-        "daily-start",
-        "public-run-status",
-    ]
-    assert not (app / "out" / "argus-dashboard.html").exists()
-    assert not (public / "index.html").exists()
-    assert not (public / "data" / "semantic-dashboard.json").exists()
-    assert (app / "out" / "argus-data-plane-manifest.json").read_text(encoding="utf-8")
-    assert (public / "data" / "argus-latest-run-status.json").read_text(encoding="utf-8") == (
-        '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}'
-    )
-    assert (public / "v2" / "data" / "argus-latest-run-status.json").read_text(encoding="utf-8") == (
-        '{"schema_version":1,"publish_status":"blocked","status":"blocked_runtime_timeout","public_dashboard_updated":false}'
-    )
 
 
 def test_hermes_wrapper_runs_preflight_before_daily_runner(tmp_path):

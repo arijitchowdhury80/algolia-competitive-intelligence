@@ -1,0 +1,10 @@
+{
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12",
+  "extraPaths": ["src"],
+  "include": [
+    "src/cios/publication",
+    "scripts/publish_generation.py",
+    "scripts/check_e2e_launch_readiness.py"
+  ]
+}

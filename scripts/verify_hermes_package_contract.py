@@ -9,20 +9,26 @@ publish wrapper needed before a daily run is considered production-acceptable.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 REQUIRED_PATHS = [
     "deploy/cios-admin.service",
     "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
+    "deploy/cios-static.service",
     "deploy/claude-shim/cios-claude-shim.service",
     "scripts/apply_product_market_schema.py",
     "scripts/daily_production_run.py",
@@ -50,8 +56,10 @@ REQUIRED_PATHS = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
+    "scripts/publish_generation.py",
     "scripts/build_phase0_release_record.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
@@ -62,12 +70,26 @@ REQUIRED_PATHS = [
     "src/cios/admin/product_surface_extraction.py",
     "src/cios/admin/product_surface_repair.py",
     "src/cios/admin/dashboard_refresh.py",
+    "src/cios/intelligence/product_surface_executor.py",
+    "src/cios/platform/process_supervisor.py",
+    "src/cios/platform/cgroup_launcher.py",
+    "src/cios/platform/redaction.py",
     "src/cios/intelligence",
     "src/cios/admin/learning_apply.py",
     "src/cios/admin/demand_imports.py",
     "src/cios/db/repos/product_market.py",
     "src/cios/admin",
+    "src/cios/publication",
 ]
+
+REQUIRED_EXECUTABLE_PATHS = (
+    "deploy/cios-daily.sh",
+    "deploy/cios-daily-app.sh",
+    "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
+    "scripts/cios_run_queue.py",
+    "scripts/scout_http_shim",
+)
 
 WRAPPER_INVARIANTS = {
     "wrapper missing product-market default enable": "CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1",
@@ -94,40 +116,86 @@ WRAPPER_INVARIANTS = {
     "wrapper missing Argus data-plane manifest export": "export_argus_data_plane_manifest.py",
     "wrapper missing public run status export": "export_public_run_status.py",
     "wrapper missing public latest run status artifact": "argus-latest-run-status.json",
-    "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
+    "wrapper missing immutable publication feature flag": "CIOS_PUBLICATION_V2:-0",
+    "wrapper missing immutable package provenance requirement": "CIOS_PACKAGE_VERSION is required",
+    "wrapper missing immutable publication command": "publish_generation.py",
+    "wrapper missing structured package verdict": "--verdict-output",
+    "wrapper missing product-surface batch timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS",
+    "wrapper missing product-surface stage timeout guard": "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
-    "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
-    "wrapper missing app-user runner request queue": ".request",
-    "wrapper missing app-user runner result wait": ".result",
-    "wrapper missing handoff bypass for app-user execution": "CIOS_DISABLE_RUNNER_HANDOFF",
+    "wrapper missing fixed cios identity gate": '"$current_user" = "cios"',
+    "wrapper missing fixed host queue client root": "HOST_CLIENT_ROOT=/opt/cios/app",
+    "wrapper missing fixed Hermes queue client root": "HERMES_CLIENT_ROOT=/opt/data/apps/cios",
+    "wrapper missing fixed host queue Python": "HOST_PYTHON=/opt/cios/app/.venv/bin/python",
+    "wrapper missing fixed Hermes queue Python": "HERMES_PYTHON=/opt/hermes/.venv/bin/python",
+    "wrapper missing selected systemd request queue": 'QUEUE="$CLIENT_ROOT/run-queue"',
+    "wrapper wait must exceed systemd cleanup window": "WAIT_SECONDS=1800",
+    "wrapper missing secure queue enqueue": '"$HELPER" enqueue',
+    "wrapper missing secure result read": '"$HELPER" read-result',
+    "wrapper must sanitize the queue client environment": '"$ENV" -i PATH=/usr/bin:/bin',
     "wrapper missing marked-output cleanup": ".cios-output-dir",
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
 }
 
+PUBLIC_WRAPPER_INVARIANTS = {
+    "wrapper missing fixed host queue selection": (
+        'if [ -d "$HOST_CLIENT_ROOT" ] && [ ! -L "$HOST_CLIENT_ROOT" ]; then\n'
+        '  CLIENT_ROOT="$HOST_CLIENT_ROOT"\n'
+        '  PYTHON="$HOST_PYTHON"'
+    ),
+    "wrapper missing Hermes container queue fallback": (
+        'elif [ -d "$HERMES_CLIENT_ROOT" ] && [ ! -L "$HERMES_CLIENT_ROOT" ]; then\n'
+        '  CLIENT_ROOT="$HERMES_CLIENT_ROOT"\n'
+        '  PYTHON="$HERMES_PYTHON"'
+    ),
+}
+
 HOST_RUNNER_INVARIANTS = {
-    "host runner missing handoff bypass": "CIOS_DISABLE_RUNNER_HANDOFF=1",
-    "host runner missing app directory handoff": 'CIOS_APP_DIR="$APP"',
-    "host runner missing public directory handoff": 'CIOS_PUBLIC_DIR="$PUB"',
-    "host runner must default to /opt CI-OS app mount": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
-    "host runner must default to /opt CI-OS public mount": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
-    "host runner missing request glob": "*.request",
-    "host runner missing result artifact": ".result",
-    "host runner missing log artifact": ".log",
-    "host runner missing cios daily wrapper call": "deploy/cios-daily.sh",
+    "host runner must fix the /opt CI-OS app mount": "APP=/opt/cios/app",
+    "host runner must fix the /opt CI-OS public mount": "PUB=/opt/cios/public",
+    "host runner missing secure queue helper": "cios_run_queue.py",
+    "host runner must require cios identity": '$(/usr/bin/id -un)" != "cios"',
+    "host runner must drain requests through queue helper": '"$HELPER" run-pending',
+}
+
+RUN_FINALIZER_INVARIANTS = {
+    "run finalizer missing systemd result handling": "SERVICE_RESULT",
+    "run finalizer missing secure queue helper": "cios_run_queue.py",
+    "run finalizer must require cios identity": '$(/usr/bin/id -un)" != "cios"',
+    "run finalizer must delegate finalization": '"$HELPER" finalize',
+}
+
+RUN_QUEUE_INVARIANTS = {
+    "run queue missing no-follow filesystem access": "O_NOFOLLOW",
+    "run queue missing atomic state replacement": "os.replace",
+    "run queue missing private active state": '".state"',
+    "run queue missing unguessable request ids": "uuid.uuid4",
+    "run queue missing serial request draining": "def run_pending",
+    "run queue missing privileged cios identity check": "require_cios_user()",
+    "run queue raw logs must be cios-private": "_create_state_regular",
+    "run queue private files must use mode 0600": "0o600",
+    "run queue missing timeout exit mapping": "124 if timed_out else 2",
+    "run queue missing blocked timeout status": '"blocked_runtime_timeout"',
 }
 
 HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must define Hermes source app": 'SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"',
     "host permissions must define Hermes source public dir": 'SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"',
     "host permissions must default app runtime mount to /opt": 'APP="${CIOS_APP_DIR:-/opt/cios/app}"',
+    "host permissions must support pre-mounted immutable releases": 'MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"',
     "host permissions must default public runtime mount to /opt": 'PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"',
+    "host permissions must harden the /opt/cios parent": "install -d -o root -g root -m 0755 /opt/cios",
+    "host permissions must gate app bind mount management": 'if [ "$MANAGE_APP_BIND" = "1" ]; then',
+    "host permissions must setup the pre-mounted app when app bind is external": 'APP_SOURCE_FOR_SETUP="$APP"',
     "host permissions must bind-mount CI-OS app": 'mount --bind "$SOURCE_APP" "$APP"',
     "host permissions must bind-mount CI-OS public dir": 'mount --bind "$SOURCE_PUB" "$PUB"',
     "host permissions must persist app bind mount": 'app_fstab="$SOURCE_APP $APP none bind 0 0"',
     "host permissions must persist public bind mount": 'pub_fstab="$SOURCE_PUB $PUB none bind 0 0"',
     "host permissions must create CI-OS app user": "useradd --system",
+    "host permissions must define immutable public store": 'PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"',
+    "host permissions must create app-owned public store": 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"',
     "host permissions must add app user to Hermes group": 'usermod -aG "$HERMES_GROUP" "$APP_USER"',
     "host permissions must manage Hermes cron wrapper": 'ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"',
     "host permissions must manage host env copy": 'HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"',
@@ -135,16 +203,29 @@ HOST_PERMISSIONS_INVARIANTS = {
     "host permissions must prefer ACL traversal for cios": 'setfacl -m "u:$APP_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must grant shim ACL traversal when present": 'setfacl -m "u:$SHIM_USER:--x,m:--x" /root/.hermes /root/.hermes/apps',
     "host permissions must preserve execute-only Hermes traversal fallback": "chmod 711 /root/.hermes /root/.hermes/apps",
-    "host permissions must chown source app and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"',
-    "host permissions must keep queue group-sticky": 'chmod 2775 "$APP" "$APP/run-queue"',
+    "host permissions must chown effective app source and public trees to app user": 'chown -R "$APP_USER:$HERMES_GROUP" "$APP_SOURCE_FOR_SETUP" "$SOURCE_PUB"',
+    "host permissions must grant Hermes enqueue access to request queue": 'chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"',
+    "host permissions must keep request queue setgid and sticky": 'chmod 3770 "$APP/run-queue"',
+    "host permissions must make active state private to cios": 'chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"',
+    "host permissions must protect active state permissions": 'chmod 700 "$APP/run-queue/.state"',
+    "host permissions must initialize the managed output marker": 'touch "$APP/out/.cios-output-dir"',
+    "host permissions must own the output marker for CI-OS": 'chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"',
+    "host permissions must protect the output marker permissions": 'chmod 660 "$APP/out/.cios-output-dir"',
+    "host permissions must create app-owned Looker data root": 'install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"',
     "host permissions must create app-owned product-market workdir": 'PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"',
     "host permissions must repair legacy product-market tmp ownership": 'LEGACY_PRODUCT_MARKET_TMP="${CIOS_LEGACY_PRODUCT_MARKET_TMP:-/tmp/cios-product-market}"',
     "host permissions must make Hermes cron wrapper group executable": 'chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"',
     "host permissions must protect Hermes CI-OS env file": 'chmod 640 "$ENV_FILE"',
     "host permissions must install host-readable CI-OS env file": 'install -o "$APP_USER" -g "$HERMES_GROUP" -m 0640 "$ENV_FILE" "$HOST_ENV_FILE"',
+    "host permissions must protect run finalizer for cios only": 'chmod 700 "$APP/deploy/cios-run-finalize.sh"',
+    "host permissions must install executable secure queue helper": 'chmod 755 "$APP/scripts/cios_run_queue.py"',
+    "host permissions must make app body cios-private": 'chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"',
+    "host permissions must make host runner cios-private": 'chmod 700 "$APP/deploy/cios-host-runner.sh"',
+    "host permissions must remove group write from code trees": 'chmod -R g-w,o-w "$code_dir"',
 }
 
 RUNNER_SERVICE_INVARIANTS = {
+    "runner service must use executable service type": "Type=exec",
     "runner service must run as cios user": "User=cios",
     "runner service must run as cios group": "Group=cios",
     "runner service must include hermes supplementary group": "SupplementaryGroups=hermes",
@@ -153,6 +234,14 @@ RUNNER_SERVICE_INVARIANTS = {
     "runner service must set /opt CI-OS public directory": "Environment=CIOS_PUBLIC_DIR=/opt/cios/public",
     "runner service must use host-readable CI-OS env file": "Environment=CIOS_ENV_FILE=/etc/cios-env",
     "runner service must call /opt host runner": "ExecStart=/opt/cios/app/deploy/cios-host-runner.sh",
+    "runner service must finalize after cgroup cleanup": "ExecStopPost=/opt/cios/app/deploy/cios-run-finalize.sh",
+    "runner service must require command cgroups": "Environment=CIOS_REQUIRE_CGROUP_CONTAINMENT=1",
+    "runner service must name supervisor subgroup": "Environment=CIOS_CGROUP_SUPERVISOR_SUBGROUP=supervisor",
+    "runner service must delegate cgroup subtree": "Delegate=yes",
+    "runner service must place main process in supervisor subgroup": "DelegateSubgroup=supervisor",
+    "runner service must kill the full run cgroup": "KillMode=control-group",
+    "runner service must enforce a runtime ceiling": "RuntimeMaxSec=",
+    "runner service must bound stop cleanup": "TimeoutStopSec=",
     "runner service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "runner service must keep group-writable artifacts": "UMask=0007",
 }
@@ -178,10 +267,29 @@ ADMIN_SERVICE_INVARIANTS = {
     "admin service must use the expected local admin port": "--port 8765",
     "admin service must use /opt CI-OS app working directory": "WorkingDirectory=/opt/cios/app",
     "admin service must set /opt CI-OS app directory": "Environment=CIOS_APP_DIR=/opt/cios/app",
+    "admin service must import the src-layout package": "Environment=PYTHONPATH=/opt/cios/app/src",
     "admin service must run as cios user": "User=cios",
     "admin service must run as cios group": "Group=cios",
     "admin service must keep no-new-privileges enabled": "NoNewPrivileges=true",
     "admin service must read Hermes product-market artifacts": "PrivateTmp=false",
+}
+
+STATIC_SERVICE_INVARIANTS = {
+    "static service must run as cios user": "User=cios",
+    "static service must run as cios group": "Group=cios",
+    "static service must serve immutable router": "WorkingDirectory=/opt/cios/public-store/served",
+    "static service must bind localhost only": "--bind 127.0.0.1 8662",
+    "static service must keep no-new-privileges enabled": "NoNewPrivileges=true",
+    "static service must enforce memory cgroup limit": "MemoryMax=128M",
+    "static service must enforce CPU cgroup limit": "CPUQuota=20%",
+    "static service must enforce task cgroup limit": "TasksMax=32",
+}
+
+LAUNCH_READINESS_INVARIANTS = {
+    "launch readiness missing publication verdict input": "--publication-verdict",
+    "launch readiness missing served manifest input": "--publication-manifest",
+    "launch readiness missing publication verdict gate": 'expected_gate="publication_integrity"',
+    "launch readiness missing exact manifest digest binding": "publication_manifest_sha256",
 }
 
 MANUAL_DEMAND_FAST_LANE_INVARIANTS = {
@@ -213,6 +321,32 @@ PRODUCT_SURFACE_EXECUTION_INVARIANTS = {
     "product-surface executor missing row-count summary": "product_row_count",
     "product-surface executor missing empty output accounting": "empty_scout_paths",
     "product-surface executor missing product-plane status": "product_plane_status",
+    "product-surface executor missing process-group supervision": "start_new_session=True",
+    "product-surface executor missing contained process spawn": "PROCESS_GROUPS.spawn",
+    "product-surface executor missing batch deadline": "batch_timeout_seconds",
+    "product-surface executor missing not-started accounting": "not_started",
+    "product-surface executor missing sensitive-error redaction": "redact_sensitive_text",
+    "product-surface executor missing worker hard cap": "MAX_PRODUCT_SURFACE_WORKERS",
+}
+
+PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS = {
+    "product-surface executor CLI missing batch deadline option": "--batch-timeout-seconds",
+    "product-surface executor CLI missing shutdown handlers": "install_shutdown_handlers",
+}
+
+PROCESS_SUPERVISOR_INVARIANTS = {
+    "process supervisor missing process-group termination": "os.killpg",
+    "process supervisor missing active-process shutdown": "terminate_all",
+    "process supervisor missing delegated cgroup backend": "CgroupV2Backend",
+    "process supervisor missing atomic cgroup kill": "cgroup.kill",
+    "process supervisor missing launch-before-exec containment": "cgroup_launcher",
+}
+
+DAILY_RUNTIME_SECURITY_INVARIANTS = {
+    "daily runtime missing sensitive-error redaction": "redact_sensitive_text",
+    "daily runtime missing contained process spawn": "PROCESS_GROUPS.spawn",
+    "daily runtime missing process-group termination": "PROCESS_GROUPS.terminate",
+    "daily runtime missing shutdown-handler installation": "install_shutdown_handlers()",
 }
 
 PRODUCT_SURFACE_PLANNER_INVARIANTS = {
@@ -262,6 +396,72 @@ TEST_DEPENDENCY_IMPORTS = [
     "pytest_asyncio",
 ]
 
+PROCESS_SUPERVISION_PROBE = r'''
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+from cios.platform.process_supervisor import PROCESS_GROUPS
+
+child_code = r"""
+import signal
+import sys
+import time
+from pathlib import Path
+
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+time.sleep(0.8)
+Path(sys.argv[1]).write_text("survived", encoding="utf-8")
+"""
+
+parent_code = r"""
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+def spawn_detached():
+    subprocess.Popen(
+        [sys.executable, "-c", sys.argv[1], sys.argv[2]],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+spawn_detached()
+Path(sys.argv[3]).write_text("ready", encoding="utf-8")
+deadline = time.monotonic() + 5
+while time.monotonic() < deadline:
+    spawn_detached()
+    time.sleep(0.01)
+"""
+
+with tempfile.TemporaryDirectory(prefix="cios-process-probe-") as temp_dir:
+    if not PROCESS_GROUPS.cgroup_enabled:
+        raise SystemExit(4)
+    marker = Path(temp_dir) / "detached-survivor"
+    ready = Path(temp_dir) / "ready"
+    parent = PROCESS_GROUPS.spawn(
+        [sys.executable, "-c", parent_code, child_code, str(marker), str(ready)],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 1.0
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if not ready.exists():
+            PROCESS_GROUPS.terminate(parent)
+            raise SystemExit(3)
+        PROCESS_GROUPS.terminate(parent)
+    finally:
+        PROCESS_GROUPS.unregister(parent)
+    time.sleep(1.0)
+    raise SystemExit(2 if marker.exists() else 0)
+'''
+
 
 def collect_path_errors(app_dir: Path) -> list[str]:
     errors: list[str] = []
@@ -271,19 +471,74 @@ def collect_path_errors(app_dir: Path) -> list[str]:
     return errors
 
 
+def collect_executable_errors(app_dir: Path) -> list[str]:
+    errors: list[str] = []
+    for relative_path in REQUIRED_EXECUTABLE_PATHS:
+        path = app_dir / relative_path
+        if path.is_file() and not path.stat().st_mode & stat.S_IXUSR:
+            errors.append(f"required executable is not executable: {relative_path}")
+    return errors
+
+
 def collect_wrapper_errors(app_dir: Path) -> list[str]:
     wrapper_path = app_dir / "deploy" / "cios-daily.sh"
-    if not wrapper_path.exists():
+    app_wrapper_path = app_dir / "deploy" / "cios-daily-app.sh"
+    if not wrapper_path.exists() or not app_wrapper_path.exists():
         return []
-    text = wrapper_path.read_text(encoding="utf-8")
-    return [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+    public_text = wrapper_path.read_text(encoding="utf-8")
+    text = public_text + "\n" + app_wrapper_path.read_text(encoding="utf-8")
+    errors = [message for message, needle in WRAPPER_INVARIANTS.items() if needle not in text]
+    errors.extend(
+        message for message, needle in PUBLIC_WRAPPER_INVARIANTS.items() if needle not in public_text
+    )
+    forbidden = (
+        "CIOS_APP_DIR",
+        "CIOS_PUBLIC_DIR",
+        "CIOS_RUNNER_QUEUE_DIR",
+        "CIOS_PYTHON_BIN",
+        "CIOS_RUN_QUEUE_HELPER",
+        "CIOS_APP_USER",
+        "CIOS_RUNNER_HANDOFF",
+        "CIOS_DISABLE_RUNNER_HANDOFF",
+    )
+    if any(name in public_text for name in forbidden):
+        errors.append("wrapper permits caller-controlled execution paths")
+    if 'cat "$log"' in public_text or 'tail -120 "$log"' in public_text:
+        errors.append("wrapper exposes unredacted runner logs")
+    return errors
 
 
 def collect_host_runner_errors(app_dir: Path) -> list[str]:
-    return collect_text_invariant_errors(
+    errors = collect_text_invariant_errors(
         app_dir,
         rel_path="deploy/cios-host-runner.sh",
         invariants=HOST_RUNNER_INVARIANTS,
+    )
+    path = app_dir / "deploy/cios-host-runner.sh"
+    forbidden = ("CIOS_APP_DIR", "CIOS_PUBLIC_DIR", "CIOS_RUNNER_QUEUE_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in forbidden):
+        errors.append("host runner permits caller-controlled execution paths")
+    return errors
+
+
+def collect_run_finalizer_errors(app_dir: Path) -> list[str]:
+    errors = collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-run-finalize.sh",
+        invariants=RUN_FINALIZER_INVARIANTS,
+    )
+    path = app_dir / "deploy/cios-run-finalize.sh"
+    forbidden = ("CIOS_APP_DIR", "CIOS_PUBLIC_DIR", "CIOS_RUNNER_QUEUE_DIR", "CIOS_PYTHON_BIN", "CIOS_RUN_QUEUE_HELPER")
+    if path.exists() and any(name in path.read_text(encoding="utf-8") for name in forbidden):
+        errors.append("run finalizer permits caller-controlled execution paths")
+    return errors
+
+
+def collect_run_queue_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="scripts/cios_run_queue.py",
+        invariants=RUN_QUEUE_INVARIANTS,
     )
 
 
@@ -328,6 +583,22 @@ def collect_admin_service_errors(app_dir: Path) -> list[str]:
     if "0.0.0.0" in text and "admin service must bind to 127.0.0.1 only" not in errors:
         errors.append("admin service must bind to 127.0.0.1 only")
     return errors
+
+
+def collect_static_service_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="deploy/cios-static.service",
+        invariants=STATIC_SERVICE_INVARIANTS,
+    )
+
+
+def collect_launch_readiness_errors(app_dir: Path) -> list[str]:
+    return collect_text_invariant_errors(
+        app_dir,
+        rel_path="scripts/check_e2e_launch_readiness.py",
+        invariants=LAUNCH_READINESS_INVARIANTS,
+    )
 
 
 def collect_text_invariant_errors(
@@ -384,11 +655,28 @@ def collect_demand_intake_plan_errors(app_dir: Path) -> list[str]:
 
 
 def collect_product_surface_execution_errors(app_dir: Path) -> list[str]:
-    return collect_text_invariant_errors(
-        app_dir,
-        rel_path="scripts/execute_product_surface_plan.py",
-        invariants=PRODUCT_SURFACE_EXECUTION_INVARIANTS,
+    checks = (
+        (
+            "src/cios/intelligence/product_surface_executor.py",
+            PRODUCT_SURFACE_EXECUTION_INVARIANTS,
+        ),
+        (
+            "scripts/execute_product_surface_plan.py",
+            PRODUCT_SURFACE_EXECUTION_CLI_INVARIANTS,
+        ),
+        ("src/cios/platform/process_supervisor.py", PROCESS_SUPERVISOR_INVARIANTS),
+        ("scripts/daily_production_run.py", DAILY_RUNTIME_SECURITY_INVARIANTS),
     )
+    errors: list[str] = []
+    for rel_path, invariants in checks:
+        errors.extend(
+            collect_text_invariant_errors(
+                app_dir,
+                rel_path=rel_path,
+                invariants=invariants,
+            )
+        )
+    return errors
 
 
 def collect_product_surface_planner_errors(app_dir: Path) -> list[str]:
@@ -452,6 +740,33 @@ def collect_import_errors(app_dir: Path) -> list[str]:
     return [f"python import preflight failed: {detail}"]
 
 
+def collect_process_supervision_runtime_errors(app_dir: Path) -> list[str]:
+    python_bin = app_dir / ".venv" / "bin" / "python"
+    if not python_bin.exists():
+        return []
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(app_dir / "src")
+    try:
+        completed = subprocess.run(
+            [str(python_bin), "-c", PROCESS_SUPERVISION_PROBE],
+            text=True,
+            capture_output=True,
+            env=env,
+            timeout=5,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return ["process supervision self-test failed: runtime probe timed out"]
+    if completed.returncode == 0:
+        return []
+    if completed.returncode == 2:
+        return ["process supervision self-test failed: detached descendant survived cleanup"]
+    if completed.returncode == 4:
+        return ["process supervision self-test failed: delegated cgroup v2 unavailable"]
+    return ["process supervision self-test failed: runtime probe error"]
+
+
 def collect_test_dependency_errors(app_dir: Path) -> list[str]:
     python_bin = app_dir / ".venv" / "bin" / "python"
     if not python_bin.exists():
@@ -494,11 +809,31 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Require test-only dependencies needed for remote full-suite validation.",
     )
     parser.add_argument("--scout-bin", default="scout", help="Scout CLI command name/path.")
+    parser.add_argument("--run-id", help="Current CI-OS run identity for a structured verdict.")
+    parser.add_argument("--verdict-output", type=Path, help="Write a machine-readable package verdict.")
     return parser.parse_args(argv)
+
+
+def _write_verdict(*, output: Path, run_id: str, errors: list[str]) -> None:
+    status = "fail" if errors else "pass"
+    payload = {
+        "schema_version": 1,
+        "gate": "hermes_package_contract",
+        "run_id": run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "status": status,
+        "exit_code": 2 if errors else 0,
+        "checks": {"required_contract": not errors},
+        "error_count": len(errors),
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(f"{json.dumps(payload, indent=2, sort_keys=True)}\n", encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.verdict_output and not args.run_id:
+        raise SystemExit("--run-id is required with --verdict-output")
     app_dir = args.app_dir
 
     errors: list[str] = []
@@ -506,13 +841,18 @@ def main(argv: list[str] | None = None) -> int:
         errors.append(f"missing app directory: {app_dir}")
     else:
         errors.extend(collect_path_errors(app_dir))
+        errors.extend(collect_executable_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
+        errors.extend(collect_run_finalizer_errors(app_dir))
+        errors.extend(collect_run_queue_errors(app_dir))
         errors.extend(collect_host_permissions_errors(app_dir))
         errors.extend(collect_runner_service_errors(app_dir))
         errors.extend(collect_runner_path_errors(app_dir))
         errors.extend(collect_claude_shim_service_errors(app_dir))
         errors.extend(collect_admin_service_errors(app_dir))
+        errors.extend(collect_static_service_errors(app_dir))
+        errors.extend(collect_launch_readiness_errors(app_dir))
         errors.extend(collect_manual_demand_fast_lane_errors(app_dir))
         errors.extend(collect_admin_refresh_errors(app_dir))
         errors.extend(collect_operator_handoff_errors(app_dir))
@@ -526,11 +866,14 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(collect_admin_app_product_surface_extraction_errors(app_dir))
         if not args.skip_python_imports:
             errors.extend(collect_import_errors(app_dir))
+            errors.extend(collect_process_supervision_runtime_errors(app_dir))
         if args.require_scout:
             errors.extend(collect_scout_errors(args.scout_bin))
         if args.require_test_deps:
             errors.extend(collect_test_dependency_errors(app_dir))
 
+    if args.verdict_output:
+        _write_verdict(output=args.verdict_output, run_id=args.run_id, errors=errors)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

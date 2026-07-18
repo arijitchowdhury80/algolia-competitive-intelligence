@@ -18,9 +18,9 @@ CI-OS is a clean-slate **Competitive Intelligence operating system**. **Argus** 
 Use the commands already present in this repo and keep them current:
 
 - `python3 -m pytest -q`
-- `python3 scripts/verify_hermes_package_contract.py --app-dir /Users/arijitchowdhury/Dropbox/AI-Development/CI-OS`
-- `python3 scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia`
-- `python3 scripts/check_e2e_launch_readiness.py --public-status <argus-latest-run-status.json> --click-validation-log <click.log> --package-contract-log <package.log>`
+- `python3 scripts/verify_hermes_package_contract.py --app-dir /Users/arijitchowdhury/Dropbox/AI-Development/CI-OS --run-id "$CIOS_RUN_ID" --verdict-output out/hermes-package-contract-verdict.json`
+- `python3 scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia --run-id "$CIOS_RUN_ID" --output out/dashboard-click-verdict.json`
+- `python3 scripts/check_e2e_launch_readiness.py --public-status <argus-latest-run-status.json> --click-verdict out/dashboard-click-verdict.json --package-verdict out/hermes-package-contract-verdict.json --publication-verdict out/publication-integrity-verdict.json --publication-manifest <served-publication-manifest.json>`
 
 ## Conventions
 - This is a Codex-primary project; Arijit also uses Claude on parts of the portfolio.

@@ -13,8 +13,10 @@ The final gate is:
 ```bash
 python3 scripts/check_e2e_launch_readiness.py \
   --public-status out/argus-latest-run-status.json \
-  --click-validation-log out/dashboard-click-validation.log \
-  --package-contract-log out/hermes-package-contract.log \
+  --click-verdict out/dashboard-click-verdict.json \
+  --package-verdict out/hermes-package-contract-verdict.json \
+  --publication-verdict out/publication-integrity-verdict.json \
+  --publication-manifest out/served-publication-manifest.json \
   --min-active-sources 1 \
   --max-failed-sources 0 \
   --output out/cios-e2e-launch-readiness.json
@@ -22,11 +24,13 @@ python3 scripts/check_e2e_launch_readiness.py \
 
 For production, the inputs must come from the deployed Hermes package and the live dashboard:
 
-- `scripts/verify_hermes_package_contract.py --app-dir /root/.hermes/apps/cios`
-- `scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia`
+- `scripts/verify_hermes_package_contract.py --app-dir /opt/cios/app --run-id "$CIOS_RUN_ID" --verdict-output out/hermes-package-contract-verdict.json`
+- `scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia --run-id "$CIOS_RUN_ID" --output out/dashboard-click-verdict.json`
+- `scripts/publish_generation.py ... --output out/publication-integrity-verdict.json`
+- `https://ci.chowmes.com/publication-manifest.json`, saved byte-for-byte as the `--publication-manifest` input
 - `https://ci.chowmes.com/data/argus-latest-run-status.json`
 
-The gate passes only when the public status is published, the dashboard was updated by the latest run, source coverage is complete, failed sources are within the explicit launch budget, inward demand was processed, product reality is present, the public payload is safe, dashboard click validation passed, and the Hermes package contract passed.
+The gate passes only when all inputs are fresh structured JSON verdicts with the same run ID, explicit zero exit codes, and named passing checks. Literal `PASS` text has no authority. The publication verdict digest must match the exact served decision manifest bytes. The public status must be published, source coverage must account for every active source through a current-run check or uniquely identified bounded disposition, current-run product extraction arithmetic must be complete, failed sources must stay within budget, inward demand must be processed, product reality must be present, and the public payload must be scanner-verified safe.
 
 ## Hermes Execution Gate
 
@@ -36,7 +40,7 @@ Required evidence:
 
 - `deploy/cios-daily.sh` is the execution wrapper used by Hermes cron.
 - `scripts/verify_hermes_package_contract.py` passes for the installed package.
-- The wrapper runs the daily producer, product-market spine, demand readiness, demand intake, operator handoff, data-plane manifest, public status export, dashboard publish or blocked publish path, and final artifact copy.
+- The wrapper runs the daily producer, product-market spine, demand readiness, demand intake, operator handoff, data-plane manifest, public status export, and immutable decision or diagnostic generation promotion.
 - Timeout handling kills the run tree and writes a public-safe blocked status without updating dashboard HTML.
 - The package contract verifies all required scripts, admin service files, source paths, product surface extraction controls, product muscle queue hooks, demand import hooks, and wrapper hooks.
 
@@ -54,7 +58,7 @@ Purpose: prove the public dashboard is usable and every key click routes to the 
 
 Required evidence:
 
-- `scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia` prints `PASS dashboard_click_validation`.
+- `scripts/validate_dashboard_clicks.py --url https://ci.chowmes.com/ --tenant algolia --run-id "$CIOS_RUN_ID" --output out/dashboard-click-verdict.json` writes a passing, zero-exit, run-bound verdict.
 - Navigation links land on distinct sections and update hash/current state.
 - Partner selector updates selected competitor, active panel, role implications, and hash.
 - Priority move selection updates the selected competitor panel and role implications.
@@ -154,7 +158,7 @@ Failure examples:
 
 Production is acceptable only when:
 
-- Hermes package contract passes on `/root/.hermes/apps/cios`.
+- Hermes package contract passes on `/opt/cios/app` under the dedicated `cios` application user.
 - Hermes daily wrapper exits successfully for a non-timeout run.
 - All active sources are checked or explicitly skipped.
 - Public latest-run status is `published`.

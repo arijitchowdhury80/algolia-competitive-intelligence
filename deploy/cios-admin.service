@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/opt/cios/app
 Environment=CIOS_APP_DIR=/opt/cios/app
+Environment=PYTHONPATH=/opt/cios/app/src
 User=cios
 Group=cios
 ExecStart=/opt/cios/app/.venv/bin/python /opt/cios/app/scripts/run_admin.py --env-file /etc/cios-env --host 127.0.0.1 --port 8765

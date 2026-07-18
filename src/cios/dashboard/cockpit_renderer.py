@@ -3465,6 +3465,33 @@ _BRIEF_UI_STYLE = """
 	    .history-main strong { font-size: 13px; line-height: 1.25; }
 	    .history-main p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 	    .history-link { color: var(--blue); font-size: 11px; font-weight: 650; white-space: nowrap; }
+	    .market-interpretation {
+	      border: 1px solid var(--line); background: var(--panel); padding: 14px; display: grid; gap: 14px;
+	      box-shadow: inset 4px 0 0 var(--gold);
+	    }
+	    .interpretation-grid {
+	      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+	    }
+	    .interpret-card {
+	      min-height: 172px; padding: 12px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+	      display: grid; align-content: start; gap: 8px; background: rgba(255,253,247,.72);
+	    }
+	    .interpret-card.primary { background: var(--wash); }
+	    .interpret-card.blocked { box-shadow: inset 3px 0 0 var(--amber); }
+	    .interpret-card span, .feature-kicker, .feature-proof-group > span {
+	      color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+	    }
+	    .interpret-card strong { font-size: 15px; line-height: 1.3; }
+	    .interpret-card p, .feature-read-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.48; }
+	    .interpret-card b { font-size: 11px; color: var(--ink); line-height: 1.3; }
+	    .evidence-drawer {
+	      border: 1px solid var(--line); background: rgba(255,253,247,.72); padding: 12px;
+	    }
+	    .evidence-drawer > summary {
+	      cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 12px; align-items: center;
+	    }
+	    .evidence-drawer > summary::-webkit-details-marker { display: none; }
+	    .drawer-body { margin-top: 12px; display: grid; gap: 10px; }
 	    .coverage-board { border: 1px solid var(--line); background: rgba(255,253,247,.72); padding: 12px; display: grid; gap: 10px; }
 	    .coverage-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 	    .coverage-row { border-top: 1px solid var(--line); padding-top: 9px; min-height: 72px; }
@@ -3587,6 +3614,21 @@ _BRIEF_UI_STYLE = """
 	    .heat-level-1::after { background: rgba(181,138,53,.32); border-color: rgba(181,138,53,.45); }
 	    .heat-level-2::after { background: rgba(181,138,53,.62); border-color: rgba(181,138,53,.72); }
 	    .heat-level-3::after { background: var(--gold); border-color: var(--ink); }
+	    .feature-read-list {
+	      display: grid; gap: 10px;
+	    }
+	    .feature-read-card {
+	      border: 1px solid var(--line); background: var(--panel); padding: 12px; display: grid; gap: 12px;
+	      box-shadow: inset 3px 0 0 var(--blue);
+	    }
+	    .feature-read-card h3 { margin-top: 4px; font-size: 18px; }
+	    .feature-proof-group { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 8px; }
+	    .feature-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+	    .feature-pills a, .feature-pills span {
+	      min-height: 28px; display: inline-flex; align-items: center; border: 1px solid var(--line);
+	      background: var(--wash); color: var(--ink); padding: 0 8px; font-size: 11px; text-decoration: none;
+	    }
+	    .feature-pills a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 	    .rubric-score {
 	      display: flex; align-items: baseline; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--line);
 	    }
@@ -3637,7 +3679,7 @@ _BRIEF_UI_STYLE = """
 	    .status-badge { color: var(--muted); font-size: 11px; }
 	    @media (max-width: 900px) {
 	      .read-hero, .spine-head, .timeline-head, .history-controls, .semantic-head, .semantic-grid, .priority-layout, .appendix-grid, .role-set, .selected-grid { grid-template-columns: 1fr; }
-	      .decision-strip, .spine-grid, .timeline-grid, .coverage-list, .operator-handoff-grid { grid-template-columns: 1fr; }
+	      .decision-strip, .spine-grid, .timeline-grid, .coverage-list, .operator-handoff-grid, .interpretation-grid { grid-template-columns: 1fr; }
 	      .history-row { grid-template-columns: 1fr; }
 	      .decision { border-right: 0; border-bottom: 1px solid var(--line); }
 	      .spine-plane { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -4219,50 +4261,73 @@ def _render_demand_feature_alignment(state: DashboardState) -> str:
 def _render_feature_matrix_summary(state: DashboardState) -> str:
     comparison = state.product_feature_comparison
     if comparison.rows and comparison.companies:
-        header_cells = "".join(
-            f"""<th scope="col">
-  <span>{_esc(company.company_name)}</span>
-  <small>{_esc(company.company_role)} · {_esc(company.active_source_count)} active source{'' if company.active_source_count == 1 else 's'}</small>
-</th>"""
-            for company in comparison.companies
-        )
-        body_rows: list[str] = []
-        for row in comparison.rows:
-            cells: list[str] = []
-            for cell in row.cells:
-                evidence = (
-                    f'<a href="{_esc(cell.first_evidence_url)}" target="_blank" rel="noopener">proof</a>'
-                    if cell.first_evidence_url
-                    else '<span class="pattern-meta">no proof captured</span>'
-                )
-                confidence = "" if cell.confidence is None else f" · {cell.confidence:.0%}"
-                cells.append(
-                    f"""<td>
-  <strong>{_esc(cell.position_status)}</strong>
-  <span class="pattern-meta">{_esc(cell.evidence_count)} ref{'' if cell.evidence_count == 1 else 's'}{_esc(confidence)}</span>
-  <p>{_esc(cell.summary)}</p>
-  {evidence}
-</td>"""
-                )
-            body_rows.append(
-                f"""<tr>
-  <th scope="row">
-    <strong>{_esc(row.capability_text)}</strong>
-    <small>{_esc(row.proven_count)} proven · {_esc(row.claimed_count)} claimed · {_esc(row.unknown_count)} unknown</small>
-  </th>
-  {''.join(cells)}
-</tr>"""
+        read_cards: list[str] = []
+        visible_rows = comparison.rows[:4]
+        for row in visible_rows:
+            proven = [cell for cell in row.cells if cell.position_status in {"proven", "claimed"}]
+            unknowns = [cell for cell in row.cells if cell.position_status == "unknown"]
+            gaps = [cell for cell in row.cells if cell.position_status in {"gap", "disproven"}]
+            proof_labels: list[str] = []
+            for cell in proven[:5]:
+                label = f"{cell.company_name}: {cell.position_status}"
+                if cell.first_evidence_url:
+                    proof_labels.append(
+                        f'<a href="{_esc(cell.first_evidence_url)}" target="_blank" rel="noopener">{_esc(label)}</a>'
+                    )
+                else:
+                    proof_labels.append(f"<span>{_esc(label)}</span>")
+            if not proof_labels:
+                proof_labels.append("<span>No public proof captured yet</span>")
+            unknown_names = ", ".join(cell.company_name for cell in unknowns[:6]) or "None"
+            if len(unknowns) > 6:
+                unknown_names = f"{unknown_names}, +{len(unknowns) - 6} more"
+            unknown_summaries = [
+                f"{cell.company_name}: {cell.summary}"
+                for cell in unknowns[:3]
+                if cell.summary
+            ]
+            unknown_detail = " ".join(unknown_summaries)
+            if unknown_detail:
+                unknown_detail = f" {unknown_detail}"
+            gap_names = ", ".join(f"{cell.company_name}: {cell.position_status}" for cell in gaps[:4]) or "No explicit gap/disproof captured"
+            if len(gaps) > 4:
+                gap_names = f"{gap_names}, +{len(gaps) - 4} more"
+            comparison_sentence = (
+                f"{row.proven_count} proven, {row.claimed_count} claimed, "
+                f"{row.unknown_count} unknown across {len(row.cells)} monitored companies."
+            )
+            read_cards.append(
+                f"""<article class="feature-read-card">
+  <div>
+    <span class="feature-kicker">Capability</span>
+    <h3>{_esc(row.capability_text)}</h3>
+    <p><strong>What this comparison says:</strong> {_esc(comparison_sentence)}</p>
+  </div>
+  <div class="feature-proof-group">
+    <span>Known proof</span>
+    <div class="feature-pills">{''.join(proof_labels)}</div>
+  </div>
+  <div class="feature-proof-group">
+    <span>Unknowns to verify</span>
+    <p>Unknown means Argus has not captured public proof yet. It is not a confirmed product gap. {_esc(unknown_names)}.{_esc(unknown_detail)}</p>
+  </div>
+  <div class="feature-proof-group">
+    <span>Confirmed gaps or contradictions</span>
+    <p>{_esc(gap_names)}</p>
+  </div>
+</article>"""
             )
         capped_note = (
-            f'<p class="brief-meta">Showing {_esc(len(comparison.rows))} of {_esc(comparison.row_count_total)} capabilities and {_esc(len(comparison.companies))} of {_esc(comparison.company_count_total)} companies.</p>'
-            if comparison.capped
+            f'<p class="brief-meta">Showing {_esc(len(visible_rows))} of {_esc(comparison.row_count_total)} capabilities and summarizing {_esc(len(comparison.companies))} of {_esc(comparison.company_count_total)} companies. Full matrix remains evidence, not the main read.</p>'
+            if comparison.capped or len(comparison.rows) > len(visible_rows)
             else ""
         )
-        return f"""<div class="feature-comparison-wrap">
-  <table class="feature-comparison">
-    <thead><tr><th scope="col">Capability</th>{header_cells}</tr></thead>
-    <tbody>{''.join(body_rows)}</tbody>
-  </table>
+        return f"""<div class="feature-comparison-wrap feature-read-list" aria-label="Product comparison read">
+  <div>
+    <h3>Product comparison read</h3>
+    <p class="brief-meta">This is a reader summary of capability proof, not a spreadsheet. Unknown cells are evidence gaps to investigate, not claims that a competitor lacks the feature.</p>
+  </div>
+  {''.join(read_cards)}
   {capped_note}
 </div>"""
     if not state.feature_matrix:
@@ -4692,7 +4757,7 @@ def _product_market_run_history_entries(state: DashboardState):
 def _render_product_market_run_history_rows(state: DashboardState) -> str:
     entries = _product_market_run_history_entries(state)
     if not entries:
-        return '<p class="brief-meta">No stored Argus run reads were published with this state.</p>'
+        return '<p class="brief-meta">No stored Argus interpretation history was published with this state.</p>'
     today = state.generated_at.date()
     rows: list[str] = []
     for entry in entries[:8]:
@@ -4818,14 +4883,14 @@ def _render_product_market_trend_rows(state: DashboardState) -> str:
 
 def _render_product_market_entity_velocity_rows(state: DashboardState) -> str:
     if not state.product_market_entity_velocity:
-        return '<p class="brief-meta">No entity velocity summary was derived from this state.</p>'
+        return '<p class="brief-meta">No company movement summary was derived from this state.</p>'
     rows: list[str] = []
     for entity in state.product_market_entity_velocity[:8]:
         confidence = "" if entity.confidence is None else f" · confidence {entity.confidence:.2f}"
         capabilities = ", ".join(entity.top_capabilities) if entity.top_capabilities else "No top capabilities on file"
         rows.append(
             f"""<div class="history-row">
-  <div class="history-date">Entity velocity<br>{_esc(entity.direction)}</div>
+  <div class="history-date">Company movement<br>{_esc(entity.direction)}</div>
   <div class="history-main"><strong>{_esc(entity.entity_name)}</strong><p>{_esc(_truncate(entity.latest_summary, 180))}</p><p>{_esc(entity.total_patterns_7d)} patterns in 7D · {_esc(entity.total_patterns_30d)} in 30D · {_esc(entity.hot_capability_count)} hot · {_esc(entity.warm_capability_count)} warm · {_esc(capabilities)}{_esc(confidence)}</p></div>
   <span class="history-link">{_esc(len(entity.evidence_refs))} proof</span>
 </div>"""
@@ -4865,7 +4930,7 @@ def _render_product_market_window_delta_rows(state: DashboardState) -> str:
         )
         rows.append(
             f"""<div class="history-row">
-  <div class="history-date">Window deltas<br>{_esc(delta.current_window_label)} vs {_esc(delta.previous_window_label)}</div>
+  <div class="history-date">7D change<br>{_esc(delta.current_window_label)} vs {_esc(delta.previous_window_label)}</div>
   <div class="history-main"><strong>{_esc(delta.subject_type)} · {_esc(delta.subject_name)} · {_esc(delta.direction)}</strong><p>{_esc(_truncate(delta.latest_summary, 180))}</p><p>{_esc(delta.current_pattern_count)} current · {_esc(delta.previous_pattern_count)} prior · delta {_esc(delta.delta)} · {_esc(entities)} · {_esc(capabilities)}{_esc(confidence)}</p></div>
   <span class="history-link">{_esc(len(delta.evidence_refs))} proof</span>
 </div>"""
@@ -4887,6 +4952,134 @@ def _render_product_market_heatmap_rows(state: DashboardState) -> str:
 </div>"""
         )
     return "".join(rows)
+
+
+def _first_product_market_attention(state: DashboardState) -> tuple[str, str, str]:
+    if state.product_market_theme_heatmap:
+        theme = state.product_market_theme_heatmap[0]
+        label = f"{theme.theme_text} is {theme.heat_level}"
+        detail = theme.latest_summary or (
+            f"{theme.pattern_count_7d} current-window patterns across "
+            f"{theme.entity_count} monitored entities."
+        )
+        meta = f"{theme.pattern_count_7d} in 7D · {theme.pattern_count_30d} in 30D"
+        return label, detail, meta
+    if state.product_market_trends:
+        trend = state.product_market_trends[0]
+        return (
+            f"{trend.capability_text} is {trend.direction}",
+            trend.latest_summary,
+            f"{trend.pattern_count_7d} in 7D · {trend.pattern_count_30d} in 30D",
+        )
+    return (
+        "No market theme cleared the interpretation threshold",
+        "Argus did not publish enough cross-market pattern evidence to name a current theme.",
+        "No theme scored",
+    )
+
+
+def _first_product_market_implication(state: DashboardState) -> tuple[str, str, str]:
+    if state.product_market_window_deltas:
+        delta = state.product_market_window_deltas[0]
+        return (
+            f"{delta.subject_name} is {delta.direction}",
+            delta.latest_summary,
+            f"{delta.current_pattern_count} current · {delta.previous_pattern_count} prior",
+        )
+    if state.product_market_entity_velocity:
+        entity = state.product_market_entity_velocity[0]
+        capabilities = ", ".join(entity.top_capabilities[:3]) if entity.top_capabilities else "No capability named"
+        return (
+            f"{entity.entity_name} is {entity.direction}",
+            entity.latest_summary,
+            capabilities,
+        )
+    return (
+        "No movement delta was strong enough to interpret",
+        "The stored evidence did not produce a clear current-versus-prior movement read.",
+        "No delta scored",
+    )
+
+
+def _first_argus_holdback(state: DashboardState) -> tuple[str, str, str]:
+    if state.argus_evidence_needs:
+        need = state.argus_evidence_needs[0]
+        return need.title, need.why_needed, need.next_step
+    limit = _first_confidence_limit(state)
+    return "No recommendation cleared the action gate", limit, "Use the evidence drawer before treating this as an action."
+
+
+def _first_argus_action(state: DashboardState) -> tuple[str, str, str]:
+    if state.argus_recommendations:
+        recommendation = state.argus_recommendations[0]
+        return recommendation.action, recommendation.why_now, f"confidence {recommendation.confidence:.2f}"
+    if state.product_market_run_history:
+        run = state.product_market_run_history[0]
+        action = run.primary_action or "No action promoted"
+        detail = run.top_insight or "Argus stored a run read but did not publish a promoted action."
+        meta = f"{run.verdict} · {run.recommendation_count} recommendations"
+        return action, detail, meta
+    return (
+        "No action promoted",
+        "The current product-market read is informative but not yet actionable.",
+        "Recommendation gate closed",
+    )
+
+
+def _render_market_interpretation(state: DashboardState) -> str:
+    attention_title, attention_detail, attention_meta = _first_product_market_attention(state)
+    implication_title, implication_detail, implication_meta = _first_product_market_implication(state)
+    action_title, action_detail, action_meta = _first_argus_action(state)
+    holdback_title, holdback_detail, holdback_meta = _first_argus_holdback(state)
+    return f"""<div class="market-interpretation" aria-label="Market interpretation">
+  <div>
+    <div class="eyebrow">Market interpretation</div>
+    <h2>What this market data means</h2>
+    <p class="brief-meta">Read this as the sense-making layer. The raw product, conversation, demand, and run-history rows are supporting evidence, not the main story.</p>
+  </div>
+  <div class="interpretation-grid">
+    <article class="interpret-card primary">
+      <span>What to pay attention to</span>
+      <strong>{_esc(attention_title)}</strong>
+      <p>{_esc(attention_detail)}</p>
+      <b>{_esc(attention_meta)}</b>
+    </article>
+    <article class="interpret-card">
+      <span>Why it matters</span>
+      <strong>{_esc(implication_title)}</strong>
+      <p>{_esc(implication_detail)}</p>
+      <b>{_esc(implication_meta)}</b>
+    </article>
+    <article class="interpret-card">
+      <span>What Argus recommends</span>
+      <strong>{_esc(action_title)}</strong>
+      <p>{_esc(action_detail)}</p>
+      <b>{_esc(action_meta)}</b>
+    </article>
+    <article class="interpret-card blocked">
+      <span>What is holding action back</span>
+      <strong>{_esc(holdback_title)}</strong>
+      <p>{_esc(holdback_detail)}</p>
+      <b>{_esc(holdback_meta)}</b>
+    </article>
+  </div>
+</div>"""
+
+
+def _render_raw_argus_evidence_drawer(state: DashboardState) -> str:
+    return f"""<details class="evidence-drawer">
+  <summary><h2>Supporting evidence rows</h2><span class="brief-meta">Open audit detail</span></summary>
+  <div class="drawer-body">
+    {_render_product_market_run_history_rows(state)}
+    {_render_argus_evidence_need_rows(state)}
+    {_render_product_market_theme_heatmap_rows(state)}
+    {_render_product_market_window_delta_rows(state)}
+    {_render_product_market_entity_velocity_rows(state)}
+    {_render_product_market_heatmap_rows(state)}
+    {_render_product_market_trend_rows(state)}
+    {_render_product_market_history_rows(state)}
+  </div>
+</details>"""
 
 
 def _render_market_timeline(state: DashboardState, groups: list[_CompetitorGroup]) -> str:
@@ -4928,38 +5121,23 @@ def _render_market_timeline(state: DashboardState, groups: list[_CompetitorGroup
   <div class="timeline-grid" aria-label="Historical windows">
     <article class="timeline-card"><span>Today</span><strong>{_esc(current_moves)} promoted moves</strong><p>{_esc(today_detail)}</p></article>
     <article class="timeline-card"><span>Yesterday</span><strong>{_esc(yesterday_entry.title if yesterday_entry and yesterday_entry.title else ('report available' if yesterday_entry else 'no report in state'))}</strong><p>{_esc(yesterday.isoformat())}</p></article>
-    <article class="timeline-card"><span>Last 7 days</span><strong>{_esc(len(patterns_7))} remembered patterns</strong><p>{_esc(len(run_reads_7))} Argus run reads and {_esc(len(reports_7))} archived reports.</p></article>
+    <article class="timeline-card"><span>Last 7 days</span><strong>{_esc(len(patterns_7))} remembered patterns</strong><p>{_esc(len(run_reads_7))} interpreted runs and {_esc(len(reports_7))} archived reports.</p></article>
     <article class="timeline-card"><span>Last 30 days</span><strong>{_esc(len(patterns_30))} remembered patterns</strong><p>Monthly trend depth depends on retained pattern memory.</p></article>
   </div>
-  <div class="history-board">
-    <div><h2>Product-market memory</h2><p>Historical Argus pattern observations from the product, conversation, and demand ledger. This is the basis for trends beyond today's brief.</p></div>
-    <div><h2>Argus run reads</h2><p>Stored run-level conclusions from product-market synthesis. This is what Argus believed, promoted, or withheld over time.</p></div>
-    {_render_product_market_run_history_rows(state)}
-    <div><h2>What Argus needs next</h2><p>Evidence gaps that explain why Argus withheld action or why a priority cannot be trusted yet.</p></div>
-    {_render_argus_evidence_need_rows(state)}
-    <div><h2>Theme heat map</h2><p>Which strategic themes are heating up across the market before you inspect individual companies.</p></div>
-    {_render_product_market_theme_heatmap_rows(state)}
-    <div><h2>Window deltas</h2><p>Whether each theme or entity is hotter, quieter, new, or flat versus the prior seven-day window.</p></div>
-    {_render_product_market_window_delta_rows(state)}
-    <div><h2>Entity velocity</h2><p>Who is accelerating, sustaining, emerging, or dormant across remembered product-market capabilities.</p></div>
-    {_render_product_market_entity_velocity_rows(state)}
-    <div><h2>Market heat map</h2><p>Entity by capability heat derived from remembered patterns, not from decorative scoring.</p></div>
-    {_render_product_market_heatmap_rows(state)}
-    {_render_product_market_trend_rows(state)}
-    {_render_product_market_history_rows(state)}
-  </div>
-  <div class="history-board">
-    <div><h2>Report history</h2><p>Stored summaries from prior daily and weekly reports. Missing public archive routes are shown honestly instead of linking to server files.</p></div>
-    {_render_report_history_rows(state)}
-  </div>
-  <div class="coverage-board">
-    <div><h2>Holistic daily coverage</h2><p>Every monitored partner should appear here, whether they produced a material move or stayed quiet.</p></div>
-    {_render_coverage_rows(state)}
-  </div>
+  {_render_market_interpretation(state)}
   <div class="reason-board">
     <div><h2>Why this priority</h2><p>{_esc(priority_text)}</p></div>
     {_priority_reason_rows(state, groups)}
   </div>
+  <details class="evidence-drawer">
+    <summary><h2>Report history</h2><span class="brief-meta">Open archive</span></summary>
+    <div class="drawer-body">{_render_report_history_rows(state)}</div>
+  </details>
+  <details class="evidence-drawer">
+    <summary><h2>Coverage roster</h2><span class="brief-meta">Open monitored universe</span></summary>
+    <div class="drawer-body coverage-list">{_render_coverage_rows(state)}</div>
+  </details>
+  {_render_raw_argus_evidence_drawer(state)}
 </section>"""
 
 
@@ -5296,11 +5474,11 @@ def render_cockpit_html(state: DashboardState) -> str:
 	      </section>
 
       <section class="appendix-grid" id="evidence-coverage">
-        <details class="appendix" open>
+        <details class="appendix">
           <summary><h2>Market coverage</h2><span class="brief-meta">Open roster</span></summary>
           <div class="appendix-body">{_render_registry_rows(state)}</div>
         </details>
-        <details class="appendix" open>
+        <details class="appendix">
           <summary><h2>Evidence and source health</h2><span class="brief-meta">Open evidence</span></summary>
           <div class="appendix-body">{_render_product_market_run_trace(state)}{_render_source_rows(state)}</div>
         </details>

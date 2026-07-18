@@ -53,6 +53,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -62,6 +63,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from urllib.parse import urlsplit
 
 import psycopg
 import yaml
@@ -80,11 +82,9 @@ from cios.brain.quality import QualityReviewer, UnparseableVerdict, extract_json
 from cios.brain.synthesizer import Synthesizer
 from cios.brain.thesis import ThesisEngine, find_similar_active_thesis
 from cios.brain.types import (
-    CadenceActionItem,
     CoverageReport,
     LaneStatus,
     MonthlySynthesisResult,
-    Pattern,
     Signal,
     SynthesisInput,
     Thesis,
@@ -130,7 +130,6 @@ from cios.db.repos.sources import PgSourceRepository
 from cios.db.session import get_dsn, tenant_context
 from cios.delivery.action_router import ActionRouter
 from cios.delivery.gated_commander import GatedDeliveryCommander
-from cios.delivery.telegram_format import render_brief_html
 from cios.delivery.types import Cadence, DeliveryRequest, ReportReadyEvent
 from cios.execspeech.providers import SnapshotQuoteProvider
 from cios.execspeech.scanner import ExecSpeechScanner
@@ -139,10 +138,10 @@ from cios.hunter.types import Competitor, HealthEventType, Source, SourceHealthE
 from cios.hunter.validator import SourceValidator, normalize_url
 from cios.intelligence.capabilities import capability_key
 from cios.intelligence.ga4_exporter import resolve_ga4_date_windows
-from cios.intelligence.importers import diagnose_looker_rows, load_export_records, normalize_looker_rows
+from cios.intelligence.importers import diagnose_looker_rows, load_export_records
 from cios.intelligence.scout_surface_exporter import ProductSurfaceTarget
+from cios.intelligence.product_surface_executor import MAX_PRODUCT_SURFACE_WORKERS
 from cios.learn.recorder import LearningRecorder
-from cios.learn.types import FalseNegativeAuditStatus
 from cios.platform.channels.adapter import ChannelAdapter
 from cios.platform.channels.adapters.telegram import TelegramAdapter
 from cios.platform.channels.types import (
@@ -152,9 +151,12 @@ from cios.platform.channels.types import (
     ResponseEnvelope,
     VerificationResult,
 )
+from cios.platform.process_supervisor import PROCESS_GROUPS, install_shutdown_handlers
+from cios.platform.redaction import redact_sensitive_text
 from cios.platform.models.providers.claude_cli import ClaudeCliShimProvider
 from cios.platform.models.types import ModelRequest
 
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 LLM_BUDGET = 35
 LLM_CALLS = {"count": 0}
 
@@ -166,6 +168,19 @@ DAILY_MARKER = "ARGUS — Daily Competitive Brief"
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "tenants-sources.yaml"
 SCRIPT_DIR = Path(__file__).resolve().parent
 PRODUCT_MARKET_STAGE_PREFIX = "CIOS_PRODUCT_MARKET_STAGE"
+
+
+def redacted_exception_message(exc: BaseException) -> str:
+    """Return bounded exception text without configured secret values."""
+
+    return redact_sensitive_text(str(exc))
+
+
+def redacted_exception_detail(exc: BaseException) -> str:
+    """Return a bounded exception type and redacted message for diagnostics."""
+
+    message = redacted_exception_message(exc)
+    return f"{type(exc).__name__}: {message}" if message else type(exc).__name__
 
 
 class CountingModel:
@@ -231,6 +246,35 @@ def env_flag(env: dict[str, str], key: str, *, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_run_id(slug: str, env: Mapping[str, str], epoch_seconds: int) -> str:
+    """Use the wrapper run identity or create a local-execution fallback."""
+    provided = str(env.get("CIOS_RUN_ID") or "").strip()
+    if provided:
+        if not RUN_ID_PATTERN.fullmatch(provided):
+            raise ValueError("unsafe CIOS_RUN_ID")
+        return provided
+    return f"daily-{slug}-{epoch_seconds}"
+
+
+def runtime_provenance(
+    env: Mapping[str, str],
+    *,
+    require_package_version: bool = False,
+) -> dict[str, str]:
+    """Return private reproducibility metadata for one runtime execution."""
+    package_version = str(env.get("CIOS_PACKAGE_VERSION") or "").strip()
+    if require_package_version and not package_version:
+        raise ValueError("CIOS_PACKAGE_VERSION is required for publication v2")
+    if package_version and RUN_ID_PATTERN.fullmatch(package_version) is None:
+        raise ValueError("unsafe CIOS_PACKAGE_VERSION")
+    model_route = str(env.get("CIOS_MODEL_ALIAS") or "sonnet").strip() or "sonnet"
+    return {
+        "package_version": package_version or "unversioned",
+        "model_provider": "claude-shim",
+        "model_route": model_route,
+    }
 
 
 def env_paths(env: dict[str, str], key: str) -> list[str]:
@@ -367,7 +411,7 @@ def prepare_product_market_looker_exports(
             normalized = list(diagnosis["normalized"])
         except Exception as exc:  # noqa: BLE001
             entry["status"] = "error"
-            entry["error"] = f"{exc.__class__.__name__}: {exc}"
+            entry["error"] = redacted_exception_detail(exc)
             error_count += 1
             files.append(entry)
             continue
@@ -1370,8 +1414,38 @@ def product_market_conversation_records_from_current_sweep(
     return records
 
 
+def _run_process_group(
+    cmd: list[str],
+    *,
+    capture_output: bool,
+    text: bool,
+    timeout: float,
+    check: bool,
+) -> subprocess.CompletedProcess:
+    del capture_output, text, check
+    process = PROCESS_GROUPS.spawn(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            PROCESS_GROUPS.terminate(process)
+            stdout, stderr = process.communicate()
+            detail = redact_sensitive_text((stderr or "").strip() or (stdout or "").strip())
+            suffix = f": {detail}" if detail else ""
+            raise RuntimeError(f"command timed out after {timeout:g}s{suffix}") from None
+    finally:
+        PROCESS_GROUPS.unregister(process)
+    return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+
+
 def _run_checked(cmd: list[str], *, timeout_seconds: float) -> subprocess.CompletedProcess:
-    completed = subprocess.run(
+    completed = _run_process_group(
         cmd,
         capture_output=True,
         text=True,
@@ -1381,9 +1455,38 @@ def _run_checked(cmd: list[str], *, timeout_seconds: float) -> subprocess.Comple
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         stdout = (completed.stdout or "").strip()
-        detail = stderr or stdout or f"exit {completed.returncode}"
+        detail = redact_sensitive_text(stderr or stdout or f"exit {completed.returncode}")
         raise RuntimeError(f"command failed: {Path(cmd[1]).name}: {detail}")
     return completed
+
+
+PRODUCT_SURFACE_STAGE_CLEANUP_MARGIN_SECONDS = 30.0
+
+
+def product_surface_timeout_settings(env: Mapping[str, str]) -> dict[str, float | int]:
+    item_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS", "300"))
+    batch_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_BATCH_TIMEOUT_SECONDS", "600"))
+    stage_timeout = float(
+        env.get("CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS", str(batch_timeout + 30))
+    )
+    max_workers = int(env.get("CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS", "1"))
+    if item_timeout <= 0 or batch_timeout <= 0 or stage_timeout <= 0:
+        raise ValueError("product-surface timeout values must be greater than zero")
+    if not 1 <= max_workers <= MAX_PRODUCT_SURFACE_WORKERS:
+        raise ValueError(
+            f"product-surface max workers must be between 1 and {MAX_PRODUCT_SURFACE_WORKERS}"
+        )
+    if stage_timeout < batch_timeout + PRODUCT_SURFACE_STAGE_CLEANUP_MARGIN_SECONDS:
+        raise ValueError(
+            "product-surface stage timeout must be at least 30 seconds longer "
+            "than the executor batch timeout"
+        )
+    return {
+        "item_timeout": item_timeout,
+        "batch_timeout": batch_timeout,
+        "stage_timeout": stage_timeout,
+        "max_workers": max_workers,
+    }
 
 
 def _utc_stage_timestamp() -> str:
@@ -1425,13 +1528,14 @@ def _run_product_market_stage(
     except Exception as exc:
         elapsed_s = round(time.monotonic() - started_at, 3)
         ended_at_wall = _utc_stage_timestamp()
+        safe_error = redact_sensitive_text(str(exc))
         _emit_product_market_stage(
             slug=slug,
             stage=stage,
             event="failed",
             elapsed_s=elapsed_s,
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=safe_error,
         )
         if stage_ledger is not None:
             stage_ledger.append(
@@ -1443,10 +1547,10 @@ def _run_product_market_stage(
                     "ended_at": ended_at_wall,
                     "elapsed_s": elapsed_s,
                     "error_type": type(exc).__name__,
-                    "error": str(exc)[:500],
+                    "error": safe_error,
                 }
             )
-        raise
+        raise RuntimeError(safe_error) from None
     elapsed_s = round(time.monotonic() - started_at, 3)
     ended_at_wall = _utc_stage_timestamp()
     _emit_product_market_stage(
@@ -1476,7 +1580,7 @@ def _product_market_failed_summary(
 ) -> dict[str, Any]:
     return {
         "status": "failed",
-        "error": f"{type(exc).__name__}: {exc}",
+        "error": redacted_exception_detail(exc),
         "stage_ledger": stage_ledger,
     }
 
@@ -1513,6 +1617,7 @@ def run_product_market_chain_if_enabled(
 
     python_bin = env.get("CIOS_PRODUCT_MARKET_PYTHON_BIN") or sys.executable
     command_timeout = float(env.get("CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS", "240"))
+    product_surface_timeouts = product_surface_timeout_settings(env)
     surface_timeout = env.get("CIOS_PRODUCT_MARKET_SURFACE_TIMEOUT_SECONDS", "120")
     provider = env.get("CIOS_PRODUCT_MARKET_PROVIDER", "ollama/llama3.2:3b")
     scout_bin = env.get("CIOS_SCOUT_BIN", "scout")
@@ -1628,15 +1733,20 @@ def run_product_market_chain_if_enabled(
         "--summary-output",
         str(execution_summary_path),
         "--command-timeout-seconds",
-        env.get("CIOS_PRODUCT_MARKET_EXPORT_COMMAND_TIMEOUT_SECONDS", "300"),
+        f"{product_surface_timeouts['item_timeout']:g}",
+        "--batch-timeout-seconds",
+        f"{product_surface_timeouts['batch_timeout']:g}",
         "--max-workers",
-        env.get("CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS", "1"),
+        str(product_surface_timeouts["max_workers"]),
     ]
     try:
         _run_product_market_stage(
             slug=slug,
             stage="product_surface_export",
-            action=lambda: _run_checked(execute_cmd, timeout_seconds=command_timeout),
+            action=lambda: _run_checked(
+                execute_cmd,
+                timeout_seconds=float(product_surface_timeouts["stage_timeout"]),
+            ),
             stage_ledger=stage_ledger,
         )
     except Exception as exc:
@@ -1650,6 +1760,10 @@ def run_product_market_chain_if_enabled(
         "succeeded": int(execution_summary.get("succeeded") or 0),
         "empty": int(execution_summary.get("empty") or 0),
         "failed": int(execution_summary.get("failed") or 0),
+        "timed_out": int(execution_summary.get("timed_out") or 0),
+        "not_started": int(execution_summary.get("not_started") or 0),
+        "batch_timed_out": bool(execution_summary.get("batch_timed_out")),
+        "batch_timeout_seconds": float(execution_summary.get("batch_timeout_seconds") or 0),
         "product_row_count": int(execution_summary.get("product_row_count") or 0),
         "empty_scout_paths": [str(path) for path in execution_summary.get("empty_scout_paths", [])],
         "empty_outputs": list(execution_summary.get("empty_outputs", []))
@@ -2020,14 +2134,15 @@ class DailyRunStageRecorder:
         try:
             result = action()
         except Exception as exc:
+            safe_error = redacted_exception_message(exc)
             self.finish_stage(
                 event_id=event_id,
                 status="failed",
                 metadata={},
                 error_type=type(exc).__name__,
-                error=str(exc)[:500],
+                error=safe_error,
             )
-            raise
+            raise RuntimeError(safe_error) from None
 
         if callable(finish_metadata):
             done_metadata = finish_metadata(result)
@@ -2165,12 +2280,13 @@ def start_daily_run_stage_ledger(
             run_id=run_id,
             package_name="cios.daily",
         )
-        result.daily_stage_ledger_id = recorder.start(
-            metadata={"tenant": result.slug, "cadence": "daily"},
-        )
+        metadata: dict[str, Any] = {"tenant": result.slug, "cadence": "daily"}
+        if result.runtime_provenance:
+            metadata["runtime_provenance"] = dict(result.runtime_provenance)
+        result.daily_stage_ledger_id = recorder.start(metadata=metadata)
         return result.daily_stage_ledger_id
     except Exception as exc:  # noqa: BLE001
-        result.errors.append(f"daily stage ledger start error: {exc.__class__.__name__}: {exc}")
+        result.errors.append(f"daily stage ledger start error: {redacted_exception_detail(exc)}")
         return None
 
 
@@ -2231,6 +2347,8 @@ def daily_run_ledger_metadata(result, *, extra: dict[str, Any] | None = None) ->
         "tenant": result.slug,
         "product_market_stage_ledger_id": product_market_summary.get("stage_ledger_id"),
     }
+    if result.runtime_provenance:
+        metadata["runtime_provenance"] = dict(result.runtime_provenance)
     if extra:
         metadata.update(extra)
     return metadata
@@ -2376,7 +2494,8 @@ def record_daily_publish_gate_stage(
         )
         return paths
     except Exception as exc:
-        result.errors.append(f"publish gate error: {exc.__class__.__name__}: {exc}")
+        safe_error = redacted_exception_message(exc)
+        result.errors.append(f"publish gate error: {redacted_exception_detail(exc)}")
         recorder.finish_stage(
             event_id=event_id,
             status="failed",
@@ -2386,7 +2505,7 @@ def record_daily_publish_gate_stage(
                 "block_reason": block_reason,
             },
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=safe_error,
         )
         repo.finish_ledger(
             tenant_id=tenant_id,
@@ -2422,6 +2541,21 @@ def should_publish_dashboard(result) -> bool:
         and result.synth_verdict != Verdict.COVERAGE_FAILURE.value
         and product_market_publish_block_reason(result) is None
     )
+
+
+def publish_gate_exit_code(result) -> int:
+    if should_publish_dashboard(result):
+        return 0
+    demand_block = product_market_demand_source_block_reason(result)
+    if (
+        demand_block
+        and result is not None
+        and result.dashboard_state is not None
+        and result.quality_status == "passed"
+        and result.synth_verdict != Verdict.COVERAGE_FAILURE.value
+    ):
+        return 3
+    return 2
 
 
 def should_apply_quality_revision_result(
@@ -2493,7 +2627,7 @@ async def synthesize_quality_revision_targets(
         except Exception as exc:  # noqa: BLE001
             errors.append(
                 f"quality revise target failed: competitor={comp_name} "
-                f"error={exc.__class__.__name__}: {exc}"
+                f"error={redacted_exception_detail(exc)}"
             )
             continue
 
@@ -2735,7 +2869,9 @@ class ClaudeQualityReviewer:
             resp.raise_for_status()
             text = (resp.json().get("text") or "").strip()
         except Exception as exc:  # noqa: BLE001
-            raise UnparseableVerdict(f"quality reviewer LLM call failed: {exc}") from exc
+            raise UnparseableVerdict(
+                f"quality reviewer LLM call failed: {redacted_exception_message(exc)}"
+            ) from exc
         obj = extract_json_object(text)
         if isinstance(obj, dict) and "pass" in obj:
             return {"pass": bool(obj.get("pass")),
@@ -2896,9 +3032,57 @@ class TenantResult:
         self.dashboard_state = None
         self.reader_text: Optional[str] = None
         self.product_market_summary: dict[str, Any] = {"status": "not_run"}
+        self.runtime_provenance: dict[str, str] = {}
         self.daily_stage_ledger_id: Optional[int] = None
         self.daily_live_stage_orders: set[int] = set()
         self.errors: list[str] = []
+
+
+def current_source_coverage(result: TenantResult, *, run_id: str) -> dict[str, Any]:
+    """Build current-run source accounting with bounded explicit dispositions."""
+    disposed = [
+        item
+        for item in result.sources_skipped
+        if isinstance(item, dict) and source_skip_is_disposition(item)
+    ]
+    checked_failures = [
+        item
+        for item in result.sources_skipped
+        if isinstance(item, dict) and item.get("checked") is True and not source_skip_is_disposition(item)
+    ]
+    checked_disposition_count = sum(1 for item in disposed if item.get("checked") is True)
+    dispositions = []
+    for index, item in enumerate(disposed):
+        reason = str(item.get("reason") or "unspecified")[:120]
+        competitor_name = str(item.get("name") or "unknown")[:120]
+        source_key = str(
+            item.get("normalized_url")
+            or item.get("url")
+            or item.get("source_id")
+            or f"{competitor_name}|{item.get('family') or ''}|{index}"
+        ).strip()
+        dispositions.append(
+            {
+                "source_ref": hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:16],
+                "competitor_name": competitor_name,
+                "reason": reason,
+            }
+        )
+    return {
+        "run_id": run_id,
+        "active_source_count": int(result.sources_planned_count),
+        "checked_source_count": max(int(result.sources_attempted_count) - checked_disposition_count, 0),
+        "failed_source_count": len(result.sources_failed) + len(checked_failures),
+        "disposed_source_count": len(disposed),
+        "dispositions": dispositions,
+    }
+
+
+def source_skip_is_disposition(item: dict[str, Any]) -> bool:
+    if item.get("checked") is False:
+        return True
+    reason = str(item.get("reason") or "")
+    return reason == BLOCKED_BY_WAF_ERROR or reason.startswith("blocked_by_platform_policy:")
 
 
 def format_tenant_run_summary(r: TenantResult) -> str:
@@ -3134,7 +3318,7 @@ def build_runtime_source_plan_from_rows(seed_plan: list[dict], db_rows: list[dic
     return runtime_plan
 
 
-def source_block_reason_for_fetch_error(fetched: Any) -> str | None:
+def source_block_reason_for_fetch_error(fetched: Any, *, url: str = "") -> str | None:
     """Return a durable source-block reason for fetch failures that are not
     ordinary transient collection errors.
 
@@ -3145,7 +3329,35 @@ def source_block_reason_for_fetch_error(fetched: Any) -> str | None:
 
     if getattr(fetched, "error", None) == BLOCKED_BY_WAF_ERROR:
         return BLOCKED_BY_WAF_ERROR
+    reddit_block = reddit_rss_platform_block_reason(url, getattr(fetched, "http_status", None))
+    if reddit_block:
+        return reddit_block
     return None
+
+
+def reddit_rss_platform_block_reason(url: str, http_status: Any) -> str | None:
+    """Return a durable block reason for Reddit RSS platform access denials.
+
+    The Community Reddit RSS source is useful when available, but current VPS
+    probes return HTTP 403 with the runtime fetcher and HTTP 429 with more
+    feed-specific headers. Treat those as platform access/rate-limit policy
+    blocks for that specific feed family, not as market silence or a generic
+    source failure.
+    """
+
+    try:
+        status = int(http_status)
+    except (TypeError, ValueError):
+        return None
+    if status not in {403, 429}:
+        return None
+    parsed = urlsplit(url.strip())
+    host = parsed.netloc.lower()
+    if host not in {"old.reddit.com", "www.reddit.com", "reddit.com"}:
+        return None
+    if not parsed.path.lower().endswith(".rss"):
+        return None
+    return f"blocked_by_platform_policy:reddit_http_{status}"
 
 
 def block_source_after_fetch_challenge(
@@ -3713,7 +3925,10 @@ async def run_weekly_if_due(
                 f"Argus weekly horizon review - {slug}", horizon_brief,
             )
     except Exception as exc:  # noqa: BLE001
-        print(f"WARNING: weekly horizon/dot-connection integration failed for {slug}: {exc}")
+        print(
+            "WARNING: weekly horizon/dot-connection integration failed "
+            f"for {slug}: {redacted_exception_detail(exc)}"
+        )
 
 
 async def run_monthly_if_due(
@@ -3757,8 +3972,12 @@ async def run_tenant(
     defer_publish_gate: bool = False,
 ) -> TenantResult:
     res = TenantResult(slug)
+    res.runtime_provenance = runtime_provenance(
+        os.environ,
+        require_package_version=env_flag(os.environ, "CIOS_PUBLICATION_V2"),
+    )
     res.tenant_id = tenant_id
-    run_id = f"daily-{slug}-{int(time.time())}"
+    run_id = resolve_run_id(slug, os.environ, int(time.time()))
     start_daily_run_stage_ledger(
         app_conn,
         tenant_id=tenant_id,
@@ -3819,7 +4038,7 @@ async def run_tenant(
             status="failed",
             metadata={},
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=redacted_exception_message(exc),
         )
         raise
 
@@ -3872,6 +4091,7 @@ async def run_tenant(
                         "competitor_id": competitor_id,
                         "url": c["url"],
                         "reason": vr.reason,
+                        "checked": False,
                     })
                     continue
             source_id = source.id
@@ -3881,6 +4101,7 @@ async def run_tenant(
                 "competitor_id": competitor_id,
                 "url": c["url"],
                 "reason": "source_id_missing",
+                "checked": False,
             })
             continue
         res.sources_attempted_count += 1
@@ -3890,7 +4111,7 @@ async def run_tenant(
         )
         fetched = content_fetcher.fetch_content(c["url"])
         if fetched.status != FetchStatus.OK or not fetched.text:
-            block_reason = source_block_reason_for_fetch_error(fetched)
+            block_reason = source_block_reason_for_fetch_error(fetched, url=c["url"])
             if block_reason:
                 block_source_after_fetch_challenge(
                     app_conn,
@@ -3905,6 +4126,7 @@ async def run_tenant(
                     "url": c["url"],
                     "reason": block_reason,
                     "http": fetched.http_status,
+                    "checked": True,
                 })
                 insert_health_event(app_conn, SourceHealthEvent(
                     tenant_id=tenant_id,
@@ -4030,7 +4252,7 @@ async def run_tenant(
             # it also must not block the rest of the pipeline (same
             # bounded-blast-radius pattern as the own-brand read above).
             exec_speech_ran = False
-            res.errors.append(f"exec_speech scan error: {exc}")
+            res.errors.append(f"exec_speech scan error: {redacted_exception_detail(exc)}")
 
     fetch_run.status = "completed"
     fetch_run.finished_at = datetime.now(timezone.utc)
@@ -4074,7 +4296,7 @@ async def run_tenant(
                 own_brand_read = await compiler.compile(tenant_id, tenant_company_name, observations)
                 own_position_facts = own_brand_read.to_own_position_facts()
     except Exception as exc:  # noqa: BLE001
-        res.errors.append(f"own-brand error: {exc}")
+        res.errors.append(f"own-brand error: {redacted_exception_detail(exc)}")
 
     # LLM budget guard (task #25 root-cause fix): synthesizing was hardcoded
     # to the single competitor with the most deltas (`best_comp`), silently
@@ -4142,7 +4364,9 @@ async def run_tenant(
                     promoted.append({**s.model_dump(), "competitor_name": comp_name, "competitor_id": comp_id, "urls_ok": urls_ok})
             except Exception as exc:  # noqa: BLE001
                 synthesis_error_count += 1
-                res.errors.append(f"synthesis error ({comp_name}): {exc.__class__.__name__}: {exc}")
+                res.errors.append(
+                    f"synthesis error ({comp_name}): {redacted_exception_detail(exc)}"
+                )
 
         verdict = decide_synthesis_verdict(
             promoted_count=len(promoted),
@@ -4263,7 +4487,10 @@ async def run_tenant(
                 else:
                     res.errors.append("quality revise pass dropped rejected signals")
         except Exception as exc:  # noqa: BLE001
-            res.errors.append(f"revision pass error (original failed verdict kept): {exc.__class__.__name__}: {exc}")
+            res.errors.append(
+                "revision pass error (original failed verdict kept): "
+                f"{redacted_exception_detail(exc)}"
+            )
 
     res.quality_status = qr.status.value
     res.quality_fixes = qr.required_fixes
@@ -4327,7 +4554,7 @@ async def run_tenant(
         elif promoted and res.quality_status == "passed":
             res.errors.append("prescriptions: skipped by CIOS_ENABLE_PRESCRIPTIONS=0")
     except Exception as exc:  # noqa: BLE001
-        res.errors.append(f"prescription engine error: {exc}")
+        res.errors.append(f"prescription engine error: {redacted_exception_detail(exc)}")
 
     if prescriptions:
         reader_text = compose_daily_brief(
@@ -4420,7 +4647,7 @@ async def run_tenant(
             if aid is not None:
                 action_item_ids.append(aid)
     except Exception as exc:  # noqa: BLE001
-        res.errors.append(f"action_items persistence error: {exc}")
+        res.errors.append(f"action_items persistence error: {redacted_exception_detail(exc)}")
 
     delivery_stage_event_id = daily_stage_recorder.start_stage(
         stage="delivery",
@@ -4465,15 +4692,21 @@ async def run_tenant(
             status="failed",
             metadata={},
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=redacted_exception_message(exc),
         )
         raise
 
     cov_dict = {
-        "lanes": [{"lane": l.lane, "ran": l.ran, "error": l.error} for l in coverage.lanes],
-        "coverage_score": round(sum(1 for l in coverage.lanes if l.ran) / len(coverage.lanes), 4),
+        "lanes": [
+            {"lane": lane.lane, "ran": lane.ran, "error": lane.error}
+            for lane in coverage.lanes
+        ],
+        "coverage_score": round(
+            sum(1 for lane in coverage.lanes if lane.ran) / len(coverage.lanes),
+            4,
+        ),
         "false_negative_audit_status": res.fn_status,
-        "missing_source_families": [l.lane for l in coverage.lanes if not l.ran],
+        "missing_source_families": [lane.lane for lane in coverage.lanes if not lane.ran],
     }
     product_market_stage_event_id = daily_stage_recorder.start_stage(
         stage="product_market_chain",
@@ -4490,6 +4723,7 @@ async def run_tenant(
         )
         run_dict = {"run_id": run_id, "report_id": report_id, "generated_at": generated_at,
                     "model_tier": "judgment", "source_family_count": res.sources_attempted_count,
+                    "source_coverage": current_source_coverage(res, run_id=run_id),
                     "material_delta_count": len(promoted),
                     "delivery_status": "sent" if res.delivered else "failed", "quality_review_status": res.quality_status,
                     "argus_read": {"useful_truth": reader_text.split(chr(10))[0]},
@@ -4502,8 +4736,13 @@ async def run_tenant(
                 conversation_records=product_market_conversation_records,
             )
         except Exception as exc:  # noqa: BLE001
-            res.product_market_summary = {"status": "failed", "error": f"{exc.__class__.__name__}: {exc}"}
-            res.errors.append(f"product-market chain error: {exc.__class__.__name__}: {exc}")
+            res.product_market_summary = {
+                "status": "failed",
+                "error": redacted_exception_detail(exc),
+            }
+            res.errors.append(
+                f"product-market chain error: {redacted_exception_detail(exc)}"
+            )
         else:
             try:
                 monitored_rows = PgMonitoredCompetitorsRepository(app_conn).get_monitored_competitors(tenant_id)
@@ -4514,7 +4753,9 @@ async def run_tenant(
                     feature_matrix_rows=feature_matrix_rows,
                 )
             except Exception as exc:  # noqa: BLE001
-                res.errors.append(f"product-muscle gap plan error: {exc.__class__.__name__}: {exc}")
+                res.errors.append(
+                    f"product-muscle gap plan error: {redacted_exception_detail(exc)}"
+                )
         try:
             stage_ledger_id = persist_product_market_stage_ledger(
                 app_conn,
@@ -4528,7 +4769,10 @@ async def run_tenant(
                     "stage_ledger_id": stage_ledger_id,
                 }
         except Exception as exc:  # noqa: BLE001
-            res.errors.append(f"product-market stage ledger persistence error: {exc.__class__.__name__}: {exc}")
+            res.errors.append(
+                "product-market stage ledger persistence error: "
+                f"{redacted_exception_detail(exc)}"
+            )
         run_dict["product_market_summary"] = res.product_market_summary
         try:
             update_report_metadata(
@@ -4541,7 +4785,9 @@ async def run_tenant(
                 },
             )
         except Exception as exc:  # noqa: BLE001
-            res.errors.append(f"report metadata update error: {exc.__class__.__name__}: {exc}")
+            res.errors.append(
+                f"report metadata update error: {redacted_exception_detail(exc)}"
+            )
         product_market_done_marker = "product_market_done"
         product_market_summary = res.product_market_summary or {}
         daily_stage_recorder.finish_stage(
@@ -4562,7 +4808,7 @@ async def run_tenant(
             status="failed",
             metadata={},
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=redacted_exception_message(exc),
         )
         raise
 
@@ -4605,7 +4851,7 @@ async def run_tenant(
             status="failed",
             metadata={},
             error_type=type(exc).__name__,
-            error=str(exc)[:500],
+            error=redacted_exception_message(exc),
         )
         raise
     try:
@@ -4628,7 +4874,9 @@ async def run_tenant(
             },
         )
     except Exception as exc:  # noqa: BLE001
-        res.errors.append(f"daily stage ledger persistence error: {exc.__class__.__name__}: {exc}")
+        res.errors.append(
+            f"daily stage ledger persistence error: {redacted_exception_detail(exc)}"
+        )
     return res
 
 
@@ -4723,8 +4971,11 @@ async def main() -> int:
             if product_market_block:
                 print(f"  {product_market_block}")
             if delivered_result.errors:
-                print(f"  {deliver_tenant} errors={delivered_result.errors}")
-            return 2
+                print(
+                    f"  {deliver_tenant} errors="
+                    f"{redact_sensitive_text(str(delivered_result.errors))}"
+                )
+            return publish_gate_exit_code(delivered_result)
         if published_paths:
             # Two artifacts, same run: the cockpit (Arijit's designed Luxury
             # Editorial surface, built from DashboardState) is the primary
@@ -4740,10 +4991,23 @@ async def main() -> int:
     wall = time.time() - started
     print(f"\nRun complete in {wall:.1f}s. LLM calls used: {LLM_CALLS['count']} / {LLM_BUDGET}")
     for r in results:
-        print(f"  {r.slug}: delivered={r.delivered} quality={r.quality_status} errors={r.errors}")
+        print(
+            f"  {r.slug}: delivered={r.delivered} quality={r.quality_status} "
+            f"errors={redact_sensitive_text(str(r.errors))}"
+        )
     return 0
 
 
+def run_main() -> int:
+    """Run the daily entrypoint without exposing uncaught secret-bearing errors."""
+
+    try:
+        return asyncio.run(main())
+    except Exception as exc:  # noqa: BLE001 - this is the process boundary.
+        print(f"ERROR: daily run failed: {redacted_exception_detail(exc)}", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    import sys
-    sys.exit(asyncio.run(main()))
+    install_shutdown_handlers()
+    sys.exit(run_main())

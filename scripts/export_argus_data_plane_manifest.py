@@ -311,6 +311,10 @@ def _product_surface_execution_summary(run: Mapping[str, Any]) -> dict[str, Any]
         "succeeded": _int_value(raw.get("succeeded")),
         "empty": _int_value(raw.get("empty")),
         "failed": _int_value(raw.get("failed")),
+        "timed_out": _int_value(raw.get("timed_out")),
+        "not_started": _int_value(raw.get("not_started")),
+        "batch_timed_out": bool(raw.get("batch_timed_out")),
+        "batch_timeout_seconds": _int_value(raw.get("batch_timeout_seconds")),
         "product_row_count": _int_value(raw.get("product_row_count")),
         "empty_outputs": _sanitized_empty_outputs(raw.get("empty_outputs")),
     }
@@ -872,13 +876,8 @@ def _overall_status(
     ):
         return "blocked_on_evidence"
     handoff_status = str(operator_handoff.get("status") or "")
-    if handoff_status:
+    if handoff_status and handoff_status != "limited_by_evidence":
         return handoff_status
-    if (
-        _int_value(evidence_work_queue.get("limiting_count")) > 0
-        or _int_value(product_muscle_work_queue.get("limiting_count")) > 0
-    ):
-        return "limited_by_evidence"
     return "ready_for_operator_review"
 
 
@@ -910,6 +909,7 @@ def build_data_plane_manifest_payload(
     product_muscle_work_queue: dict[str, Any] | None = None,
     operator_handoff: dict[str, Any] | None = None,
     artifact_refs: dict[str, str | None] | None = None,
+    run_id: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     demand_readiness = demand_readiness or {}
@@ -944,7 +944,7 @@ def build_data_plane_manifest_payload(
         operator_handoff=operator_handoff,
     )
 
-    return {
+    payload = {
         "schema_version": 1,
         "tenant_slug": tenant_slug,
         "generated_at": generated_at or _now(),
@@ -974,6 +974,9 @@ def build_data_plane_manifest_payload(
             "empty_or_missing_plane_blocks_promotion": True,
         },
     }
+    if run_id:
+        payload["run_id"] = run_id
+    return payload
 
 
 def write_payload(payload: dict[str, Any], output: Path) -> None:
@@ -991,6 +994,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-work-queue", type=Path)
     parser.add_argument("--product-muscle-work-queue", type=Path)
     parser.add_argument("--operator-handoff", type=Path)
+    parser.add_argument("--run-id")
     parser.add_argument("--output", type=Path)
     return parser.parse_args(argv)
 
@@ -1017,6 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
         product_muscle_work_queue=_load_json(args.product_muscle_work_queue),
         operator_handoff=_load_json(args.operator_handoff),
         artifact_refs=artifact_refs,
+        run_id=args.run_id,
     )
     if args.output:
         write_payload(payload, args.output)

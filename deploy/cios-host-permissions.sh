@@ -4,7 +4,9 @@ set -eu
 SOURCE_APP="${CIOS_SOURCE_APP_DIR:-/root/.hermes/apps/cios}"
 SOURCE_PUB="${CIOS_SOURCE_PUBLIC_DIR:-/root/.hermes/apps/algolia-competitive-intelligence/apps/dashboard/public}"
 APP="${CIOS_APP_DIR:-/opt/cios/app}"
+MANAGE_APP_BIND="${CIOS_MANAGE_APP_BIND:-1}"
 PUB="${CIOS_PUBLIC_DIR:-/opt/cios/public}"
+PUBLIC_STORE="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
 ENV_FILE="${CIOS_ENV_FILE:-/root/.hermes/cios-env}"
 HOST_ENV_FILE="${CIOS_HOST_ENV_FILE:-/etc/cios-env}"
 ROOT_WRAPPER="${CIOS_ROOT_WRAPPER:-/root/.hermes/scripts/cios-daily.sh}"
@@ -32,17 +34,34 @@ if id "$SHIM_USER" >/dev/null 2>&1; then
   usermod -aG "$HERMES_GROUP" "$SHIM_USER"
 fi
 
-mkdir -p /opt/cios "$APP" "$PUB"
-if ! mountpoint -q "$APP"; then
-  mount --bind "$SOURCE_APP" "$APP"
+install -d -o root -g root -m 0755 /opt/cios
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/releases"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/diagnostics"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/.staging"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2750 "$PUBLIC_STORE/served"
+mkdir -p "$APP" "$PUB"
+APP_SOURCE_FOR_SETUP="$SOURCE_APP"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
+  if ! mountpoint -q "$APP"; then
+    mount --bind "$SOURCE_APP" "$APP"
+  fi
+else
+  if ! mountpoint -q "$APP"; then
+    echo "pre-mounted CI-OS app is required when CIOS_MANAGE_APP_BIND=0: $APP" >&2
+    exit 1
+  fi
+  APP_SOURCE_FOR_SETUP="$APP"
 fi
 if ! mountpoint -q "$PUB"; then
   mount --bind "$SOURCE_PUB" "$PUB"
 fi
 
-app_fstab="$SOURCE_APP $APP none bind 0 0"
+if [ "$MANAGE_APP_BIND" = "1" ]; then
+  app_fstab="$SOURCE_APP $APP none bind 0 0"
+  grep -Fqx "$app_fstab" /etc/fstab || printf '%s\n' "$app_fstab" >> /etc/fstab
+fi
 pub_fstab="$SOURCE_PUB $PUB none bind 0 0"
-grep -Fqx "$app_fstab" /etc/fstab || printf '%s\n' "$app_fstab" >> /etc/fstab
 grep -Fqx "$pub_fstab" /etc/fstab || printf '%s\n' "$pub_fstab" >> /etc/fstab
 
 # CI-OS is hosted under the Hermes home as an extension. The app user needs
@@ -57,9 +76,26 @@ else
   chmod 711 /root/.hermes /root/.hermes/apps
 fi
 
-mkdir -p "$SOURCE_APP/run-queue" "$SOURCE_APP/out" "$SOURCE_APP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
-chown -R "$APP_USER:$HERMES_GROUP" "$SOURCE_APP" "$SOURCE_PUB"
-chmod 2775 "$APP" "$APP/run-queue" "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+mkdir -p "$APP_SOURCE_FOR_SETUP/run-queue/.state" "$APP_SOURCE_FOR_SETUP/out" "$APP_SOURCE_FOR_SETUP/tmp" "$SOURCE_PUB/data" "$SOURCE_PUB/v2/data"
+chown -R "$APP_USER:$HERMES_GROUP" "$APP_SOURCE_FOR_SETUP" "$SOURCE_PUB"
+chown "$APP_USER:$APP_USER" "$APP"
+chmod 755 "$APP"
+for code_dir in "$APP/deploy" "$APP/scripts" "$APP/src" "$APP/.venv"; do
+  if [ -d "$code_dir" ]; then
+    chown -R "$APP_USER:$APP_USER" "$code_dir"
+    chmod -R g-w,o-w "$code_dir"
+    find "$code_dir" -type d -exec chmod u+rwx,go+rx {} +
+  fi
+done
+chmod 2775 "$APP/out" "$APP/tmp" "$PUB" "$PUB/data" "$PUB/v2" "$PUB/v2/data"
+install -d -o "$APP_USER" -g "$HERMES_GROUP" -m 2775 "$APP/data" "$APP/data/looker"
+chown "$APP_USER:$HERMES_GROUP" "$APP/run-queue"
+chmod 3770 "$APP/run-queue"
+chown "$APP_USER:$APP_USER" "$APP/run-queue/.state"
+chmod 700 "$APP/run-queue/.state"
+touch "$APP/out/.cios-output-dir"
+chown "$APP_USER:$HERMES_GROUP" "$APP/out/.cios-output-dir"
+chmod 660 "$APP/out/.cios-output-dir"
 
 PRODUCT_MARKET_WORKDIR="${CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market}"
 mkdir -p "$PRODUCT_MARKET_WORKDIR"
@@ -73,14 +109,28 @@ if [ -e "$LEGACY_PRODUCT_MARKET_TMP" ]; then
 fi
 
 if [ -f "$APP/deploy/cios-daily.sh" ]; then
-  chmod 750 "$APP/deploy/cios-daily.sh"
+  chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily.sh"
+  chmod 755 "$APP/deploy/cios-daily.sh"
+fi
+if [ -f "$APP/deploy/cios-daily-app.sh" ]; then
+  chown "$APP_USER:$APP_USER" "$APP/deploy/cios-daily-app.sh"
+  chmod 700 "$APP/deploy/cios-daily-app.sh"
 fi
 if [ -f "$ROOT_WRAPPER" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ROOT_WRAPPER"
   chmod 750 "$ROOT_WRAPPER"
 fi
 if [ -f "$APP/deploy/cios-host-runner.sh" ]; then
-  chmod 755 "$APP/deploy/cios-host-runner.sh"
+  chown "$APP_USER:$APP_USER" "$APP/deploy/cios-host-runner.sh"
+  chmod 700 "$APP/deploy/cios-host-runner.sh"
+fi
+if [ -f "$APP/deploy/cios-run-finalize.sh" ]; then
+  chown "$APP_USER:$APP_USER" "$APP/deploy/cios-run-finalize.sh"
+  chmod 700 "$APP/deploy/cios-run-finalize.sh"
+fi
+if [ -f "$APP/scripts/cios_run_queue.py" ]; then
+  chown "$APP_USER:$APP_USER" "$APP/scripts/cios_run_queue.py"
+  chmod 755 "$APP/scripts/cios_run_queue.py"
 fi
 if [ -f "$ENV_FILE" ]; then
   chown "$APP_USER:$HERMES_GROUP" "$ENV_FILE"

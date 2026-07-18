@@ -84,3 +84,26 @@ def test_click_validator_rejects_old_fake_confidence_rubric_contract() -> None:
             "Pattern across partners Where the market is heading Argus recommendation "
             "Confidence rubric Quality gate Public-source boundary Materiality separation"
         )
+
+
+def test_click_validator_builds_run_bound_structured_verdict() -> None:
+    module = _load_validator_module()
+
+    verdict = module.build_verdict(
+        run_id="cios-20260714T090000Z-1234",
+        results=[
+            module.CheckResult("structure", "ok"),
+            module.CheckResult("viewport_390", "ok"),
+        ],
+        generated_at="2026-07-14T09:03:00Z",
+    )
+
+    assert verdict == {
+        "schema_version": 1,
+        "gate": "dashboard_click_validation",
+        "run_id": "cios-20260714T090000Z-1234",
+        "generated_at": "2026-07-14T09:03:00Z",
+        "status": "pass",
+        "exit_code": 0,
+        "checks": {"structure": True, "viewport_390": True},
+    }

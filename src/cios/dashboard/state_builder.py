@@ -538,6 +538,7 @@ class DashboardStateBuilder:
             material_delta_count=int(current_material_delta_count or 0),
             delivery_status=run.get("delivery_status"),
             quality_review_status=run.get("quality_review_status"),
+            source_coverage=dict(run.get("source_coverage") or {}),
         )
 
     def _build_product_market_run(
@@ -602,6 +603,7 @@ class DashboardStateBuilder:
         effective_demand_row_count = max(looker_normalized_row_count, current_demand_signal_count)
 
         return ProductMarketRunStatus(
+            run_id=run.get("run_id"),
             status=str(summary.get("status") or "not_recorded"),
             next_sweep_plan_path=summary.get("next_sweep_plan_path"),
             learning_apply_plan_path=summary.get("learning_apply_plan_path"),

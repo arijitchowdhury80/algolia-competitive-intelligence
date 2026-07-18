@@ -226,6 +226,17 @@ def test_to_json_dict_serializes_product_market_run_trace():
         coverage=FakeCoverageRepository({1: full_coverage()}),
         runs=FakeRunRepository({
             1: {
+                "run_id": "cios-20260714T090000Z-1234",
+                "source_coverage": {
+                    "run_id": "cios-20260714T090000Z-1234",
+                    "active_source_count": 3,
+                    "checked_source_count": 2,
+                    "failed_source_count": 1,
+                    "disposed_source_count": 1,
+                    "dispositions": [
+                        {"competitor_name": "Klevu", "reason": "source_id_missing"}
+                    ],
+                },
                 "product_market_summary": {
                     "status": "ran",
                     "product_surface_plan_summary": {
@@ -412,6 +423,18 @@ def test_to_json_dict_serializes_product_market_run_trace():
     )
     payload = to_json_dict(builder.build(tenant_id=1, cadence="daily"))
 
+    assert payload["run_health"]["run_id"] == "cios-20260714T090000Z-1234"
+    assert payload["run_health"]["source_coverage"] == {
+        "run_id": "cios-20260714T090000Z-1234",
+        "active_source_count": 3,
+        "checked_source_count": 2,
+        "failed_source_count": 1,
+        "disposed_source_count": 1,
+        "dispositions": [
+            {"competitor_name": "Klevu", "reason": "source_id_missing"}
+        ],
+    }
+    assert payload["product_market_run"]["run_id"] == "cios-20260714T090000Z-1234"
     assert payload["product_market_run"]["status"] == "ran"
     assert payload["product_market_run"]["target_company_count"] == 2
     assert payload["product_market_run"]["target_companies"] == ["Constructor", "Coveo"]

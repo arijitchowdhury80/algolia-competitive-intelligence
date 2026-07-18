@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "export_public_run_status.py"
 
@@ -17,6 +19,36 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_public_status_binds_explicit_manifest_run_id() -> None:
+    module = _load_module()
+    run_id = "cios-20260714T090000Z-12345"
+
+    payload = module.build_public_run_status_payload(
+        tenant_slug="algolia",
+        manifest={"run_id": run_id, "status": "blocked_on_evidence", "planes": {}},
+        dashboard={},
+        publish_status="blocked",
+        run_id=run_id,
+        generated_at="2026-07-14T09:00:00Z",
+    )
+
+    assert payload["schema_version"] == 2
+    assert payload["run_id"] == run_id
+
+
+def test_public_status_rejects_manifest_run_id_mismatch() -> None:
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="manifest run_id mismatch"):
+        module.build_public_run_status_payload(
+            tenant_slug="algolia",
+            manifest={"run_id": "cios-20260714T090000Z-other", "status": "blocked", "planes": {}},
+            dashboard={},
+            publish_status="blocked",
+            run_id="cios-20260714T090000Z-12345",
+        )
 
 
 def test_public_run_status_strips_local_paths_and_preserves_blocker_summary() -> None:
@@ -255,6 +287,138 @@ def test_public_run_status_counts_list_shaped_source_health() -> None:
     }
 
 
+def test_public_run_status_prefers_current_run_coverage_and_extraction_accounting() -> None:
+    module = _load_module()
+    run_id = "cios-20260714T090000Z-1234"
+
+    payload = module.build_public_run_status_payload(
+        tenant_slug="algolia",
+        manifest={
+            "run_id": run_id,
+            "status": "published",
+            "planes": {},
+            "blockers": [],
+        },
+        dashboard={
+            "run_health": {
+                "run_id": run_id,
+                "source_coverage": {
+                    "run_id": run_id,
+                    "active_source_count": 4,
+                    "checked_source_count": 3,
+                    "failed_source_count": 1,
+                    "disposed_source_count": 1,
+                    "dispositions": [
+                        {
+                            "source_ref": "3995b87e38e234fe",
+                            "competitor_name": "Klevu",
+                            "reason": "source_id_missing",
+                            "internal_path": "/root/private",
+                        }
+                    ],
+                },
+            },
+            "product_market_run": {
+                "run_id": run_id,
+                "status": "ran",
+                "product_event_count": 120,
+                "product_surface_execution_summary": {
+                    "planned": 3,
+                    "succeeded": 1,
+                    "empty": 1,
+                    "failed": 0,
+                    "timed_out": 1,
+                    "not_started": 0,
+                },
+            },
+        },
+        publish_status="published",
+        run_id=run_id,
+        generated_at="2026-07-14T09:05:00Z",
+    )
+
+    assert payload["source_coverage"] == {
+        "run_id": run_id,
+        "active_source_count": 4,
+        "checked_source_count": 3,
+        "failed_source_count": 1,
+        "disposed_source_count": 1,
+        "dispositions": [
+            {
+                "source_ref": "3995b87e38e234fe",
+                "competitor_name": "Klevu",
+                "reason": "source_id_missing",
+            }
+        ],
+    }
+    assert payload["product_market_run"]["run_id"] == run_id
+    assert payload["product_extraction"] == {
+        "run_id": run_id,
+        "planned": 3,
+        "attempted": 3,
+        "terminal": 3,
+        "successful": 1,
+        "failed": 2,
+        "timed_out": 1,
+        "not_started": 0,
+        "accounting_complete": True,
+        "all_planned_terminal": True,
+    }
+
+
+def test_public_run_status_publishes_ready_operator_manifest() -> None:
+    module = _load_module()
+    run_id = "cios-20260716T083956Z-3866870"
+
+    payload = module.build_public_run_status_payload(
+        tenant_slug="algolia",
+        manifest={
+            "run_id": run_id,
+            "status": "ready_for_operator_review",
+            "next_hermes_action": "review_argus_evidence_queue",
+            "planes": {
+                "product_reality": {
+                    "status": "limited_by_product_surface_evidence",
+                    "blocks_action": False,
+                    "counts": {
+                        "product_event_count": 500,
+                        "product_muscle_work_item_count": 39,
+                        "product_muscle_blocking_count": 0,
+                        "product_muscle_limiting_count": 39,
+                    },
+                }
+            },
+            "blockers": [],
+        },
+        dashboard={
+            "run_health": {
+                "source_coverage": {
+                    "run_id": run_id,
+                    "active_source_count": 42,
+                    "checked_source_count": 42,
+                    "failed_source_count": 0,
+                    "disposed_source_count": 0,
+                    "dispositions": [],
+                },
+            },
+            "product_market_run": {
+                "run_id": run_id,
+                "status": "ran",
+                "product_event_count": 500,
+                "demand_signal_count": 1,
+            },
+        },
+        publish_status="published",
+        run_id=run_id,
+        generated_at="2026-07-16T08:56:00Z",
+    )
+
+    assert payload["publish_status"] == "published"
+    assert payload["status"] == "published"
+    assert payload["planes"]["product_reality"]["status"] == "limited_by_product_surface_evidence"
+    assert payload["planes"]["product_reality"]["blocks_action"] is False
+
+
 def test_public_run_status_exposes_sanitized_demand_collection_plan() -> None:
     module = _load_module()
 
@@ -390,6 +554,10 @@ def test_public_run_status_exposes_sanitized_product_surface_execution_summary()
                             "succeeded": 0,
                             "empty": 2,
                             "failed": 0,
+                            "timed_out": 1,
+                            "not_started": 1,
+                            "batch_timed_out": True,
+                            "batch_timeout_seconds": 600,
                             "product_row_count": 0,
                             "empty_scout_paths": [
                                 "/tmp/cios-product-market/algolia/surface-exports/000031-coveo-docs.json"
@@ -435,6 +603,10 @@ def test_public_run_status_exposes_sanitized_product_surface_execution_summary()
         "succeeded": 0,
         "empty": 2,
         "failed": 0,
+        "timed_out": 1,
+        "not_started": 1,
+        "batch_timed_out": True,
+        "batch_timeout_seconds": 600,
         "product_row_count": 0,
         "empty_outputs": [{"company_name": "Coveo", "surface_family": "docs"}],
         "company_row_counts": {},

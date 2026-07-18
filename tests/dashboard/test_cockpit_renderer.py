@@ -295,10 +295,11 @@ def test_navigation_has_state_contract_and_distinct_section_targets() -> None:
     assert 'href="#evidence-coverage" data-nav-link="evidence-coverage"' in html
 
 
-def test_evidence_appendix_is_open_so_anchor_has_real_destination() -> None:
+def test_evidence_appendix_is_closed_by_default_until_reader_asks_for_audit_detail() -> None:
     html = render_cockpit_html(DashboardState(tenant_id=1, cadence="daily", competitor_cards=[_card()]))
 
-    assert html.count('<details class="appendix" open>') == 2
+    assert html.count('<details class="appendix">') == 2
+    assert '<details class="appendix" open>' not in html
 
 
 def test_information_order_is_read_then_priority_then_roles_then_evidence() -> None:
@@ -1332,7 +1333,7 @@ def test_cockpit_renders_argus_evidence_needs_for_withheld_actions() -> None:
 
     html = render_cockpit_html(state)
 
-    assert "What Argus needs next" in html
+    assert "What is holding action back" in html
     assert "Demand plane missing" in html
     assert "owner recommendations" in html
     assert "Upload GA4 / Looker demand export" in html
@@ -1480,27 +1481,201 @@ def test_market_timeline_renders_product_market_history_from_argus_memory() -> N
 
     html = render_cockpit_html(state)
 
-    assert "Product-market memory" in html
+    assert "Market interpretation" in html
+    assert "What this market data means" in html
+    assert "Supporting evidence rows" in html
     assert "Constructor showed product proof" in html
     assert "agentic product discovery" in html
     assert "own_product_gap" in html
     assert "Trend direction" in html
     assert "accelerating" in html
-    assert "Market heat map" in html
+    assert "Product-market memory" not in html
+    assert "Market heat map" not in html
     assert "Constructor" in html
     assert "92" in html
-    assert "Entity velocity" in html
+    assert "Company movement" in html
+    assert "Entity velocity" not in html
     assert "accelerating" in html
-    assert "Argus run reads" in html
+    assert "interpreted runs" in html
     assert "Constructor is moving" in html
     assert "watch" in html
     assert "Constructor is accelerating around agentic discovery." in html
-    assert "Theme heat map" in html
+    assert "Theme heat map" not in html
     assert "Agentic discovery is heating up across commerce search competitors." in html
     assert "Constructor, Coveo" in html
-    assert "Window deltas" in html
+    assert "7D change" in html
+    assert "Window deltas" not in html
     assert "last_7d vs prior_7d" in html
     assert "Agentic discovery added one more current-window pattern than the prior window." in html
+
+
+def test_market_timeline_prioritizes_interpreted_market_read_over_raw_ledger_sections() -> None:
+    state = DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        generated_at=datetime(2026, 7, 10, 5, 13, tzinfo=timezone.utc),
+        product_market_run_history=[
+            ProductMarketRunHistoryEntry(
+                run_intelligence_id=77,
+                observed_at=datetime(2026, 7, 10, 5, 13, tzinfo=timezone.utc),
+                verdict="watch",
+                top_insight="Argus sees agentic discovery heating up, but action is held.",
+                primary_action=None,
+                evidence_urls=["https://constructor.example/changelog"],
+                confidence_limits=["Demand evidence is too thin to promote an action."],
+                product_event_count=2,
+                conversation_theme_count=1,
+                demand_signal_count=1,
+                pattern_count=1,
+                recommendation_count=0,
+            )
+        ],
+        product_market_theme_heatmap=[
+            ProductMarketThemeHeatmapCell(
+                theme_text="agentic product discovery",
+                heat_level="hot",
+                direction="accelerating",
+                intensity_score=96.0,
+                pattern_count_7d=2,
+                pattern_count_30d=3,
+                entity_count=2,
+                leading_entities=["Constructor", "Coveo"],
+                pattern_types=["own_narrative_gap", "competitive_pressure"],
+                latest_summary="Agentic discovery is heating up across commerce search competitors.",
+                latest_observed_at=datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+                confidence=0.78,
+                evidence_refs=[{"source_url": "https://constructor.example/changelog"}],
+            )
+        ],
+        product_market_entity_velocity=[
+            ProductMarketEntityVelocitySummary(
+                entity_name="Constructor",
+                direction="accelerating",
+                total_patterns_7d=2,
+                total_patterns_30d=3,
+                hot_capability_count=1,
+                warm_capability_count=0,
+                top_capabilities=["agentic product discovery"],
+                latest_summary="Constructor is accelerating around agentic discovery.",
+                latest_observed_at=datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+                confidence=0.78,
+                evidence_refs=[{"source_url": "https://constructor.example/changelog"}],
+            )
+        ],
+        product_market_window_deltas=[
+            ProductMarketWindowDeltaSummary(
+                subject_type="theme",
+                subject_name="agentic product discovery",
+                direction="rising",
+                current_window_label="last_7d",
+                previous_window_label="prior_7d",
+                current_pattern_count=2,
+                previous_pattern_count=1,
+                delta=1,
+                related_entities=["Constructor"],
+                related_capabilities=["agentic product discovery"],
+                latest_summary="Agentic discovery added one more pattern than the prior window.",
+                latest_observed_at=datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+                evidence_refs=[{"source_url": "https://constructor.example/changelog"}],
+            )
+        ],
+        argus_evidence_needs=[
+            ArgusEvidenceNeedSummary(
+                evidence_plane="demand",
+                status="missing",
+                severity="blocks_action",
+                title="Demand plane too thin",
+                why_needed="The demand plane has not proven customer-side urgency.",
+                blocks=["owner recommendations"],
+                next_step="Refresh Looker demand exports before promoting action.",
+            )
+        ],
+    )
+
+    html = render_cockpit_html(state)
+
+    assert "Market interpretation" in html
+    assert "What to pay attention to" in html
+    assert "Why it matters" in html
+    assert "What is holding action back" in html
+    assert "Supporting evidence rows" in html
+    assert "Product-market memory" not in html
+    assert "Argus run reads" not in html
+    assert "Theme heat map" not in html
+    assert "Window deltas" not in html
+    assert "Entity velocity" not in html
+    assert "Holistic daily coverage" not in html
+
+
+def test_feature_comparison_renders_as_reader_summary_not_overflowing_raw_table() -> None:
+    state = DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        product_feature_comparison=ProductFeatureComparisonState(
+            companies=[
+                ProductFeatureComparisonCompany(
+                    company_name="Algolia",
+                    company_role="own",
+                    active_source_count=4,
+                    has_product_evidence=True,
+                ),
+                ProductFeatureComparisonCompany(
+                    company_name="Constructor",
+                    company_role="competitor",
+                    active_source_count=4,
+                    has_product_evidence=True,
+                ),
+                ProductFeatureComparisonCompany(
+                    company_name="Bloomreach",
+                    company_role="competitor",
+                    active_source_count=4,
+                    has_product_evidence=False,
+                ),
+            ],
+            rows=[
+                ProductFeatureComparisonRow(
+                    capability_text="AI Shopping Agent",
+                    cells=[
+                        ProductFeatureComparisonCell(
+                            company_name="Algolia",
+                            position_status="proven",
+                            summary="Algolia has AI shopping proof.",
+                            evidence_count=1,
+                            first_evidence_url="https://www.algolia.com/doc/ai-shopping",
+                        ),
+                        ProductFeatureComparisonCell(
+                            company_name="Constructor",
+                            position_status="proven",
+                            summary="Constructor positions an AI Shopping Agent.",
+                            evidence_count=1,
+                            first_evidence_url="https://constructor.com/products/ai-shopping-agent",
+                        ),
+                        ProductFeatureComparisonCell(
+                            company_name="Bloomreach",
+                            position_status="unknown",
+                            summary="No product proof captured for Bloomreach in this evidence set.",
+                            evidence_count=0,
+                        ),
+                    ],
+                    proven_count=2,
+                    claimed_count=0,
+                    unknown_count=1,
+                    evidence_count=2,
+                )
+            ],
+            row_count_total=1,
+            company_count_total=3,
+        ),
+    )
+
+    html = render_cockpit_html(state)
+
+    assert "Product comparison read" in html
+    assert "What this comparison says" in html
+    assert "Known proof" in html
+    assert "Unknown means Argus has not captured public proof yet" in html
+    assert "Bloomreach" in html
+    assert '<table class="feature-comparison">' not in html
 
 
 def test_timeline_history_calendar_and_holistic_daily_coverage_are_visible() -> None:
@@ -1533,7 +1708,7 @@ def test_timeline_history_calendar_and_holistic_daily_coverage_are_visible() -> 
     assert "Report history" in html
     assert "Yesterday summary" in html
     assert "Last week summary" in html
-    assert "Holistic daily coverage" in html
+    assert "Coverage roster" in html
     assert "Why this priority" in html
     assert "Constructor is first because" in html
     assert "Coveo" in html
