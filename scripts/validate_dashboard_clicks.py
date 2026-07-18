@@ -144,11 +144,29 @@ def validate_timeline(page: Page) -> CheckResult:
     _assert(page.locator("#history-selector").count() == 1, "history selector missing")
     text = _text(timeline)
     text_lower = text.lower()
-    for phrase in ("Holistic daily coverage", "Why this priority", "Last 7 days", "Last 30 days"):
+    for phrase in (
+        "Market interpretation",
+        "What to pay attention to",
+        "What is holding action back",
+        "Coverage roster",
+        "Supporting evidence rows",
+        "Why this priority",
+        "Last 7 days",
+        "Last 30 days",
+    ):
         _assert(phrase.lower() in text_lower, f"timeline missing {phrase}")
+    for phrase in (
+        "Product-market memory",
+        "Argus run reads",
+        "Theme heat map",
+        "Window deltas",
+        "Entity velocity",
+        "Holistic daily coverage",
+    ):
+        _assert(phrase.lower() not in text_lower, f"timeline exposes raw internal label {phrase}")
     coverage_rows = timeline.locator(".coverage-row")
-    _assert(coverage_rows.count() >= 5, f"expected broad holistic coverage, found {coverage_rows.count()} rows")
-    return CheckResult("timeline", "History controls, holistic coverage, and priority rationale are visible")
+    _assert(coverage_rows.count() >= 5, f"expected broad coverage roster, found {coverage_rows.count()} rows")
+    return CheckResult("timeline", "History controls, interpreted market read, coverage roster, and priority rationale are visible")
 
 
 def validate_semantic_layer(page: Page) -> CheckResult:
@@ -359,7 +377,11 @@ def main(argv: list[str] | None = None) -> int:
         print(_dependency_help(errors), file=sys.stderr)
         return 2
 
-    base_url = args.url if args.url.endswith("/") else args.url + "/"
+    clean_url = args.url.split("?", 1)[0].split("#", 1)[0]
+    if args.url.endswith("/") or clean_url.endswith((".html", ".htm")):
+        base_url = args.url
+    else:
+        base_url = args.url + "/"
     try:
         results = _run_validation(base_url)
     except Exception as exc:  # noqa: BLE001 - emit a terminal structured verdict.
