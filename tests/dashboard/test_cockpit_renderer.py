@@ -285,11 +285,15 @@ def test_navigation_has_state_contract_and_distinct_section_targets() -> None:
 
     assert 'data-nav-link="today-read"' in html
     assert 'data-nav-link="intelligence-spine"' in html
+    assert 'data-nav-link="market-timeline"' in html
+    assert 'data-nav-link="semantic-layer"' in html
     assert 'data-nav-link="priority-moves"' in html
     assert 'data-nav-link="role-implications"' in html
     assert 'data-nav-link="evidence-coverage"' in html
     assert 'href="#today-read" data-nav-link="today-read" aria-current="page"' in html
     assert 'href="#intelligence-spine" data-nav-link="intelligence-spine"' in html
+    assert 'href="#market-timeline" data-nav-link="market-timeline"' in html
+    assert 'href="#semantic-layer" data-nav-link="semantic-layer"' in html
     assert 'href="#priority-moves" data-nav-link="priority-moves"' in html
     assert 'href="#role-implications" data-nav-link="role-implications"' in html
     assert 'href="#evidence-coverage" data-nav-link="evidence-coverage"' in html
