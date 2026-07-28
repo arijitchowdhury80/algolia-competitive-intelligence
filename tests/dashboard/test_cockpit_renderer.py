@@ -21,6 +21,11 @@ from cios.dashboard.types import (
     IntelligencePlaneSummary,
     IntelligenceSpine,
     LivingThesis,
+    MarketFieldAction,
+    MarketFieldHotspot,
+    MarketFieldNode,
+    MarketFieldProofItem,
+    MarketFieldState,
     MonitoredCompetitor,
     PrescriptionSummary,
     ProductFeatureComparisonCell,
@@ -72,6 +77,68 @@ def test_renders_new_intelligence_brief_shell() -> None:
     assert "Selected competitor" in html
     assert "Role implications" in html
     assert "Evidence and source health" in html
+
+
+def test_renders_market_field_first_experience() -> None:
+    state = DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        market_field=MarketFieldState(
+            selected_hotspot_id="ai-commerce",
+            nodes=[
+                MarketFieldNode(node_id="ai-commerce", label="AI commerce ownership", node_type="theme"),
+                MarketFieldNode(node_id="constructor", label="Constructor", node_type="competitor"),
+                MarketFieldNode(
+                    node_id="unknown-ai-agent",
+                    label="Unknown boundary",
+                    node_type="unknown_boundary",
+                    status="confidence_limit",
+                    summary="Unknown is not absence.",
+                ),
+            ],
+            hotspots=[
+                MarketFieldHotspot(
+                    hotspot_id="ai-commerce",
+                    label="AI commerce ownership",
+                    argus_read="AI commerce ownership is becoming the active competitive frame.",
+                    movement="rising",
+                    confidence_label="medium-high",
+                    proof_status="partial",
+                    unknowns=["Unknown is not absence."],
+                )
+            ],
+            actions=[
+                MarketFieldAction(
+                    owner="PMM",
+                    priority="P1",
+                    action="Sharpen AI commerce positioning.",
+                    why_now="Competitor narrative is moving faster than Algolia's visible story.",
+                    confidence_label="medium-high",
+                )
+            ],
+            proof=[
+                MarketFieldProofItem(
+                    plane="audience_demand",
+                    summary="Audience demand overlaps the selected movement.",
+                    source_count=3,
+                )
+            ],
+        ),
+    )
+
+    html = render_cockpit_html(state)
+
+    assert 'id="market-field"' in html
+    assert 'id="selected-movement"' in html
+    assert 'id="action-layer"' in html
+    assert 'id="proof-drawer"' in html
+    assert 'id="evidence-lab"' in html
+    assert 'id="admin"' in html
+    assert "Where the market is concentrating" in html
+    assert "AI commerce ownership" in html
+    assert "Sharpen AI commerce positioning." in html
+    assert "Unknown is not absence." in html
+    assert "confirmed absence" not in html.lower()
 
 
 def test_quiet_current_run_does_not_label_rolling_cards_as_todays_moves() -> None:

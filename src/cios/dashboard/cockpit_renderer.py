@@ -3395,6 +3395,149 @@ _BRIEF_UI_STYLE = """
     .brief-nav a[aria-current="page"]::after {
       content: ""; position: absolute; left: 10px; right: 10px; bottom: 7px; height: 2px; background: var(--gold);
     }
+    .market-field {
+      margin-top: 22px;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 24px;
+      display: grid;
+      gap: 16px;
+    }
+    .market-field-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+    }
+    .market-field-head p {
+      margin: 10px 0 0;
+      max-width: 660px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .time-window-control {
+      display: flex;
+      flex-wrap: wrap;
+      border: 1px solid var(--line);
+      background: rgba(255,253,247,.78);
+    }
+    .time-window-control button {
+      min-height: 40px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      padding: 0 12px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .time-window-control button:last-child { border-right: 0; }
+    .time-window-control button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+    .market-field-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(320px, .75fr);
+      gap: 16px;
+      min-height: 460px;
+    }
+    .market-field-canvas {
+      position: relative;
+      overflow: hidden;
+      min-height: 460px;
+      border: 1px solid var(--ink);
+      background:
+        radial-gradient(circle at 24% 28%, rgba(181,138,53,.34), transparent 12%),
+        radial-gradient(circle at 68% 36%, rgba(0,61,255,.18), transparent 14%),
+        radial-gradient(circle at 52% 78%, rgba(17,97,73,.20), transparent 16%),
+        linear-gradient(135deg, #16181d, #242019 54%, #0f1217);
+      box-shadow: 0 24px 70px rgba(23,23,23,.16);
+    }
+    .market-field-canvas::before {
+      content: "";
+      position: absolute;
+      inset: 22px;
+      background:
+        linear-gradient(90deg, rgba(255,253,247,.08) 1px, transparent 1px) 0 0 / 56px 56px,
+        linear-gradient(180deg, rgba(255,253,247,.06) 1px, transparent 1px) 0 0 / 56px 56px;
+      opacity: .72;
+    }
+    .market-node {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      transform: translate(-50%, -50%);
+      min-width: 96px;
+      max-width: 190px;
+      border: 1px solid rgba(255,253,247,.45);
+      background: rgba(255,253,247,.91);
+      color: var(--ink);
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 1.2;
+      box-shadow: 0 0 0 8px rgba(255,253,247,.08), 0 18px 42px rgba(0,0,0,.2);
+      z-index: 1;
+    }
+    .market-node-theme {
+      min-width: 170px;
+      background: var(--gold-soft);
+      border-color: var(--gold);
+      font-weight: 780;
+      z-index: 2;
+    }
+    .market-node-audience_demand { background: #d9eee8; border-color: var(--green); }
+    .market-node-unknown_boundary { background: #f5e6df; border-color: var(--red); }
+    .market-node[aria-pressed="true"] { outline: 3px solid var(--gold); outline-offset: 3px; }
+    .market-panel {
+      border: 1px solid var(--line);
+      background: rgba(255,253,247,.86);
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .market-panel p, .market-action span, .proof-row p, .proof-row span {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .market-facts {
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+    }
+    .market-facts div { padding: 10px; border-right: 1px solid var(--line); }
+    .market-facts div:last-child { border-right: 0; }
+    .market-facts dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+    .market-facts dd { margin: 4px 0 0; font-size: 13px; font-weight: 700; }
+    .market-unknowns { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .hotspot-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .hotspot-pill {
+      min-height: 74px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      padding: 12px;
+      text-align: left;
+      display: grid;
+      gap: 6px;
+    }
+    .hotspot-pill span { color: var(--muted); font-size: 12px; }
+    .hotspot-pill[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--gold); }
+    .market-support-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr .8fr .8fr;
+      gap: 12px;
+    }
+    .market-action, .proof-row {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      display: grid;
+      gap: 6px;
+    }
+    [data-proof-drawer-panel][hidden] { display: none; }
     .read-hero {
       margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr);
       gap: 24px; align-items: stretch; border-bottom: 1px solid var(--ink); padding-bottom: 22px;
@@ -3636,9 +3779,10 @@ _BRIEF_UI_STYLE = """
 	    .source-row, .registry-row { border: 1px solid var(--line); background: var(--panel); padding: 10px; display: grid; gap: 5px; }
 	    .status-badge { color: var(--muted); font-size: 11px; }
 	    @media (max-width: 900px) {
-	      .read-hero, .spine-head, .timeline-head, .history-controls, .semantic-head, .semantic-grid, .priority-layout, .appendix-grid, .role-set, .selected-grid { grid-template-columns: 1fr; }
-	      .decision-strip, .spine-grid, .timeline-grid, .coverage-list, .operator-handoff-grid { grid-template-columns: 1fr; }
+	      .market-field-head, .market-field-layout, .market-support-grid, .read-hero, .spine-head, .timeline-head, .history-controls, .semantic-head, .semantic-grid, .priority-layout, .appendix-grid, .role-set, .selected-grid { grid-template-columns: 1fr; }
+	      .hotspot-strip, .decision-strip, .spine-grid, .timeline-grid, .coverage-list, .operator-handoff-grid { grid-template-columns: 1fr; }
 	      .history-row { grid-template-columns: 1fr; }
+	      .market-field-canvas { min-height: 360px; }
 	      .decision { border-right: 0; border-bottom: 1px solid var(--line); }
 	      .spine-plane { border-right: 0; border-bottom: 1px solid var(--line); }
 	      .timeline-card { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -3653,6 +3797,12 @@ _BRIEF_UI_STYLE = """
       .brief-nav a { flex: 1 1 50%; justify-content: center; }
       h1 { font-size: 34px; }
       .coverage-metrics { grid-template-columns: 1fr; }
+      .time-window-control button { flex: 1 1 50%; border-bottom: 1px solid var(--line); }
+      .market-field-canvas { min-height: 300px; }
+      .market-node { min-width: 84px; max-width: 140px; font-size: 11px; }
+      .market-facts { grid-template-columns: 1fr; }
+      .market-facts div { border-right: 0; border-bottom: 1px solid var(--line); }
+      .market-facts div:last-child { border-bottom: 0; }
     }
 """
 
@@ -3666,6 +3816,8 @@ _BRIEF_UI_SCRIPT = """
 	      const partnerSelector = document.getElementById('partner-selector');
 	      const historySelector = document.getElementById('history-selector');
 	      const historyCalendar = document.getElementById('history-calendar');
+	      const proofToggle = document.querySelector('[data-proof-drawer-toggle]');
+	      const proofPanel = document.querySelector('[data-proof-drawer-panel]');
 
       const setActiveNav = (id) => {
         navLinks.forEach((link) => {
@@ -3700,6 +3852,13 @@ _BRIEF_UI_SCRIPT = """
           event.preventDefault();
           goToSection(link.dataset.navLink);
         });
+      });
+
+      proofToggle?.addEventListener('click', () => {
+        const expanded = proofToggle.getAttribute('aria-expanded') === 'true';
+        proofToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        proofToggle.textContent = expanded ? 'Open proof drawer' : 'Close proof drawer';
+        if (proofPanel) proofPanel.hidden = expanded;
       });
 
 	      const selectCompetitor = (id, name, updateHash = true) => {
@@ -5190,6 +5349,145 @@ def _render_source_rows(state: DashboardState) -> str:
     return "".join(rows) or '<p class="status-badge">No source health rows published.</p>'
 
 
+def _render_market_field_nodes(state: DashboardState) -> str:
+    field = state.market_field
+    if not field.nodes:
+        return '<p class="brief-meta">No Market Field nodes have been published for this run.</p>'
+
+    rows: list[str] = []
+    for index, node in enumerate(field.nodes[:24]):
+        selected = "true" if node.node_id == field.selected_hotspot_id else "false"
+        classes = f"market-node market-node-{_esc(node.node_type)}"
+        if node.status == "confidence_limit":
+            classes = f"{classes} confidence-limit"
+        top = 12 + ((index * 19) % 72)
+        left = 10 + ((index * 29) % 78)
+        rows.append(
+            f"""<button type="button" class="{classes}" data-market-node="{_esc(node.node_id)}" aria-pressed="{selected}" style="--x:{left}%;--y:{top}%">
+  <span>{_esc(node.label)}</span>
+</button>"""
+        )
+    return "".join(rows)
+
+
+def _render_market_field_hotspots(state: DashboardState) -> str:
+    field = state.market_field
+    if not field.hotspots:
+        return '<p class="brief-meta">No market hotspots crossed the current evidence threshold.</p>'
+
+    rows: list[str] = []
+    for hotspot in field.hotspots[:8]:
+        selected = "true" if hotspot.hotspot_id == field.selected_hotspot_id else "false"
+        rows.append(
+            f"""<button type="button" class="hotspot-pill" data-market-hotspot="{_esc(hotspot.hotspot_id)}" aria-pressed="{selected}">
+  <strong>{_esc(hotspot.label)}</strong>
+  <span>{_esc(hotspot.movement)} · {_esc(hotspot.confidence_label)} · {_esc(hotspot.proof_status)}</span>
+</button>"""
+        )
+    return "".join(rows)
+
+
+def _render_selected_movement(state: DashboardState) -> str:
+    selected = state.market_field.selected_hotspot
+    if selected is None:
+        return """<aside id="selected-movement" class="market-panel" aria-label="Selected movement">
+  <h2 data-selected-hotspot-title>No selected movement yet</h2>
+  <p data-selected-hotspot-read>Argus has not published a Market Field hotspot for this run.</p>
+</aside>"""
+
+    unknowns = "".join(f"<li>{_esc(item)}</li>" for item in selected.unknowns[:5])
+    unknown_block = (
+        f'<ul class="market-unknowns">{unknowns}</ul>'
+        if unknowns
+        else '<p class="brief-meta">No confidence boundary has been attached to this movement.</p>'
+    )
+    return f"""<aside id="selected-movement" class="market-panel" aria-label="Selected movement">
+  <div class="eyebrow">Selected movement</div>
+  <h2 data-selected-hotspot-title>{_esc(selected.label)}</h2>
+  <p data-selected-hotspot-read>{_esc(selected.argus_read or "No Argus read has been attached.")}</p>
+  <dl class="market-facts">
+    <div><dt>Movement</dt><dd>{_esc(selected.movement)}</dd></div>
+    <div><dt>Confidence</dt><dd>{_esc(selected.confidence_label)}</dd></div>
+    <div><dt>Proof</dt><dd>{_esc(selected.proof_status)}</dd></div>
+  </dl>
+  <h3>Confidence boundaries</h3>
+  {unknown_block}
+</aside>"""
+
+
+def _render_action_layer(state: DashboardState) -> str:
+    if not state.market_field.actions:
+        body = '<p class="brief-meta">No action has been promoted from the selected movement yet.</p>'
+    else:
+        body = "".join(
+            f"""<article data-market-action class="market-action">
+  <h3>{_esc(action.owner)} · {_esc(action.priority)}</h3>
+  <p>{_esc(action.action)}</p>
+  <span>{_esc(action.why_now)}</span>
+</article>"""
+            for action in state.market_field.actions[:6]
+        )
+    return f"""<section id="action-layer" class="market-panel" aria-label="What Algolia should do next">
+  <div class="panel-head"><h2>What Algolia should do next</h2></div>
+  {body}
+</section>"""
+
+
+def _render_proof_drawer(state: DashboardState) -> str:
+    if not state.market_field.proof:
+        body = '<p class="brief-meta">No proof items have been attached to this movement yet.</p>'
+    else:
+        body = "".join(
+            f"""<article class="proof-row">
+  <strong>{_esc(item.plane)}</strong>
+  <p>{_esc(item.summary)}</p>
+  <span>{_esc(item.source_count)} source{'s' if item.source_count != 1 else ''}</span>
+</article>"""
+            for item in state.market_field.proof[:8]
+        )
+    return f"""<section id="proof-drawer" class="market-panel" aria-label="Proof chain">
+  <button type="button" data-proof-drawer-toggle aria-expanded="false">Open proof drawer</button>
+  <div data-proof-drawer-panel hidden>{body}</div>
+</section>"""
+
+
+def _render_market_field(state: DashboardState) -> str:
+    return f"""<section id="market-field" class="market-field" aria-label="Market Field">
+  <div class="market-field-head">
+    <div>
+      <div class="eyebrow">Market Field</div>
+      <h1>Where the market is concentrating</h1>
+      <p>Start with the movement map, then click into action, proof, and confidence boundaries.</p>
+    </div>
+    <div class="time-window-control" aria-label="Market Field time windows">
+      <button type="button" data-time-window="today">Today</button>
+      <button type="button" data-time-window="7d" aria-pressed="true">7D</button>
+      <button type="button" data-time-window="30d">30D</button>
+      <button type="button" data-time-window="custom">Custom</button>
+    </div>
+  </div>
+  <div class="market-field-layout">
+    <div class="market-field-canvas" data-market-field-canvas>
+      {_render_market_field_nodes(state)}
+    </div>
+    {_render_selected_movement(state)}
+  </div>
+  <div class="hotspot-strip" aria-label="Market hotspots">{_render_market_field_hotspots(state)}</div>
+  <div class="market-support-grid">
+    {_render_action_layer(state)}
+    {_render_proof_drawer(state)}
+    <section id="evidence-lab" class="market-panel" aria-label="Evidence Lab">
+      <h2>Evidence Lab</h2>
+      <a href="#evidence-coverage">Inspect raw proof</a>
+    </section>
+    <section id="admin" class="market-panel" aria-label="Admin">
+      <h2>Admin</h2>
+      <a href="#evidence-coverage">Inspect run controls and diagnostics</a>
+    </section>
+  </div>
+</section>"""
+
+
 def render_cockpit_html(state: DashboardState) -> str:
     """Render the rebuilt CI-OS intelligence brief UI.
 
@@ -5248,6 +5546,8 @@ def render_cockpit_html(state: DashboardState) -> str:
     </header>
 
     <main>
+      {_render_market_field(state)}
+
       <section class="read-hero" id="today-read" aria-label="Today&apos;s competitive brief">
         <div class="read-main">
           <div>
