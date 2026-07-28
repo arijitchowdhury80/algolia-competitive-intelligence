@@ -113,6 +113,48 @@ def test_hermes_wrapper_enables_product_market_spine_by_default_and_publishes_sa
         tmp_path,
         """#!/bin/sh
 set -eu
+case "$1" in
+  *export_argus_recommendation_review_packet.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; mkdir -p "$(dirname "$1")"; printf '{"recommendation":{"recommendation_id":2,"owner":"PMM","action":"Turn Agent Studio into a narrative."},"evidence_summary":{}}' > "$1";;
+        --markdown-output) shift; mkdir -p "$(dirname "$1")"; printf '# Review Packet\n' > "$1";;
+      esac
+      shift
+    done
+    exit 0
+    ;;
+  *export_pilot_recommendation_work_artifact.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; mkdir -p "$(dirname "$1")"; printf '{"phase":"phase8_controlled_pilot","artifact_type":"named_team_recommendation_work_artifact","named_team":"Product Marketing","status":"draft_for_named_team_review","phase8_exit_evidence":false,"recommendation":{"recommendation_id":2,"owner":"PMM","action":"Turn Agent Studio into a narrative."},"work_product":{"title":"Agent Studio PMM Narrative Brief"},"next_required_action":"Product Marketing must use, reject, or amend this artifact."}' > "$1";;
+        --markdown-output) shift; mkdir -p "$(dirname "$1")"; printf '# Agent Studio PMM Narrative Brief\n' > "$1";;
+      esac
+      shift
+    done
+    exit 0
+    ;;
+  *publish_pilot_recommendation_work_artifact.py)
+    public_dir=""
+    output=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --public-dir) shift; public_dir="$1";;
+        --output) shift; output="$1";;
+      esac
+      shift
+    done
+    mkdir -p "$public_dir/data/phase8" "$public_dir/v2/data/phase8" "$(dirname "$output")"
+    printf '{"schema_version":1,"status":"published","phase8_exit_evidence":false,"items":[{"recommendation_id":2,"named_team":"Product Marketing","phase8_exit_evidence":false}]}' > "$public_dir/data/phase8/argus-phase8-work-artifacts.json"
+    cp "$public_dir/data/phase8/argus-phase8-work-artifacts.json" "$public_dir/v2/data/phase8/argus-phase8-work-artifacts.json"
+    printf '{"phase8_exit_evidence":false}' > "$public_dir/data/phase8/argus-pmm-narrative-brief.json"
+    cp "$public_dir/data/phase8/argus-pmm-narrative-brief.json" "$public_dir/v2/data/phase8/argus-pmm-narrative-brief.json"
+    printf '# Agent Studio PMM Narrative Brief\n' > "$public_dir/data/phase8/argus-pmm-narrative-brief.md"
+    cp "$public_dir/data/phase8/argus-pmm-narrative-brief.md" "$public_dir/v2/data/phase8/argus-pmm-narrative-brief.md"
+    printf '{"status":"published","phase8_exit_evidence":false}' > "$output"
+    exit 0
+    ;;
+esac
 OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
 printf "%s" "$CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE" > "$OUT/product-market-flag.txt"
 printf "%s" "$CIOS_SCOUT_BIN" > "$OUT/scout-bin.txt"
@@ -142,6 +184,12 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     old_release.mkdir()
     (old_release / "index.html").write_text("old cockpit", encoding="utf-8")
     (public_store / "current").symlink_to("releases/cios-old")
+    for script_name in (
+        "export_argus_recommendation_review_packet.py",
+        "export_pilot_recommendation_work_artifact.py",
+        "publish_pilot_recommendation_work_artifact.py",
+    ):
+        (app / "scripts" / script_name).write_text("", encoding="utf-8")
 
     result = _run_wrapper(app, public, env_file, {"CIOS_PUBLIC_STORE_DIR": str(public_store)})
 
@@ -169,6 +217,11 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert (public / "v2" / "data" / "argus-data-plane-manifest.json").read_text(encoding="utf-8") == (
         '{"schema_version":1,"status":"ready_for_operator_review"}'
     )
+    assert (public / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
+    assert (public / "v2" / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
+    assert json.loads((public / "data" / "phase8" / "argus-phase8-work-artifacts.json").read_text(encoding="utf-8"))[
+        "phase8_exit_evidence"
+    ] is False
     current_release = (public_store / "current").resolve()
     assert current_release.is_dir()
     assert current_release.parent == (public_store / "releases").resolve()
@@ -182,6 +235,7 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert (public_store / "latest-status.json").is_file()
     assert (public_store / "served" / "index.html").read_text(encoding="utf-8") == "current cockpit"
     assert (public_store / "served" / "publication-manifest.json").is_file()
+    assert (public_store / "served" / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
     assert not list(public.glob(".argus-publish.*"))
     assert not list(current_release.glob(".argus-publish.*"))
     assert not list((public_store / "served").glob(".argus-publish.*"))

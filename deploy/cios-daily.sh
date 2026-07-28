@@ -747,6 +747,35 @@ fi
 cp -R "$OUT/briefs" "$STAGE/briefs"
 cp -R "$OUT/briefs" "$STAGE/v2/briefs"
 
+if [ -f scripts/export_argus_recommendation_review_packet.py ] && \
+   [ -f scripts/export_pilot_recommendation_work_artifact.py ] && \
+   [ -f scripts/publish_pilot_recommendation_work_artifact.py ]; then
+  mkdir -p "$OUT/phase8"
+  set +e
+  .venv/bin/python scripts/export_argus_recommendation_review_packet.py \
+    --dashboard "$OUT/argus-dashboard.json" \
+    --output "$OUT/phase8/argus-recommendation-review-packet.json" \
+    --markdown-output "$OUT/phase8/argus-recommendation-review-packet.md" \
+    --reviewed-by "cios-wrapper"
+  phase8_review_code=$?
+  set -e
+  if [ "$phase8_review_code" -eq 0 ]; then
+    .venv/bin/python scripts/export_pilot_recommendation_work_artifact.py \
+      --review-packet "$OUT/phase8/argus-recommendation-review-packet.json" \
+      --output "$OUT/phase8/argus-pmm-narrative-brief.json" \
+      --markdown-output "$OUT/phase8/argus-pmm-narrative-brief.md" \
+      --generated-by "cios-wrapper"
+    .venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py \
+      --artifact-json "$OUT/phase8/argus-pmm-narrative-brief.json" \
+      --artifact-markdown "$OUT/phase8/argus-pmm-narrative-brief.md" \
+      --public-dir "$STAGE" \
+      --base-url "https://ci.chowmes.com" \
+      --output "$OUT/phase8/argus-pmm-narrative-brief-publication.json"
+  else
+    echo "Phase 8 PMM work artifact skipped; no current reviewable recommendation in this run" >&2
+  fi
+fi
+
 .venv/bin/python scripts/redact_public_artifacts.py \
   --public-dir "$STAGE" \
   --output "$OUT/public-artifact-redaction.json"
@@ -783,6 +812,11 @@ fi
 if [ -s "$STAGE/data/argus-demand-plan-amendment-candidates.csv" ]; then
   cp "$STAGE/data/argus-demand-plan-amendment-candidates.csv" "$PUB/data/argus-demand-plan-amendment-candidates.csv"
   cp "$STAGE/v2/data/argus-demand-plan-amendment-candidates.csv" "$PUB/v2/data/argus-demand-plan-amendment-candidates.csv"
+fi
+if [ -d "$STAGE/data/phase8" ]; then
+  rm -rf "$PUB/data/phase8" "$PUB/v2/data/phase8"
+  cp -R "$STAGE/data/phase8" "$PUB/data/phase8"
+  cp -R "$STAGE/v2/data/phase8" "$PUB/v2/data/phase8"
 fi
 rm -rf "$PUB/briefs" "$PUB/v2/briefs"
 cp -R "$STAGE/briefs" "$PUB/briefs"

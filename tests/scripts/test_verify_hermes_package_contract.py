@@ -139,6 +139,10 @@ if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
 fi
 STAGE="$PUB/.argus-publish.$$"
 mkdir -p "$STAGE"
+.venv/bin/python scripts/export_argus_recommendation_review_packet.py --dashboard "$OUT/argus-dashboard.json" --output "$OUT/phase8/argus-recommendation-review-packet.json" --markdown-output "$OUT/phase8/argus-recommendation-review-packet.md" --reviewed-by "cios-wrapper"
+.venv/bin/python scripts/export_pilot_recommendation_work_artifact.py --review-packet "$OUT/phase8/argus-recommendation-review-packet.json" --output "$OUT/phase8/argus-pmm-narrative-brief.json" --markdown-output "$OUT/phase8/argus-pmm-narrative-brief.md" --generated-by "cios-wrapper"
+.venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py --artifact-json "$OUT/phase8/argus-pmm-narrative-brief.json" --artifact-markdown "$OUT/phase8/argus-pmm-narrative-brief.md" --public-dir "$STAGE" --base-url "https://ci.chowmes.com" --output "$OUT/phase8/argus-pmm-narrative-brief-publication.json"
+cp -R "$STAGE/data/phase8" "$PUB/data/phase8"
 .venv/bin/python scripts/redact_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-redaction.json"
 .venv/bin/python scripts/scan_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-safety-scan.json"
 """
