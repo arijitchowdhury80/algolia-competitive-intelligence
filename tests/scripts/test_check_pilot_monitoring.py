@@ -33,9 +33,10 @@ def _public_status() -> dict:
         },
         "product_market_run": {
             "demand_signal_count": 101,
-            "recommendation_count": 1,
-            "signal_count": 3,
+            "pattern_count": 4,
+            "recommendation_count": 0,
         },
+        "next_monitoring_actions": ["repair failed source", "review demand debt"],
         "planes": {
             "audience_demand": {
                 "status": "processed_limited_plan_coverage",
@@ -101,10 +102,13 @@ def test_pilot_monitor_passes_with_visible_controlled_limitations() -> None:
     assert payload["checks"]["launch_readiness_passed"] is True
     assert payload["checks"]["source_failure_ratio_ok"] is True
     assert payload["checks"]["audience_demand_present"] is True
-    assert payload["checks"]["recommendation_or_signal_present"] is True
+    assert payload["checks"]["decision_activity_present"] is True
     assert payload["monitoring"]["source_coverage"]["failed_source_ratio"] == 0.0952
     assert payload["monitoring"]["audience_demand"]["planned_topic_coverage"] == "1/12"
+    assert payload["monitoring"]["recommendations"]["recommendation_count"] == 0
+    assert payload["monitoring"]["recommendations"]["pattern_count"] == 4
     assert payload["monitoring_debt"]
+    assert "no current recommendation in public run status" in payload["monitoring_debt"]
 
 
 def test_pilot_monitor_blocks_when_publication_is_not_current() -> None:
@@ -154,3 +158,51 @@ def test_pilot_monitor_cli_writes_json_and_exit_code(tmp_path) -> None:
     assert code == 0
     assert payload["status"] == "pass"
     assert payload["exit_code"] == 0
+
+
+def test_pilot_monitor_reads_top_level_demand_plan_coverage() -> None:
+    module = _load_module()
+    public_status = _public_status()
+    public_status["planes"]["audience_demand"].pop("demand_collection_plan")
+    public_status["demand_collection_plan"] = {
+        "coverage": {
+            "covered_topic_count": 1,
+            "planned_topic_count": 12,
+            "missing_topic_count": 11,
+        }
+    }
+
+    payload = module.evaluate_pilot_monitoring(
+        public_status=public_status,
+        launch_readiness=_launch_readiness(),
+        release_id="cios-pilot-algolia-20260728-2f7385f",
+        package_commit="2f7385f4afdcdd2af771e34d8e92bdc629a990fa",
+        max_failed_source_ratio=0.10,
+    )
+
+    assert payload["monitoring"]["audience_demand"]["planned_topic_coverage"] == "1/12"
+    assert "demand plan missing 11 of 12 planned topics" in payload["monitoring_debt"]
+
+
+def test_pilot_monitor_reads_demand_plan_coverage_from_summary() -> None:
+    module = _load_module()
+    public_status = _public_status()
+    public_status["planes"]["audience_demand"]["demand_collection_plan"] = {
+        "status": "partial_coverage",
+        "topic_count": 12,
+    }
+    public_status["planes"]["audience_demand"]["summary"] = (
+        "Tenant demand evidence is sufficient for the controlled pilot, but only covers "
+        "1 of 12 Argus-prioritized demand topics; missing topics remain monitoring debt."
+    )
+
+    payload = module.evaluate_pilot_monitoring(
+        public_status=public_status,
+        launch_readiness=_launch_readiness(),
+        release_id="cios-pilot-algolia-20260728-2f7385f",
+        package_commit="2f7385f4afdcdd2af771e34d8e92bdc629a990fa",
+        max_failed_source_ratio=0.10,
+    )
+
+    assert payload["monitoring"]["audience_demand"]["planned_topic_coverage"] == "1/12"
+    assert payload["monitoring"]["audience_demand"]["missing_topic_count"] == 11

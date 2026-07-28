@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -24,8 +25,10 @@ def _dict_value(value: Any) -> dict[str, Any]:
 
 
 def _int_value(value: Any, default: int = 0) -> int:
+    if value is None or value == "":
+        return default
     try:
-        return int(value or 0)
+        return int(value)
     except (TypeError, ValueError):
         return default
 
@@ -44,14 +47,22 @@ def _plane(public_status: Mapping[str, Any], name: str) -> dict[str, Any]:
     return _dict_value(_dict_value(public_status.get("planes")).get(name))
 
 
-def _demand_plan_coverage(demand: Mapping[str, Any]) -> tuple[int, int, int]:
+def _demand_plan_coverage(public_status: Mapping[str, Any], demand: Mapping[str, Any]) -> tuple[int, int, int]:
     plan = _dict_value(demand.get("demand_collection_plan"))
+    if not plan:
+        plan = _dict_value(public_status.get("demand_collection_plan"))
     coverage = _dict_value(plan.get("coverage"))
-    return (
-        _int_value(coverage.get("covered_topic_count")),
-        _int_value(coverage.get("planned_topic_count")),
-        _int_value(coverage.get("missing_topic_count")),
-    )
+    covered = _int_value(coverage.get("covered_topic_count"))
+    planned = _int_value(coverage.get("planned_topic_count"), _int_value(plan.get("topic_count")))
+    missing = _int_value(coverage.get("missing_topic_count"))
+    if not covered and planned and not missing:
+        summary = str(demand.get("summary") or "")
+        match = re.search(r"covers\s+(\d+)\s+of\s+(\d+)", summary, flags=re.IGNORECASE)
+        if match:
+            covered = _int_value(match.group(1))
+            planned = _int_value(match.group(2), planned)
+            missing = max(planned - covered, 0)
+    return (covered, planned, missing)
 
 
 def evaluate_pilot_monitoring(
@@ -73,13 +84,14 @@ def evaluate_pilot_monitoring(
     run = _dict_value(public_status.get("product_market_run"))
     demand = _plane(public_status, "audience_demand")
     product = _plane(public_status, "product_reality")
-    covered_topics, planned_topics, missing_topics = _demand_plan_coverage(demand)
+    covered_topics, planned_topics, missing_topics = _demand_plan_coverage(public_status, demand)
     demand_signal_count = _int_value(
         _dict_value(demand.get("counts")).get("demand_signal_count"),
         _int_value(run.get("demand_signal_count")),
     )
     recommendation_count = _int_value(run.get("recommendation_count"))
-    signal_count = _int_value(run.get("signal_count"), recommendation_count)
+    pattern_count = _int_value(run.get("pattern_count"))
+    next_monitoring_action_count = len(public_status.get("next_monitoring_actions") or [])
     product_event_count = _int_value(_dict_value(product.get("counts")).get("product_event_count"))
 
     publication_current = (
@@ -94,7 +106,7 @@ def evaluate_pilot_monitoring(
         "source_failure_ratio_ok": failed_source_ratio <= max_failed_source_ratio,
         "audience_demand_present": demand_signal_count > 0 and not bool(demand.get("blocks_action")),
         "product_reality_present": product_event_count > 0 and not bool(product.get("blocks_action")),
-        "recommendation_or_signal_present": recommendation_count > 0 or signal_count > 0,
+        "decision_activity_present": recommendation_count > 0 or pattern_count > 0 or next_monitoring_action_count > 0,
     }
 
     blockers: list[dict[str, str]] = []
@@ -146,12 +158,15 @@ def evaluate_pilot_monitoring(
                 "Refresh Scout-backed product evidence before release monitoring starts.",
             )
         )
-    if not checks["recommendation_or_signal_present"]:
+    if not checks["decision_activity_present"]:
         blockers.append(
             _blocker(
-                "recommendation_or_signal_present",
-                f"recommendation_count={recommendation_count} signal_count={signal_count}",
-                "Run Argus synthesis until the pilot has at least one decision signal or recommendation.",
+                "decision_activity_present",
+                (
+                    f"recommendation_count={recommendation_count} pattern_count={pattern_count} "
+                    f"next_monitoring_action_count={next_monitoring_action_count}"
+                ),
+                "Run Argus synthesis until the pilot has a recommendation, pattern, or next monitoring action.",
             )
         )
 
@@ -165,6 +180,8 @@ def evaluate_pilot_monitoring(
     product_failed = _int_value(_dict_value(product.get("counts")).get("product_surface_failed_count"))
     if product_failed:
         monitoring_debt.append(f"{product_failed} product-surface captures failed")
+    if recommendation_count <= 0:
+        monitoring_debt.append("no current recommendation in public run status")
 
     status = "pass" if not blockers else "fail"
     return {
@@ -207,7 +224,8 @@ def evaluate_pilot_monitoring(
             },
             "recommendations": {
                 "recommendation_count": recommendation_count,
-                "signal_count": signal_count,
+                "pattern_count": pattern_count,
+                "next_monitoring_action_count": next_monitoring_action_count,
             },
         },
         "monitoring_debt": monitoring_debt,
