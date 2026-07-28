@@ -85,6 +85,11 @@ def _float(value: Any) -> float:
         return 0.0
 
 
+def _metric_text(value: Any) -> str:
+    number = _float(value)
+    return str(int(number)) if number.is_integer() else str(number)
+
+
 def _split_list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -297,6 +302,41 @@ def evaluate_off_plan(rows: list[MetricRow]) -> list[dict[str, Any]]:
     return sorted(opportunities, key=lambda item: item["current_sessions"], reverse=True)
 
 
+def build_plan_amendment_candidates(off_plan: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for row in off_plan:
+        if row.get("status") not in {"action_grade", "action_grade_limited"}:
+            continue
+        current_rows = row.get("current_rows") if isinstance(row.get("current_rows"), list) else []
+        previous_rows = row.get("previous_rows") if isinstance(row.get("previous_rows"), list) else []
+        evidence_dimensions = [
+            str(item.get("dimension") or "")
+            for item in [*current_rows[:4], *previous_rows[:4]]
+            if isinstance(item, dict) and item.get("dimension")
+        ]
+        candidates.append(
+            {
+                "topic": row["topic"],
+                "capability_key": _norm(row["capability_key"]),
+                "assessment": "demand_plan_amendment",
+                "suggested_filters": row["terms"],
+                "related_competitors": [],
+                "why_collect": (
+                    f"Off-plan Looker movement is action-grade for {row['topic']}: "
+                    f"{row['current_sessions']} current sessions versus {row['previous_sessions']} previous "
+                    f"sessions, change_pct={row['change_pct']}. Amend the Argus plan only if Product or "
+                    "Conversation evidence should now track this theme."
+                ),
+                "evidence_urls": evidence_dimensions,
+                "current_sessions": row["current_sessions"],
+                "previous_sessions": row["previous_sessions"],
+                "change_pct": row["change_pct"],
+                "comparison_quality": row["comparison_quality"],
+            }
+        )
+    return candidates
+
+
 def build_report(*, plan_path: Path, data_dir: Path, generated_at: str | None = None) -> dict[str, Any]:
     plan = load_plan(plan_path)
     rows = load_metric_rows(data_dir)
@@ -304,6 +344,8 @@ def build_report(*, plan_path: Path, data_dir: Path, generated_at: str | None = 
     action_grade_topics = [row for row in topic_results if row["action_grade"]]
     limited_topics = [row for row in topic_results if row["status"] == "action_grade_limited"]
     status = "passed" if action_grade_topics else "blocked_no_action_grade_planned_demand"
+    off_plan = evaluate_off_plan(rows)
+    amendment_candidates = build_plan_amendment_candidates(off_plan)
     return {
         "schema_version": 1,
         "generated_at": generated_at or _now(),
@@ -328,7 +370,8 @@ def build_report(*, plan_path: Path, data_dir: Path, generated_at: str | None = 
         "topics": topic_results,
         "action_grade_topics": action_grade_topics,
         "limited_action_grade_topics": limited_topics,
-        "off_plan_opportunities": evaluate_off_plan(rows),
+        "off_plan_opportunities": off_plan,
+        "plan_amendment_candidates": amendment_candidates,
     }
 
 
@@ -376,12 +419,55 @@ def write_prepared_csv(topic_results: list[dict[str, Any]], output: Path) -> Non
             )
 
 
+def write_plan_amendment_csv(candidates: list[dict[str, Any]], output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fields = [
+        "Page title",
+        "Page path",
+        "Engaged sessions",
+        "Engaged sessions previous period",
+        "Period start",
+        "Period end",
+        "Looker Studio URL",
+        "Argus topic",
+        "Capability key",
+        "Assessment",
+        "Suggested filters",
+        "Related competitors",
+        "Why collect",
+        "Evidence URLs",
+    ]
+    with output.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for row in candidates:
+            writer.writerow(
+                {
+                    "Page title": "",
+                    "Page path": "",
+                    "Engaged sessions": _metric_text(row["current_sessions"]),
+                    "Engaged sessions previous period": _metric_text(row["previous_sessions"]),
+                    "Period start": f"{CURRENT_START}T00:00:00+00:00",
+                    "Period end": f"{CURRENT_END}T23:59:59+00:00",
+                    "Looker Studio URL": "https://datastudio.google.com/",
+                    "Argus topic": row["topic"],
+                    "Capability key": row["capability_key"],
+                    "Assessment": row["assessment"],
+                    "Suggested filters": " | ".join(row["suggested_filters"]),
+                    "Related competitors": " | ".join(row["related_competitors"]),
+                    "Why collect": row["why_collect"],
+                    "Evidence URLs": " | ".join(row["evidence_urls"]),
+                }
+            )
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate Looker exports against the active Argus demand plan.")
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepared-output", type=Path)
+    parser.add_argument("--amendment-output", type=Path)
     return parser.parse_args(argv)
 
 
@@ -391,6 +477,8 @@ def main(argv: list[str] | None = None) -> int:
     write_json(report, args.output)
     if args.prepared_output is not None:
         write_prepared_csv(report["action_grade_topics"], args.prepared_output)
+    if args.amendment_output is not None:
+        write_plan_amendment_csv(report["plan_amendment_candidates"], args.amendment_output)
     return 0 if report["phase4_gate_passed"] else 2
 
 
