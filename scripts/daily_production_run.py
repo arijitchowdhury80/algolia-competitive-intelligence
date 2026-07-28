@@ -1514,6 +1514,7 @@ def run_product_market_chain_if_enabled(
     python_bin = env.get("CIOS_PRODUCT_MARKET_PYTHON_BIN") or sys.executable
     command_timeout = float(env.get("CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS", "240"))
     surface_timeout = env.get("CIOS_PRODUCT_MARKET_SURFACE_TIMEOUT_SECONDS", "120")
+    surface_export_stage_timeout = float(env.get("CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS", "900"))
     provider = env.get("CIOS_PRODUCT_MARKET_PROVIDER", "ollama/llama3.2:3b")
     scout_bin = env.get("CIOS_SCOUT_BIN", "scout")
     own_company_name = env.get("CIOS_PRODUCT_MARKET_OWN_COMPANY_NAME") or slug.title()
@@ -1636,7 +1637,7 @@ def run_product_market_chain_if_enabled(
         _run_product_market_stage(
             slug=slug,
             stage="product_surface_export",
-            action=lambda: _run_checked(execute_cmd, timeout_seconds=command_timeout),
+            action=lambda: _run_checked(execute_cmd, timeout_seconds=surface_export_stage_timeout),
             stage_ledger=stage_ledger,
         )
     except Exception as exc:

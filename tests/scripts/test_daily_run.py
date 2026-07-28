@@ -1408,6 +1408,7 @@ def test_current_sweep_deltas_infer_capability_theme_from_statement_before_gener
 
 def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tmp_path, monkeypatch):
     calls = []
+    timeouts_by_script = {}
     scout_path = tmp_path / "surface-exports" / "000011-constructor-changelog.json"
     looker_path = tmp_path / "looker.csv"
     looker_path.write_text(
@@ -1417,9 +1418,10 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     )
 
     def fake_run(cmd, capture_output, text, timeout, check):
-        del capture_output, text, timeout, check
+        del capture_output, text, check
         calls.append(cmd)
         script_name = Path(cmd[1]).name
+        timeouts_by_script[script_name] = timeout
         if script_name == "build_next_sweep_learning_plan.py":
             plan_output = Path(cmd[cmd.index("--output") + 1])
             plan_output.parent.mkdir(parents=True, exist_ok=True)
@@ -1573,6 +1575,8 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
             "CIOS_PRODUCT_MARKET_USE_JS": "1",
             "CIOS_PRODUCT_MARKET_LOOKER_EXPORTS": str(looker_path),
             "CIOS_PRODUCT_MARKET_EXPORT_MAX_WORKERS": "4",
+            "CIOS_PRODUCT_MARKET_COMMAND_TIMEOUT_SECONDS": "240",
+            "CIOS_PRODUCT_MARKET_EXPORT_STAGE_TIMEOUT_SECONDS": "900",
             "CIOS_PRODUCT_MARKET_DEMAND_CHANGE_FLOOR": "0.03",
             "CIOS_PRODUCT_MARKET_DEMAND_VALUE_FLOOR": "25",
         },
@@ -1669,6 +1673,8 @@ def test_product_market_chain_runs_plan_execute_payload_and_runner(daily_run, tm
     assert "--approved-by" not in learning_execute_call
     assert plan_call[plan_call.index("--learning-plan") + 1].endswith("next-sweep-learning-plan.json")
     assert execute_call[execute_call.index("--max-workers") + 1] == "4"
+    assert timeouts_by_script["execute_product_surface_plan.py"] == 900.0
+    assert timeouts_by_script["plan_product_surface_exports.py"] == 240.0
     assert payload_call[payload_call.index("--scout") + 1] == str(scout_path)
     payload_looker_path = Path(payload_call[payload_call.index("--looker") + 1])
     assert payload_looker_path.name == "looker.normalized.json"
