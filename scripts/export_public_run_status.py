@@ -109,7 +109,42 @@ def _product_market_run(dashboard: Mapping[str, Any]) -> dict[str, Any]:
                 continue
         else:
             payload[field] = value
+    current_recommendations = _public_current_recommendations(dashboard.get("argus_recommendations"))
+    if current_recommendations:
+        payload["recommendation_count"] = max(
+            int(payload.get("recommendation_count") or 0),
+            len(current_recommendations),
+        )
     return payload
+
+
+def _public_current_recommendations(recommendations: Any, *, limit: int = 8) -> list[dict[str, Any]]:
+    public: list[dict[str, Any]] = []
+    for item in _list_value(recommendations):
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "open").strip().lower()
+        if status != "open":
+            continue
+        row: dict[str, Any] = {}
+        for field in ("recommendation_id", "owner", "action", "why_now", "urgency", "confidence", "status"):
+            value = item.get(field)
+            if value in (None, "", []):
+                continue
+            row[field] = value
+        evidence_url_count = 0
+        for evidence in _list_value(item.get("evidence_refs")):
+            if not isinstance(evidence, dict):
+                continue
+            url = str(evidence.get("source_url") or "").strip()
+            if url.startswith(("http://", "https://")):
+                evidence_url_count += 1
+        row["evidence_url_count"] = evidence_url_count
+        if row.get("action"):
+            public.append(row)
+        if len(public) >= limit:
+            break
+    return public
 
 
 def _public_demand_plan_topics(topics: Any, *, limit: int = 5) -> list[dict[str, Any]]:
@@ -367,6 +402,7 @@ def build_public_run_status_payload(
     next_monitoring_actions = _public_next_monitoring_actions(
         manifest.get("next_monitoring_actions")
     )
+    current_recommendations = _public_current_recommendations(dashboard.get("argus_recommendations"))
     planes = _public_planes(manifest)
     payload = {
         "schema_version": 1,
@@ -395,6 +431,8 @@ def build_public_run_status_payload(
             payload[key] = value
     if next_monitoring_actions:
         payload["next_monitoring_actions"] = next_monitoring_actions
+    if current_recommendations:
+        payload["current_recommendations"] = current_recommendations
     return {key: value for key, value in payload.items() if value not in (None, "", {})}
 
 

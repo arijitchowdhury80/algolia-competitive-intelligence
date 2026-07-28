@@ -623,3 +623,69 @@ def test_public_run_status_exposes_sanitized_next_monitoring_actions() -> None:
     assert "/root/" not in serialized
     assert "internal_artifact_path" not in serialized
     assert "constructor.com" not in serialized
+
+
+def test_public_run_status_counts_current_open_argus_recommendations_when_run_summary_is_stale() -> None:
+    module = _load_module()
+
+    payload = module.build_public_run_status_payload(
+        tenant_slug="algolia",
+        manifest={"status": "limited_by_evidence", "planes": {}, "blockers": []},
+        dashboard={
+            "product_market_run": {
+                "status": "ran",
+                "product_event_count": 500,
+                "conversation_theme_count": 500,
+                "demand_signal_count": 101,
+                "pattern_count": 4,
+                "recommendation_count": 0,
+            },
+            "argus_recommendations": [
+                {
+                    "recommendation_id": 2,
+                    "owner": "PMM",
+                    "action": "Turn Agent Studio into an evidence-backed market narrative.",
+                    "why_now": "Product reality and audience demand align.",
+                    "urgency": "this_week",
+                    "confidence": 0.68,
+                    "status": "open",
+                    "evidence_refs": [
+                        {
+                            "source_url": "https://www.algolia.com/products/ai-search/",
+                            "excerpt": "Agent Studio Create, test, and deploy AI agents, quickly.",
+                        },
+                        {
+                            "source_url": "file:///tmp/private.csv",
+                            "excerpt": "Private local path must not leak.",
+                        },
+                    ],
+                    "debug_path": "/opt/cios/private.json",
+                },
+                {
+                    "recommendation_id": 3,
+                    "owner": "Sales",
+                    "action": "A closed recommendation should not count as current.",
+                    "status": "dismissed",
+                },
+            ],
+        },
+        publish_status="published",
+        generated_at="2026-07-28T14:45:00Z",
+    )
+
+    assert payload["product_market_run"]["recommendation_count"] == 1
+    assert payload["current_recommendations"] == [
+        {
+            "recommendation_id": 2,
+            "owner": "PMM",
+            "action": "Turn Agent Studio into an evidence-backed market narrative.",
+            "why_now": "Product reality and audience demand align.",
+            "urgency": "this_week",
+            "confidence": 0.68,
+            "status": "open",
+            "evidence_url_count": 1,
+        }
+    ]
+    serialized = json.dumps(payload, sort_keys=True)
+    assert "/opt/cios" not in serialized
+    assert "file:///tmp/private.csv" not in serialized

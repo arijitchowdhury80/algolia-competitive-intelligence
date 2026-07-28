@@ -100,6 +100,20 @@ def _product_market_run(payload: dict[str, Any]) -> dict[str, Any]:
     return product_market_run if isinstance(product_market_run, dict) else {}
 
 
+def _current_open_recommendation(payload: dict[str, Any]) -> dict[str, Any]:
+    recommendations = payload.get("argus_recommendations")
+    if not isinstance(recommendations, list):
+        return {}
+    for recommendation in recommendations:
+        if not isinstance(recommendation, dict):
+            continue
+        if str(recommendation.get("status") or "open").strip().lower() != "open":
+            continue
+        if str(recommendation.get("action") or "").strip():
+            return recommendation
+    return {}
+
+
 def _trace(brief: dict[str, Any]) -> dict[str, Any]:
     trace = brief.get("demand_recommendation_trace") or {}
     return trace if isinstance(trace, dict) else {}
@@ -149,9 +163,18 @@ def build_review_packet(
     product_market_run = _product_market_run(payload)
     brief = _brief(payload)
     trace = _trace(brief)
+    current_recommendation = _current_open_recommendation(payload)
     topics = _demand_topics(trace)
-    primary_action = str(brief.get("primary_action") or "").strip()
-    top_insight = str(brief.get("top_insight") or "").strip()
+    primary_action = str(brief.get("primary_action") or current_recommendation.get("action") or "").strip()
+    scorecard = current_recommendation.get("scorecard") if current_recommendation else {}
+    if not isinstance(scorecard, dict):
+        scorecard = {}
+    top_insight = str(
+        brief.get("top_insight")
+        or current_recommendation.get("why_now")
+        or scorecard.get("summary")
+        or ""
+    ).strip()
     if not primary_action:
         raise ValueError("dashboard intelligence brief has no primary_action")
 
@@ -161,6 +184,12 @@ def build_review_packet(
     confidence_limits = [item for item in confidence_limits if isinstance(item, str) and item.strip()]
 
     evidence_urls = _public_urls(trace.get("evidence_urls"))
+    for evidence in current_recommendation.get("evidence_refs") or []:
+        if not isinstance(evidence, dict):
+            continue
+        url = str(evidence.get("source_url") or "").strip()
+        if url.startswith(("http://", "https://")) and url not in evidence_urls:
+            evidence_urls.append(url)
     for topic in topics:
         for key in ("evidence_urls", "linked_evidence_urls"):
             for url in topic.get(key, []):
@@ -175,12 +204,27 @@ def build_review_packet(
         "reviewed_by": reviewed_by,
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
         "recommendation": {
+            **(
+                {
+                    "recommendation_id": current_recommendation.get("recommendation_id"),
+                    "owner": current_recommendation.get("owner"),
+                    "urgency": current_recommendation.get("urgency"),
+                    "confidence": current_recommendation.get("confidence"),
+                    "scorecard": current_recommendation.get("scorecard"),
+                }
+                if current_recommendation
+                else {}
+            ),
             "action": primary_action,
             "top_insight": top_insight,
-            "trace_status": trace.get("status"),
+            "trace_status": trace.get("status") or ("current_open_recommendation" if current_recommendation else None),
         },
         "evidence_summary": {
-            "recommendation_count": product_market_run.get("recommendation_count", trace.get("recommendation_count")),
+            "recommendation_count": max(
+                int(product_market_run.get("recommendation_count") or 0),
+                int(trace.get("recommendation_count") or 0),
+                1 if current_recommendation else 0,
+            ),
             "pattern_count": product_market_run.get("pattern_count", trace.get("pattern_count")),
             "demand_signal_count": product_market_run.get("demand_signal_count", trace.get("demand_signal_count")),
             "rising_demand_topic_count": trace.get("rising_demand_topic_count"),

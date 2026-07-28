@@ -107,3 +107,68 @@ def test_export_packet_writes_json_and_markdown(tmp_path) -> None:
     assert "Phase 5 Argus Recommendation Review" in markdown
     assert "Turn Agent Studio into an evidence-backed market narrative." in markdown
     assert "Learning Effect" in markdown
+
+
+def test_export_packet_falls_back_to_current_open_recommendation_when_primary_action_is_empty(tmp_path) -> None:
+    module = _load_module()
+    dashboard = tmp_path / "dashboard.json"
+    dashboard.write_text(
+        json.dumps(
+            {
+                "product_market_run": {
+                    "recommendation_count": 0,
+                    "pattern_count": 4,
+                    "demand_signal_count": 101,
+                    "intelligence_brief": {
+                        "top_insight": "Historical spine is stale and still says to watch.",
+                        "primary_action": None,
+                        "confidence_limits": ["Recommendation count was stale in the run summary."],
+                    },
+                },
+                "argus_recommendations": [
+                    {
+                        "recommendation_id": 2,
+                        "owner": "PMM",
+                        "action": "Turn Agent Studio into an evidence-backed market narrative before the demand window cools.",
+                        "why_now": "Product reality and audience demand align, but the captured conversation does not yet explain the capability.",
+                        "urgency": "this_week",
+                        "confidence": 0.68,
+                        "status": "open",
+                        "scorecard": {
+                            "total_score": 66,
+                            "verdict": "actionable",
+                            "summary": "Own product proof and audience demand align.",
+                        },
+                        "evidence_refs": [
+                            {
+                                "source_url": "https://www.algolia.com/products/ai-search/",
+                                "excerpt": "Agent Studio Create, test, and deploy AI agents, quickly.",
+                            },
+                            {
+                                "source_url": "https://datastudio.google.com/",
+                                "excerpt": "Current sessions: 1619.0; previous sessions: 751.0.",
+                            },
+                            {
+                                "source_url": "file:///tmp/private.csv",
+                                "excerpt": "This local path must not leak.",
+                            },
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    packet = module.build_review_packet(dashboard, reviewed_by="codex")
+
+    assert packet["recommendation"]["action"].startswith("Turn Agent Studio")
+    assert packet["recommendation"]["recommendation_id"] == 2
+    assert packet["recommendation"]["owner"] == "PMM"
+    assert packet["recommendation"]["trace_status"] == "current_open_recommendation"
+    assert packet["evidence_summary"]["recommendation_count"] == 1
+    assert packet["evidence_summary"]["evidence_urls"] == [
+        "https://www.algolia.com/products/ai-search/",
+        "https://datastudio.google.com/",
+    ]
+    assert "/tmp/private.csv" not in json.dumps(packet)
