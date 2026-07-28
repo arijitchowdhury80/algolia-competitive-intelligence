@@ -166,6 +166,7 @@ def test_export_packet_falls_back_to_current_open_recommendation_when_primary_ac
     assert packet["recommendation"]["recommendation_id"] == 2
     assert packet["recommendation"]["owner"] == "PMM"
     assert packet["recommendation"]["trace_status"] == "current_open_recommendation"
+    assert packet["recommendation"]["top_insight"].startswith("Product reality and audience demand align")
     assert packet["evidence_summary"]["recommendation_count"] == 1
     assert packet["evidence_summary"]["evidence_urls"] == [
         "https://www.algolia.com/products/ai-search/",

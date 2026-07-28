@@ -165,16 +165,19 @@ def build_review_packet(
     trace = _trace(brief)
     current_recommendation = _current_open_recommendation(payload)
     topics = _demand_topics(trace)
-    primary_action = str(brief.get("primary_action") or current_recommendation.get("action") or "").strip()
+    brief_primary_action = str(brief.get("primary_action") or "").strip()
+    recommendation_action = str(current_recommendation.get("action") or "").strip()
+    primary_action = brief_primary_action or recommendation_action
+    action_source = "brief" if brief_primary_action else "current_recommendation" if recommendation_action else None
     scorecard = current_recommendation.get("scorecard") if current_recommendation else {}
     if not isinstance(scorecard, dict):
         scorecard = {}
-    top_insight = str(
-        brief.get("top_insight")
-        or current_recommendation.get("why_now")
-        or scorecard.get("summary")
-        or ""
-    ).strip()
+    top_insight_candidates = (
+        (current_recommendation.get("why_now"), scorecard.get("summary"), brief.get("top_insight"))
+        if action_source == "current_recommendation"
+        else (brief.get("top_insight"), current_recommendation.get("why_now"), scorecard.get("summary"))
+    )
+    top_insight = str(next((candidate for candidate in top_insight_candidates if candidate), "")).strip()
     if not primary_action:
         raise ValueError("dashboard intelligence brief has no primary_action")
 
@@ -217,7 +220,11 @@ def build_review_packet(
             ),
             "action": primary_action,
             "top_insight": top_insight,
-            "trace_status": trace.get("status") or ("current_open_recommendation" if current_recommendation else None),
+            "trace_status": (
+                "current_open_recommendation"
+                if action_source == "current_recommendation"
+                else trace.get("status")
+            ),
         },
         "evidence_summary": {
             "recommendation_count": max(
