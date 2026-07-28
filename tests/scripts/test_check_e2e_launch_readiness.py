@@ -235,6 +235,27 @@ def test_launch_readiness_accepts_controlled_pilot_limited_demand_status() -> No
     assert result["status"] == "pass"
 
 
+def test_launch_readiness_accepts_monitored_pilot_limited_by_evidence_public_status() -> None:
+    module = _load_module()
+    status = _published_status()
+    status["status"] = "limited_by_evidence"
+    status["next_hermes_action"] = "review_limited_evidence_queue"
+
+    result = module.evaluate_launch_readiness(
+        public_status=status,
+        click_validation_log="PASS dashboard_click_validation\n",
+        package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
+    )
+
+    assert result["checks"]["public_status_publishable"] is True
+    assert result["status"] == "pass"
+    assert result["public_status"]["status"] == "limited_by_evidence"
+    assert result["next_action"] == "review_limited_evidence_queue"
+
+
 def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> None:
     module = _load_module()
     status_path = tmp_path / "argus-latest-run-status.json"

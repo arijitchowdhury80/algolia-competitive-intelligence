@@ -51,7 +51,7 @@ def _int_value(value: Any, default: int = 0) -> int:
 def _public_status_publishable(public_status: Mapping[str, Any]) -> bool:
     return (
         public_status.get("publish_status") == "published"
-        and public_status.get("status") == "published"
+        and public_status.get("status") in {"published", "limited_by_evidence"}
         and public_status.get("public_dashboard_updated") is True
     )
 
