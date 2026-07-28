@@ -48,6 +48,7 @@ REQUIRED_FILES = [
     "scripts/attach_operator_handoff_to_dashboard.py",
     "scripts/export_argus_recommendation_review_packet.py",
     "scripts/record_pilot_recommendation_disposition.py",
+    "scripts/export_pilot_recommendation_work_artifact.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
     "scripts/build_phase0_release_record.py",
