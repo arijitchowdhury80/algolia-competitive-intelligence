@@ -321,6 +321,36 @@ kill_process_tree_force() {
   kill -KILL "$root_pid" 2>/dev/null || true
 }
 
+ACTIVE_DAILY_PID=""
+ACTIVE_DAILY_PGID=""
+ACTIVE_WATCHDOG_PID=""
+
+cleanup_active_daily() {
+  if [ -n "$ACTIVE_WATCHDOG_PID" ]; then
+    kill_process_tree "$ACTIVE_WATCHDOG_PID"
+    wait "$ACTIVE_WATCHDOG_PID" 2>/dev/null || true
+    ACTIVE_WATCHDOG_PID=""
+  fi
+  if [ -n "$ACTIVE_DAILY_PID" ] && kill -0 "$ACTIVE_DAILY_PID" 2>/dev/null; then
+    if [ -n "$ACTIVE_DAILY_PGID" ]; then
+      kill -TERM "-$ACTIVE_DAILY_PGID" 2>/dev/null || true
+    fi
+    kill_process_tree "$ACTIVE_DAILY_PID"
+    sleep 2
+    if kill -0 "$ACTIVE_DAILY_PID" 2>/dev/null; then
+      if [ -n "$ACTIVE_DAILY_PGID" ]; then
+        kill -KILL "-$ACTIVE_DAILY_PGID" 2>/dev/null || true
+      fi
+      kill_process_tree_force "$ACTIVE_DAILY_PID"
+    fi
+  fi
+  ACTIVE_DAILY_PID=""
+  ACTIVE_DAILY_PGID=""
+}
+
+trap 'cleanup_active_daily' EXIT
+trap 'cleanup_active_daily; exit 130' INT HUP TERM
+
 run_daily_production_with_timeout() {
   timeout_seconds="$1"
   timeout_flag="$OUT/.daily-production-timeout"
@@ -334,6 +364,8 @@ run_daily_production_with_timeout() {
     .venv/bin/python scripts/daily_production_run.py &
     daily_pid="$!"
   fi
+  ACTIVE_DAILY_PID="$daily_pid"
+  ACTIVE_DAILY_PGID="$daily_pgid"
   if [ "$timeout_seconds" -gt 0 ]; then
     (
       sleep "$timeout_seconds"
@@ -354,8 +386,10 @@ run_daily_production_with_timeout() {
       fi
     ) >/dev/null 2>&1 &
     watchdog_pid="$!"
+    ACTIVE_WATCHDOG_PID="$watchdog_pid"
   else
     watchdog_pid=""
+    ACTIVE_WATCHDOG_PID=""
   fi
   wait "$daily_pid"
   daily_code="$?"
@@ -363,6 +397,9 @@ run_daily_production_with_timeout() {
     kill_process_tree "$watchdog_pid"
     wait "$watchdog_pid" 2>/dev/null || true
   fi
+  ACTIVE_DAILY_PID=""
+  ACTIVE_DAILY_PGID=""
+  ACTIVE_WATCHDOG_PID=""
   if [ -f "$timeout_flag" ]; then
     rm -f "$timeout_flag"
     echo "daily production runner timed out after ${timeout_seconds}s" >&2

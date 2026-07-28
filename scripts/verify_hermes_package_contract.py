@@ -137,6 +137,7 @@ WRAPPER_INVARIANTS = {
     "wrapper missing Phase 8 PMM disposition request output": "argus-pmm-disposition-request.json",
     "wrapper missing Phase 8 staged public promotion": "$STAGE/data/phase8",
     "wrapper missing daily-run timeout guard": "CIOS_DAILY_RUN_TIMEOUT_SECONDS",
+    "wrapper missing daily-run interrupt cleanup": "cleanup_active_daily",
     "wrapper missing app-owned product-market workdir": 'CIOS_PRODUCT_MARKET_WORKDIR:-$APP/tmp/product-market',
     "wrapper missing app-user runner handoff switch": "CIOS_RUNNER_HANDOFF",
     "wrapper missing app-user runner request queue": ".request",

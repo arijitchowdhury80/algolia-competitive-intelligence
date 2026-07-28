@@ -55,6 +55,68 @@ def _run_wrapper(
     )
 
 
+def test_hermes_wrapper_cleans_daily_runner_when_interrupted(tmp_path):
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        """#!/bin/sh
+set -eu
+OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
+case "$1" in
+  *verify_hermes_package_contract.py|*audit_learning_policies.py|*apply_product_market_schema.py)
+    exit 0
+    ;;
+  *daily_production_run.py)
+    printf "%s" "$$" > "$OUT/daily.pid"
+    sleep 30
+    printf "daily-finished" > "$OUT/daily.finished"
+    ;;
+  *)
+    echo "unexpected python target: $1" >&2
+    exit 97
+    ;;
+esac
+""",
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "CIOS_APP_DIR": str(app),
+            "CIOS_PUBLIC_DIR": str(public),
+            "CIOS_ENV_FILE": str(env_file),
+            "CIOS_DAILY_RUN_TIMEOUT_SECONDS": "60",
+        }
+    )
+    proc = subprocess.Popen(
+        ["sh", str(WRAPPER)],
+        cwd=str(ROOT),
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    pid_file = app / "out" / "daily.pid"
+    for _ in range(50):
+        if pid_file.exists():
+            break
+        import time
+
+        time.sleep(0.1)
+    assert pid_file.exists()
+    daily_pid = int(pid_file.read_text(encoding="utf-8"))
+
+    proc.terminate()
+    stdout, stderr = proc.communicate(timeout=10)
+
+    assert proc.returncode == 130, stderr + stdout
+    assert not (app / "out" / "daily.finished").exists()
+    try:
+        os.kill(daily_pid, 0)
+    except ProcessLookupError:
+        pass
+    else:
+        raise AssertionError(f"daily runner survived wrapper termination: pid={daily_pid}")
+
+
 def test_hermes_wrapper_hands_off_to_app_user_runner_when_enabled(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,
