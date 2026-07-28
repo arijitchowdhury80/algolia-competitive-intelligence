@@ -251,17 +251,31 @@ run_daily_production_with_timeout() {
   timeout_seconds="$1"
   timeout_flag="$OUT/.daily-production-timeout"
   rm -f "$timeout_flag"
-  .venv/bin/python scripts/daily_production_run.py &
-  daily_pid="$!"
+  daily_pgid=""
+  if command -v setsid >/dev/null 2>&1; then
+    setsid .venv/bin/python scripts/daily_production_run.py &
+    daily_pid="$!"
+    daily_pgid="$daily_pid"
+  else
+    .venv/bin/python scripts/daily_production_run.py &
+    daily_pid="$!"
+  fi
   if [ "$timeout_seconds" -gt 0 ]; then
     (
       sleep "$timeout_seconds"
       if kill -0 "$daily_pid" 2>/dev/null; then
         printf "1" > "$timeout_flag"
+        if [ -n "$daily_pgid" ]; then
+          kill -TERM "-$daily_pgid" 2>/dev/null || true
+        fi
         kill_process_tree "$daily_pid"
         sleep 2
+        if [ -n "$daily_pgid" ]; then
+          kill -KILL "-$daily_pgid" 2>/dev/null || true
+        fi
+        kill_process_tree_force "$daily_pid"
         if kill -0 "$daily_pid" 2>/dev/null; then
-          kill_process_tree_force "$daily_pid"
+          echo "daily production runner survived timeout kill: pid=$daily_pid" >&2
         fi
       fi
     ) >/dev/null 2>&1 &

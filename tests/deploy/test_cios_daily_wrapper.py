@@ -482,6 +482,15 @@ esac
     )
 
 
+def test_hermes_wrapper_starts_daily_runner_in_new_session_when_available() -> None:
+    text = (ROOT / "deploy" / "cios-daily.sh").read_text(encoding="utf-8")
+
+    assert "command -v setsid" in text
+    assert "setsid .venv/bin/python scripts/daily_production_run.py" in text
+    assert 'kill -TERM "-$daily_pgid"' in text
+    assert 'kill -KILL "-$daily_pgid"' in text
+
+
 def test_hermes_wrapper_runs_preflight_before_daily_runner(tmp_path):
     app, public, env_file = _make_fake_app(
         tmp_path,
