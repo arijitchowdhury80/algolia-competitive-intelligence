@@ -337,20 +337,40 @@ def build_plan_amendment_candidates(off_plan: list[dict[str, Any]]) -> list[dict
     return candidates
 
 
-def build_report(*, plan_path: Path, data_dir: Path, generated_at: str | None = None) -> dict[str, Any]:
+def build_report(
+    *,
+    plan_path: Path,
+    data_dir: Path,
+    generated_at: str | None = None,
+    accept_limited_plan_evidence: bool = False,
+) -> dict[str, Any]:
     plan = load_plan(plan_path)
     rows = load_metric_rows(data_dir)
     topic_results = [evaluate_topic(topic, rows) for topic in plan]
     action_grade_topics = [row for row in topic_results if row["action_grade"]]
     limited_topics = [row for row in topic_results if row["status"] == "action_grade_limited"]
-    status = "passed" if action_grade_topics else "blocked_no_action_grade_planned_demand"
+    gate_topics = action_grade_topics or (limited_topics if accept_limited_plan_evidence else [])
+    status = (
+        "passed"
+        if action_grade_topics
+        else "passed_limited"
+        if limited_topics and accept_limited_plan_evidence
+        else "blocked_no_action_grade_planned_demand"
+    )
     off_plan = evaluate_off_plan(rows)
     amendment_candidates = build_plan_amendment_candidates(off_plan)
+    confidence_limits = []
+    if status == "passed_limited":
+        confidence_limits.append(
+            "Audience Demand passed with limited confidence because current and previous values come from comparable but not identical Looker export families."
+        )
     return {
         "schema_version": 1,
         "generated_at": generated_at or _now(),
         "status": status,
-        "phase4_gate_passed": bool(action_grade_topics),
+        "phase4_gate_passed": bool(gate_topics),
+        "phase4_gate_confidence": "strict" if action_grade_topics else "limited" if gate_topics else "blocked",
+        "confidence_limits": confidence_limits,
         "demand_change_floor": DEMAND_CHANGE_FLOOR,
         "demand_value_floor": DEMAND_VALUE_FLOOR,
         "plan_path": str(plan_path),
@@ -360,14 +380,17 @@ def build_report(*, plan_path: Path, data_dir: Path, generated_at: str | None = 
         "summary": (
             "At least one active Argus demand-plan topic has action-grade comparable movement."
             if action_grade_topics
+            else "At least one active Argus demand-plan topic has limited-confidence action-grade movement."
+            if gate_topics
             else "No active Argus demand-plan topic has strong comparable seven-day demand movement."
         ),
         "next_required_action": (
             "Promote the planned demand rows into the Argus demand import."
-            if action_grade_topics
+            if gate_topics
             else "Export current and previous seven-day Looker rows for the active Argus topics, or amend the demand plan explicitly."
         ),
         "topics": topic_results,
+        "phase4_gate_topics": gate_topics,
         "action_grade_topics": action_grade_topics,
         "limited_action_grade_topics": limited_topics,
         "off_plan_opportunities": off_plan,
@@ -380,7 +403,7 @@ def write_json(payload: dict[str, Any], output: Path) -> None:
     output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def write_prepared_csv(topic_results: list[dict[str, Any]], output: Path) -> None:
+def write_prepared_csv(topic_results: list[dict[str, Any]], output: Path, *, include_limited: bool = False) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "topic",
@@ -398,7 +421,7 @@ def write_prepared_csv(topic_results: list[dict[str, Any]], output: Path) -> Non
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         for row in topic_results:
-            if not row.get("action_grade"):
+            if not row.get("action_grade") and not (include_limited and row.get("status") == "action_grade_limited"):
                 continue
             writer.writerow(
                 {
@@ -411,7 +434,8 @@ def write_prepared_csv(topic_results: list[dict[str, Any]], output: Path) -> Non
                     "source_url": "https://datastudio.google.com/",
                     "excerpt": (
                         f"Current sessions: {row['current_sessions']}; previous sessions: "
-                        f"{row['previous_sessions']}; change_pct: {row['change_pct']}"
+                        f"{row['previous_sessions']}; change_pct: {row['change_pct']}; "
+                        f"comparison_quality: {row['comparison_quality']}"
                     ),
                     "capability_key": row["capability_key"],
                     "change_pct": row["change_pct"],
@@ -468,15 +492,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepared-output", type=Path)
     parser.add_argument("--amendment-output", type=Path)
+    parser.add_argument(
+        "--accept-limited-plan-evidence",
+        action="store_true",
+        help="Allow explicitly planned comparable_limited movement to pass the Phase 4 demand gate with confidence limits.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    report = build_report(plan_path=args.plan, data_dir=args.data_dir)
+    report = build_report(
+        plan_path=args.plan,
+        data_dir=args.data_dir,
+        accept_limited_plan_evidence=args.accept_limited_plan_evidence,
+    )
     write_json(report, args.output)
     if args.prepared_output is not None:
-        write_prepared_csv(report["action_grade_topics"], args.prepared_output)
+        write_prepared_csv(
+            report["phase4_gate_topics"],
+            args.prepared_output,
+            include_limited=args.accept_limited_plan_evidence,
+        )
     if args.amendment_output is not None:
         write_plan_amendment_csv(report["plan_amendment_candidates"], args.amendment_output)
     return 0 if report["phase4_gate_passed"] else 2

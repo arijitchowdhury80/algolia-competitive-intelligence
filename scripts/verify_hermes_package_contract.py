@@ -35,6 +35,7 @@ REQUIRED_PATHS = [
     "scripts/export_ga4_demand.py",
     "scripts/export_argus_demand_readiness.py",
     "scripts/export_argus_demand_plan_template.py",
+    "scripts/amend_argus_demand_plan.py",
     "scripts/evaluate_argus_planned_demand_exports.py",
     "scripts/import_demand_and_refresh.py",
     "scripts/run_argus_demand_intake.py",

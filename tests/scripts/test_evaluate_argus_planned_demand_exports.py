@@ -122,6 +122,65 @@ def test_evaluate_argus_planned_demand_exports_keeps_off_plan_spikes_out_of_gate
     )
 
 
+def test_evaluate_argus_planned_demand_exports_accepts_limited_when_topic_is_planned(tmp_path) -> None:
+    module = _load_module()
+    plan = tmp_path / "argus-demand-plan-template.csv"
+    data_dir = tmp_path / "data"
+    output = tmp_path / "report.json"
+    prepared = tmp_path / "prepared.csv"
+    _write_csv(
+        plan,
+        [
+            {
+                "Argus topic": "Agent Studio",
+                "Capability key": "agent studio",
+                "Assessment": "demand_plan_amendment",
+                "Suggested filters": "Agent Studio | agentic ai | ai agent | ai agents",
+                "Related competitors": "",
+            }
+        ],
+    )
+    _write_csv(
+        data_dir / "algolia-looker-landing-page-device-sessions_2026-06-30_2026-07-06.csv",
+        [
+            {"Landing page": "/products/ai/agent-studio", "Device category": "desktop", "Sessions": 10},
+        ],
+    )
+    _write_csv(
+        data_dir / "algolia-looker-landing-page-metrics_2026-07-07_2026-07-13.csv",
+        [
+            {"Landing page": "/products/ai/agent-studio", "Sessions": 250},
+        ],
+    )
+
+    code = module.main(
+        [
+            "--plan",
+            str(plan),
+            "--data-dir",
+            str(data_dir),
+            "--output",
+            str(output),
+            "--prepared-output",
+            str(prepared),
+            "--accept-limited-plan-evidence",
+        ]
+    )
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    prepared_rows = list(csv.DictReader(prepared.read_text(encoding="utf-8").splitlines()))
+    assert code == 0
+    assert report["status"] == "passed_limited"
+    assert report["phase4_gate_passed"] is True
+    assert report["phase4_gate_confidence"] == "limited"
+    assert report["phase4_gate_topics"][0]["topic"] == "Agent Studio"
+    assert report["limited_action_grade_topics"][0]["status"] == "action_grade_limited"
+    assert "limited confidence" in report["confidence_limits"][0]
+    assert prepared_rows[0]["topic"] == "Agent Studio"
+    assert prepared_rows[0]["change_pct"] == "24.0"
+    assert "comparison_quality: comparable_limited" in prepared_rows[0]["excerpt"]
+
+
 def test_evaluate_argus_planned_demand_exports_ignores_looker_metadata_url_matches(tmp_path) -> None:
     module = _load_module()
     plan = tmp_path / "argus-demand-plan-template.csv"
