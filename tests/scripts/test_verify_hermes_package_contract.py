@@ -55,6 +55,9 @@ REQUIRED_FILES = [
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
+    "src/cios/dashboard/static/vendor/three/0.160.0/LICENSE",
+    "src/cios/dashboard/static/vendor/three/0.160.0/CHECKSUMS.txt",
+    "src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js",
     "src/cios/admin/app.py",
     "src/cios/admin/data_plane_manifest.py",
     "src/cios/admin/product_muscle_work_queue.py",
@@ -439,6 +442,15 @@ def _make_app(
         content = "placeholder\n"
         if rel == "scripts/import_demand_and_refresh.py":
             content = demand_fast_lane
+        elif rel == "src/cios/dashboard/static/vendor/three/0.160.0/LICENSE":
+            content = "MIT License\n"
+        elif rel == "src/cios/dashboard/static/vendor/three/0.160.0/CHECKSUMS.txt":
+            content = (
+                "three@0.160.0\n"
+                "three.module.min.js sha256 3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6\n"
+            )
+        elif rel == "src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js":
+            content = "/* vendored three.module.min.js */\n"
         elif rel == "scripts/export_ga4_demand.py":
             content = ga4_export_script
         elif rel == "scripts/run_argus_demand_intake.py":
@@ -595,6 +607,42 @@ def test_preflight_fails_when_e2e_validation_plan_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: docs/plan/e2e-validation.md" in result.stderr
+
+
+def test_preflight_fails_when_3d_runtime_asset_missing(tmp_path):
+    app = _make_app(tmp_path)
+    (app / "src" / "cios" / "dashboard" / "static" / "vendor" / "three" / "0.160.0" / "three.module.min.js").unlink()
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert (
+        "missing required path: src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js"
+        in result.stderr
+    )
+
+
+def test_preflight_fails_when_3d_runtime_checksum_missing(tmp_path):
+    app = _make_app(tmp_path)
+    checksum = app / "src" / "cios" / "dashboard" / "static" / "vendor" / "three" / "0.160.0" / "CHECKSUMS.txt"
+    checksum.write_text("three@0.160.0\n", encoding="utf-8")
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "3d runtime checksum missing reviewed three.module.min.js hash" in result.stderr
+
+
+def test_preflight_fails_when_dashboard_source_references_cdn_runtime(tmp_path):
+    app = _make_app(tmp_path)
+    renderer = app / "src" / "cios" / "dashboard" / "cockpit_renderer.py"
+    renderer.parent.mkdir(parents=True, exist_ok=True)
+    renderer.write_text("const runtime = 'https://unpkg.com/three@0.160.0/build/three.module.js'\n", encoding="utf-8")
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "3d runtime must not use external CDN: src/cios/dashboard/cockpit_renderer.py contains unpkg.com" in result.stderr
 
 
 def test_preflight_fails_when_manual_fast_lane_omits_demand_plan_template_export(tmp_path):

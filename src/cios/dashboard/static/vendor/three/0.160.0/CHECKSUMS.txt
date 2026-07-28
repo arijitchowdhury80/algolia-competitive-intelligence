@@ -1,0 +1,13 @@
+three@0.160.0
+
+npm integrity:
+sha512-DLU8lc0zNIPkM7rH5/e1Ks1Z8tWCGRq6g8mPowdDJpw1CFBJMU7UoJjC6PefXW7z//SSl0b2+GCw14LB+uDhng==
+
+npm tarball:
+https://registry.npmjs.org/three/-/three-0.160.0.tgz
+
+tarball sha256:
+1ee2f935c4f555814b388e87b5ef78a44856bd2e9d0feb88643a6e193fb42856
+
+package/build/three.module.min.js sha256:
+3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6

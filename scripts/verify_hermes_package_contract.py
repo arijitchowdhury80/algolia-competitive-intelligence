@@ -16,6 +16,17 @@ import sys
 from pathlib import Path
 
 
+THREE_RUNTIME_REL = "src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js"
+THREE_RUNTIME_SHA256 = "3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6"
+FORBIDDEN_RUNTIME_HOSTS = (
+    "unpkg.com",
+    "cdn.jsdelivr.net",
+    "esm.sh",
+    "skypack.dev",
+    "raw.githubusercontent.com",
+)
+
+
 REQUIRED_PATHS = [
     "deploy/cios-admin.service",
     "deploy/cios-daily.sh",
@@ -61,6 +72,9 @@ REQUIRED_PATHS = [
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
     "docs/plan/e2e-validation.md",
+    "src/cios/dashboard/static/vendor/three/0.160.0/LICENSE",
+    "src/cios/dashboard/static/vendor/three/0.160.0/CHECKSUMS.txt",
+    THREE_RUNTIME_REL,
     "src/cios/admin/app.py",
     "src/cios/admin/data_plane_manifest.py",
     "src/cios/admin/product_muscle_work_queue.py",
@@ -275,6 +289,37 @@ def collect_path_errors(app_dir: Path) -> list[str]:
     for rel in REQUIRED_PATHS:
         if not (app_dir / rel).exists():
             errors.append(f"missing required path: {rel}")
+    return errors
+
+
+def collect_3d_runtime_errors(app_dir: Path) -> list[str]:
+    errors: list[str] = []
+    checksum_path = app_dir / "src/cios/dashboard/static/vendor/three/0.160.0/CHECKSUMS.txt"
+    if checksum_path.exists():
+        checksum_text = checksum_path.read_text(encoding="utf-8")
+        if THREE_RUNTIME_SHA256 not in checksum_text:
+            errors.append("3d runtime checksum missing reviewed three.module.min.js hash")
+
+    scan_roots = [
+        app_dir / "src" / "cios" / "dashboard",
+        app_dir / "scripts",
+        app_dir / "tests",
+    ]
+    for root in scan_roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in {".html", ".js", ".py", ".ts", ".tsx"}:
+                continue
+            rel = path.relative_to(app_dir)
+            if str(rel).startswith("src/cios/dashboard/static/vendor/"):
+                continue
+            if str(rel).startswith("tests/") or str(rel) == "scripts/verify_hermes_package_contract.py":
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for host in FORBIDDEN_RUNTIME_HOSTS:
+                if host in text:
+                    errors.append(f"3d runtime must not use external CDN: {rel} contains {host}")
     return errors
 
 
@@ -513,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         errors.append(f"missing app directory: {app_dir}")
     else:
         errors.extend(collect_path_errors(app_dir))
+        errors.extend(collect_3d_runtime_errors(app_dir))
         errors.extend(collect_wrapper_errors(app_dir))
         errors.extend(collect_host_runner_errors(app_dir))
         errors.extend(collect_host_permissions_errors(app_dir))
