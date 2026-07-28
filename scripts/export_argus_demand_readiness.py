@@ -67,6 +67,10 @@ def _int_value(value: Any) -> int:
         return 0
 
 
+def _truthy(value: Any) -> bool:
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
 def _number_value(value: Any) -> float | None:
     if value in (None, ""):
         return None
@@ -506,6 +510,7 @@ def _refine_status_with_plan_coverage(
     demand_collection_plan: dict[str, Any],
     comparison_coverage: dict[str, Any],
     action_grade_coverage: dict[str, Any],
+    allow_controlled_pilot_partial_demand: bool = False,
 ) -> tuple[str, str, str]:
     if status != "processed":
         return status, next_action, summary
@@ -543,6 +548,16 @@ def _refine_status_with_plan_coverage(
     if coverage_status == "covered":
         return status, next_action, summary
     if coverage_status == "partial_coverage":
+        if allow_controlled_pilot_partial_demand and rising_topic_count > 0 and demand_signal_count > 0:
+            return (
+                "processed_limited_plan_coverage",
+                "monitor_missing_plan_demand",
+                (
+                    "Tenant demand evidence is sufficient for the controlled pilot, but only covers "
+                    f"{covered} of {planned} Argus-prioritized demand topics; missing topics remain "
+                    "monitoring debt."
+                ),
+            )
         return (
             "processed_partial_plan_coverage",
             "collect_missing_plan_demand",
@@ -791,6 +806,9 @@ def build_demand_readiness_payload(
         demand_collection_plan=demand_collection_plan,
         comparison_coverage=comparison_coverage,
         action_grade_coverage=action_grade_coverage,
+        allow_controlled_pilot_partial_demand=_truthy(
+            effective_env.get("CIOS_CONTROLLED_PILOT_ALLOW_PARTIAL_DEMAND")
+        ),
     )
     demand_source_contract = build_demand_source_contract(
         tenant_slug=tenant_slug,

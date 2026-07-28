@@ -97,6 +97,7 @@ REQUIRED_PATHS = [
 
 WRAPPER_INVARIANTS = {
     "wrapper missing product-market default enable": "CIOS_ENABLE_PRODUCT_MARKET_INTELLIGENCE:-1",
+    "wrapper missing controlled-pilot partial demand policy": "CIOS_CONTROLLED_PILOT_ALLOW_PARTIAL_DEMAND:-1",
     "wrapper missing package src PYTHONPATH": 'PYTHONPATH="$APP/src',
     "wrapper missing package preflight call": "verify_hermes_package_contract.py",
     "wrapper missing learning-policy audit gate": "audit_learning_policies.py",

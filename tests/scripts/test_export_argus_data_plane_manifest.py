@@ -910,6 +910,48 @@ def test_data_plane_manifest_blocks_action_when_demand_only_partially_covers_pla
     ]
 
 
+def test_data_plane_manifest_limits_but_does_not_block_controlled_pilot_partial_demand() -> None:
+    module = _load_module()
+    dashboard = _dashboard_payload()
+    dashboard["product_market_run"]["demand_signal_count"] = 100
+    dashboard["product_market_run"]["looker_normalized_row_count"] = 20
+    dashboard["product_market_run"]["demand_plane_status"] = "processed"
+
+    payload = module.build_data_plane_manifest_payload(
+        tenant_slug="algolia",
+        dashboard=dashboard,
+        demand_readiness={
+            "status": "processed_limited_plan_coverage",
+            "next_hermes_action": "monitor_missing_plan_demand",
+            "summary": (
+                "Controlled pilot has action-grade demand for 1 of 2 planned topics; "
+                "missing topics remain monitoring debt."
+            ),
+            "demand_collection_plan": {
+                "status": "partial_coverage",
+                "topic_count": 2,
+                "coverage": {
+                    "status": "partial_coverage",
+                    "planned_topic_count": 2,
+                    "covered_topic_count": 1,
+                    "missing_topic_count": 1,
+                },
+            },
+        },
+        evidence_work_queue={"work_item_count": 0, "blocking_count": 0, "limiting_count": 0, "items": []},
+        operator_handoff={"status": "ready_for_operator_review", "argus_readiness": "actionable"},
+        generated_at="2026-07-28T14:05:00Z",
+    )
+
+    demand_plane = payload["planes"]["audience_demand"]
+    assert payload["status"] == "ready_for_operator_review"
+    assert payload["next_hermes_action"] == "review_scored_recommendations"
+    assert payload["blockers"] == []
+    assert demand_plane["status"] == "processed_limited_plan_coverage"
+    assert demand_plane["blocks_action"] is False
+    assert "Controlled pilot" in demand_plane["summary"]
+
+
 def test_data_plane_manifest_blocker_names_missing_and_off_plan_demand_topics() -> None:
     module = _load_module()
     dashboard = _dashboard_payload()

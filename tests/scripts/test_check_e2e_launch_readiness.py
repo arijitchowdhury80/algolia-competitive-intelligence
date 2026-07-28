@@ -209,6 +209,32 @@ def test_product_reality_is_present_when_count_exists_and_plane_does_not_block_a
     assert not any(item["requirement"] == "product_reality_present" for item in result["blockers"])
 
 
+def test_launch_readiness_accepts_controlled_pilot_limited_demand_status() -> None:
+    module = _load_module()
+    status = _published_status()
+    status["planes"]["audience_demand"] = {
+        "status": "processed_limited_plan_coverage",
+        "blocks_action": False,
+        "counts": {"demand_signal_count": 100},
+        "demand_collection_plan": {
+            "status": "partial_coverage",
+            "topic_count": 12,
+        },
+    }
+
+    result = module.evaluate_launch_readiness(
+        public_status=status,
+        click_validation_log="PASS dashboard_click_validation\n",
+        package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
+    )
+
+    assert result["checks"]["audience_demand_processed"] is True
+    assert result["status"] == "pass"
+
+
 def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> None:
     module = _load_module()
     status_path = tmp_path / "argus-latest-run-status.json"

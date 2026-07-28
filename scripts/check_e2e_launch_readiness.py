@@ -77,7 +77,7 @@ def _audience_demand_processed(public_status: Mapping[str, Any]) -> bool:
         _dict_value(demand.get("counts")).get("demand_signal_count"),
         _int_value(run.get("demand_signal_count")),
     )
-    return status in {"processed", "present", "ready"} and demand_signal_count > 0 and not bool(
+    return status in {"processed", "present", "ready", "processed_limited_plan_coverage"} and demand_signal_count > 0 and not bool(
         demand.get("blocks_action")
     )
 

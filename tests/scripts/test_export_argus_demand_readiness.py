@@ -343,6 +343,71 @@ def test_export_argus_demand_readiness_scores_imported_demand_against_collection
     assert coverage["off_plan_topics"][0]["evidence_urls"] == ["https://lookerstudio.google.com/reporting/pricing"]
 
 
+def test_export_argus_demand_readiness_allows_partial_plan_coverage_for_controlled_pilot(tmp_path) -> None:
+    module = _load_module()
+    app_dir = tmp_path / "app"
+    work_root = tmp_path / "work"
+    dashboard = {
+        "product_market_run": {
+            "demand_plane_status": "processed",
+            "looker_normalized_row_count": 20,
+            "demand_signal_count": 100,
+            "product_feature_comparison_read": {
+                "rows": [
+                    {
+                        "capability": "Agent Studio",
+                        "capability_key": "agent studio",
+                        "assessment": "own_narrative_gap",
+                        "recommended_action": "Use current demand to shape pilot recommendations.",
+                    },
+                    {
+                        "capability": "AI Assistant",
+                        "capability_key": "ai assistant",
+                        "assessment": "competitive_pressure",
+                        "recommended_action": "Monitor missing planned demand.",
+                    },
+                ]
+            },
+            "intelligence_brief": {
+                "demand_read": {
+                    "summary": "1 rising demand topic found.",
+                    "rising_topic_count": 1,
+                    "top_topics": [
+                        {
+                            "topic": "Agent Studio",
+                            "capability_key": "agent studio",
+                            "value": 1619,
+                            "change_pct": 1.1558,
+                            "source_files": ["argus-planned-demand-prepared-amended.csv"],
+                            "source_row_numbers": [1],
+                            "evidence_urls": ["https://datastudio.google.com/"],
+                        }
+                    ],
+                }
+            },
+        }
+    }
+
+    payload = module.build_demand_readiness_payload(
+        tenant_slug="algolia",
+        app_dir=app_dir,
+        work_root=work_root,
+        env={
+            "CIOS_GA4_EXPORT_ENABLED": "0",
+            "CIOS_CONTROLLED_PILOT_ALLOW_PARTIAL_DEMAND": "1",
+        },
+        dashboard=dashboard,
+        generated_at="2026-07-28T14:00:00Z",
+    )
+
+    assert payload["status"] == "processed_limited_plan_coverage"
+    assert payload["next_hermes_action"] == "monitor_missing_plan_demand"
+    assert "controlled pilot" in payload["summary"]
+    assert payload["demand_collection_plan"]["status"] == "partial_coverage"
+    assert payload["demand_collection_plan"]["coverage"]["covered_topic_count"] == 1
+    assert payload["demand_collection_plan"]["coverage"]["missing_topic_count"] == 1
+
+
 def test_export_argus_demand_readiness_blocks_current_period_only_demand(tmp_path) -> None:
     module = _load_module()
     app_dir = tmp_path / "app"

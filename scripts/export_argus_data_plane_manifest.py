@@ -575,7 +575,12 @@ def _demand_plane(
         "processed_no_comparison_period",
         "processed_no_action_grade_demand",
     }
+    nonblocking_limited_statuses = {
+        "processed_limited_plan_coverage",
+    }
     if readiness_status in plan_blocking_statuses:
+        status = readiness_status
+    elif readiness_status in nonblocking_limited_statuses:
         status = readiness_status
     elif demand_signal_count > 0 or intake_status in processed_statuses:
         status = "processed"
@@ -593,6 +598,8 @@ def _demand_plane(
             demand_readiness.get("summary")
             or "Tenant-side demand is missing, so Argus cannot promote outward movement to confident action."
         )
+    elif status in nonblocking_limited_statuses:
+        summary = str(demand_readiness.get("summary") or "Tenant-side demand is present with controlled-pilot limits.")
     elif demand_signal_count > 0:
         summary = "Tenant-side demand evidence is present for the current product-market read."
     else:
