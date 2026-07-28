@@ -78,6 +78,18 @@ def test_rejects_private_or_non_public_work_artifact_url() -> None:
         )
 
 
+def test_rejects_absolute_review_packet_path() -> None:
+    module = _load_module()
+
+    with pytest.raises(ValueError, match="review_packet_path must be a relative"):
+        module.build_disposition_request(
+            _work_artifact(),
+            work_artifact_url="https://ci.chowmes.com/data/phase8/argus-pmm-narrative-brief.md",
+            manifest_url="https://ci.chowmes.com/data/phase8/argus-phase8-work-artifacts.json",
+            review_packet_path="/opt/cios/app/out/phase8/argus-recommendation-review-packet.json",
+        )
+
+
 def test_rejects_exit_evidence_as_source_artifact() -> None:
     module = _load_module()
     artifact = _work_artifact()

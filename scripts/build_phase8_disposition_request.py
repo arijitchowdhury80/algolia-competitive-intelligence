@@ -43,6 +43,15 @@ def _require_public_url(value: str, field: str) -> str:
     return cleaned
 
 
+def _require_relative_path(value: str, field: str) -> str:
+    cleaned = _clean(value)
+    if not cleaned:
+        raise ValueError(f"{field} is required")
+    if cleaned.startswith(("/", "file://")) or ".." in Path(cleaned).parts:
+        raise ValueError(f"{field} must be a relative package path")
+    return cleaned
+
+
 def _validate_work_artifact(artifact: Mapping[str, Any]) -> None:
     if artifact.get("phase") != "phase8_controlled_pilot":
         raise ValueError("work artifact phase must be phase8_controlled_pilot")
@@ -81,6 +90,7 @@ def build_disposition_request(
     _validate_work_artifact(work_artifact)
     work_artifact_url = _require_public_url(work_artifact_url, "work_artifact_url")
     manifest_url = _require_public_url(manifest_url, "manifest_url")
+    review_packet_path = _require_relative_path(review_packet_path, "review_packet_path")
 
     recommendation = _dict_value(work_artifact.get("recommendation"))
     work_product = _dict_value(work_artifact.get("work_product"))

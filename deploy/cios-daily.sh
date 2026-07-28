@@ -770,7 +770,7 @@ if [ -f scripts/export_argus_recommendation_review_packet.py ] && \
       --work-artifact "$OUT/phase8/argus-pmm-narrative-brief.json" \
       --work-artifact-url "https://ci.chowmes.com/data/phase8/argus-pmm-narrative-brief.md" \
       --manifest-url "https://ci.chowmes.com/data/phase8/argus-phase8-work-artifacts.json" \
-      --review-packet-path "$OUT/phase8/argus-recommendation-review-packet.json" \
+      --review-packet-path "out/phase8/argus-recommendation-review-packet.json" \
       --output "$OUT/phase8/argus-pmm-disposition-request.json" \
       --markdown-output "$OUT/phase8/argus-pmm-disposition-request.md"
     .venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py \
