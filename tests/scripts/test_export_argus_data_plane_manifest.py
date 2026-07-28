@@ -1045,6 +1045,10 @@ def test_data_plane_manifest_prefers_current_readiness_action_over_stale_intake_
     assert payload["next_hermes_action"] == "upload_trended_planned_demand_export"
     assert demand_plane["status"] == "processed_no_action_grade_demand"
     assert demand_plane["next_hermes_action"] == "upload_trended_planned_demand_export"
+    assert payload["blockers"][0]["title"] == "Demand movement not action-grade"
+    assert payload["blockers"][0]["next_step"] == (
+        "Upload a planned demand export with previous-period or change_pct values, then refresh Argus."
+    )
 
 
 def test_data_plane_manifest_writes_output_file(tmp_path) -> None:

@@ -740,19 +740,27 @@ def _demand_plan_gap_blocker(
         fields=("topic", "capability_key", "evidence_urls", "source_files", "source_row_numbers"),
     )
     missing_labels = [_topic_label(topic) for topic in missing_topics if _topic_label(topic)]
+    status = str(demand_plane.get("status") or "")
 
-    if missing_labels:
+    if status == "processed_no_action_grade_demand":
+        next_step = "Upload a planned demand export with previous-period or change_pct values, then refresh Argus."
+    elif status == "processed_no_comparison_period":
+        next_step = "Upload a demand export with previous-period or change_pct values, then refresh Argus."
+    elif missing_labels:
         next_step = f"Collect demand for missing planned topics: {', '.join(missing_labels[:5])}."
     elif off_plan_topics:
         next_step = "Map imported demand to Argus planned topics or collect the planned demand export."
     else:
         next_step = str(demand_plane.get("next_hermes_action") or "Configure GA4 or upload a GA / Looker export.")
 
-    title = (
-        "Demand plan coverage incomplete"
-        if missing_topics or off_plan_topics
-        else "Demand plane missing"
-    )
+    if status == "processed_no_action_grade_demand":
+        title = "Demand movement not action-grade"
+    elif status == "processed_no_comparison_period":
+        title = "Demand trend window missing"
+    elif missing_topics or off_plan_topics:
+        title = "Demand plan coverage incomplete"
+    else:
+        title = "Demand plane missing"
     blocker: dict[str, Any] = {
         "plane": "audience_demand",
         "severity": "blocks_action",
