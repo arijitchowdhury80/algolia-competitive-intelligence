@@ -783,6 +783,87 @@ class IntelligenceSpine(BaseModel):
     next_operator_action: Optional[str] = None
 
 
+class MarketFieldNode(BaseModel):
+    """One visible entity in the Market Field knowledge graph."""
+
+    node_id: str
+    label: str
+    node_type: str
+    status: str = "present"
+    summary: Optional[str] = None
+    entity_id: Optional[int] = None
+    href: Optional[str] = None
+
+
+class MarketFieldEdge(BaseModel):
+    """One relationship between Market Field nodes."""
+
+    source_node_id: str
+    target_node_id: str
+    edge_type: str
+    strength: str = "weak"
+    status: str = "present"
+    summary: Optional[str] = None
+
+
+class MarketFieldHotspot(BaseModel):
+    """A clickable market movement cluster surfaced on the first screen."""
+
+    hotspot_id: str
+    label: str
+    argus_read: Optional[str] = None
+    movement: str = "unknown"
+    confidence_label: str = "unknown"
+    proof_status: str = "unknown"
+    time_window: str = "7d"
+    connected_node_ids: list[str] = Field(default_factory=list)
+    unknowns: list[str] = Field(default_factory=list)
+
+
+class MarketFieldAction(BaseModel):
+    """One decision-ready action revealed from a selected hotspot."""
+
+    owner: str
+    priority: str
+    action: str
+    why_now: str
+    evidence_basis: list[str] = Field(default_factory=list)
+    confidence_label: str = "unknown"
+
+
+class MarketFieldProofItem(BaseModel):
+    """Proof summary behind a hotspot, grouped by intelligence plane."""
+
+    plane: str
+    summary: str
+    source_count: int = 0
+    href: Optional[str] = None
+
+
+class MarketFieldState(BaseModel):
+    """Market Field-first IA state for the CI-OS cockpit.
+
+    Unknown boundaries are explicit graph nodes/statuses, not silent missing
+    rows. This lets the UI distinguish confidence limits from real absence.
+    """
+
+    selected_hotspot_id: Optional[str] = None
+    nodes: list[MarketFieldNode] = Field(default_factory=list)
+    edges: list[MarketFieldEdge] = Field(default_factory=list)
+    hotspots: list[MarketFieldHotspot] = Field(default_factory=list)
+    actions: list[MarketFieldAction] = Field(default_factory=list)
+    proof: list[MarketFieldProofItem] = Field(default_factory=list)
+    time_windows: list[str] = Field(default_factory=lambda: ["today", "7d", "30d", "custom"])
+
+    @property
+    def selected_hotspot(self) -> Optional[MarketFieldHotspot]:
+        if self.selected_hotspot_id:
+            for hotspot in self.hotspots:
+                if hotspot.hotspot_id == self.selected_hotspot_id:
+                    return hotspot
+        return self.hotspots[0] if self.hotspots else None
+
+
 class DashboardOperatorCommand(BaseModel):
     """One admin/run-console command Argus recommends for the operator.
 
@@ -879,6 +960,7 @@ class DashboardState(BaseModel):
     product_feature_comparison: ProductFeatureComparisonState = Field(
         default_factory=ProductFeatureComparisonState
     )
+    market_field: MarketFieldState = Field(default_factory=MarketFieldState)
     intelligence_spine: IntelligenceSpine = Field(default_factory=IntelligenceSpine)
     operator_handoff: DashboardOperatorHandoff = Field(default_factory=DashboardOperatorHandoff)
 
