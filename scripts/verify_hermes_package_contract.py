@@ -129,6 +129,7 @@ WRAPPER_INVARIANTS = {
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
+    "wrapper missing public artifact safety scan": "scan_public_artifacts.py",
 }
 
 HOST_RUNNER_INVARIANTS = {

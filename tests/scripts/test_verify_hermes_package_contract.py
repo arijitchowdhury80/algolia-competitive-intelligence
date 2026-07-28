@@ -131,6 +131,7 @@ if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
 fi
 STAGE="$PUB/.argus-publish.$$"
 mkdir -p "$STAGE"
+.venv/bin/python scripts/scan_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-safety-scan.json"
 """
 
 
@@ -1145,6 +1146,22 @@ cp "$CIOS_DASHBOARD_OUT" "$PUB/index.html"
     assert "wrapper missing scoped output cleanup" in result.stderr
     assert "wrapper missing current-run artifact validation" in result.stderr
     assert "wrapper missing staged publish directory" in result.stderr
+    assert "wrapper missing public artifact safety scan" in result.stderr
+
+
+def test_preflight_fails_when_wrapper_missing_public_artifact_safety_scan(tmp_path):
+    app = _make_app(
+        tmp_path,
+        wrapper=SAFE_WRAPPER.replace(
+            '.venv/bin/python scripts/scan_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-safety-scan.json"',
+            "",
+        ),
+    )
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "wrapper missing public artifact safety scan" in result.stderr
 
 
 def test_preflight_fails_when_wrapper_missing_daily_run_timeout_guard(tmp_path):

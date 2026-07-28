@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import subprocess
 from pathlib import Path
 
@@ -173,8 +174,14 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert current_release.parent == (public_store / "releases").resolve()
     assert current_release != old_release.resolve()
     assert (current_release / "index.html").read_text(encoding="utf-8") == "current cockpit"
-    assert (current_release / "publication-manifest.json").is_file()
+    publication_manifest = json.loads((current_release / "publication-manifest.json").read_text(encoding="utf-8"))
+    assert publication_manifest["schema_version"] == 1
+    assert publication_manifest["run_id"].startswith("cios-")
+    assert publication_manifest["previous_release"] == "releases/cios-old"
+    assert "source_public_dir" not in publication_manifest
     assert (public_store / "latest-status.json").is_file()
+    assert (public_store / "served" / "index.html").read_text(encoding="utf-8") == "current cockpit"
+    assert (public_store / "served" / "publication-manifest.json").is_file()
     assert not (old_release / "current.next").exists()
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
     assert (public / "v2" / "data" / "argus-demand-work-order-guide.json").exists()
@@ -231,6 +238,43 @@ exit 0
     assert "missing dashboard artifact from current run" in result.stderr
     assert not (public / "index.html").exists()
     assert not (public / "brief.html").exists()
+    assert not (public / "data" / "semantic-dashboard.json").exists()
+
+
+def test_hermes_wrapper_runs_public_safety_scan_before_publish(tmp_path):
+    app, public, env_file = _make_fake_app(
+        tmp_path,
+        """#!/bin/sh
+set -eu
+OUT="$(dirname "$CIOS_DASHBOARD_OUT")"
+case "$1" in
+  *scan_public_artifacts.py)
+    echo "public safety scan failed" >&2
+    exit 2
+    ;;
+esac
+printf "unsafe cockpit /root/.hermes/private" > "$CIOS_DASHBOARD_OUT"
+printf "current brief" > "$OUT/brief.html"
+printf '{"schema_version":11}' > "$OUT/argus-dashboard.json"
+printf '{"status":"blocked_missing_demand_source"}' > "$OUT/argus-demand-readiness.json"
+printf 'Page title,Page path,Engaged sessions,Engaged sessions previous period,Period start,Period end,Looker Studio URL,Argus topic,Capability key,Assessment,Suggested filters,Related competitors,Why collect,Evidence URLs\n' > "$OUT/argus-demand-plan-template.csv"
+printf '{"status":"ready","topic_count":1}' > "$OUT/argus-demand-work-order-guide.json"
+printf '{"status":"blocked_missing_demand_source","exit_code":2}' > "$OUT/argus-demand-intake.json"
+printf '{"work_item_count":0,"items":[]}' > "$OUT/argus-evidence-work-queue.json"
+printf '{"work_item_count":0,"blocking_count":0,"limiting_count":0,"items":[]}' > "$OUT/argus-product-muscle-work-queue.json"
+printf '{"status":"ready_for_operator_review"}' > "$OUT/argus-operator-handoff.json"
+printf '{"schema_version":1,"status":"ready_for_operator_review"}' > "$OUT/argus-data-plane-manifest.json"
+printf '{"publish_status":"published"}' > "$OUT/argus-public-run-status.json"
+mkdir -p "$OUT/briefs/algolia"
+printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
+""",
+    )
+
+    result = _run_wrapper(app, public, env_file)
+
+    assert result.returncode == 2
+    assert "public safety scan failed" in result.stderr
+    assert not (public / "index.html").exists()
     assert not (public / "data" / "semantic-dashboard.json").exists()
 
 
@@ -368,6 +412,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 97
@@ -464,6 +511,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 97
@@ -556,6 +606,9 @@ case "$1" in
   *daily_production_run.py)
     echo "daily should not execute after policy audit failure" >&2
     exit 98
+    ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
     ;;
   *)
     echo "unexpected python target: $1" >&2
@@ -725,6 +778,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -753,6 +809,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-safety-scan",
     ]
 
 
@@ -1133,6 +1190,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -1161,6 +1221,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-safety-scan",
     ]
     assert (app / "out" / "gap-plan-arg.txt").read_text(encoding="utf-8") == str(
         app / "out" / "argus-dashboard.json"
@@ -1438,6 +1499,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -1466,6 +1530,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-safety-scan",
     ]
     assert (app / "out" / "promotion-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
     assert (app / "out" / "promotion-discovery-source.txt").read_text(encoding="utf-8") == "product_muscle_gap_plan"
@@ -1546,6 +1611,9 @@ case "$1" in
   *export_argus_evidence_work_queue.py)
     # Simulate a broken exporter that exits 0 but writes nothing.
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -1619,6 +1687,9 @@ case "$1" in
     ;;
   *export_argus_product_muscle_work_queue.py)
     # Simulate a broken exporter that exits 0 but writes nothing.
+    ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
     ;;
   *)
     echo "unexpected python target: $1" >&2
@@ -1802,6 +1873,9 @@ case "$1" in
       shift
     done
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -1833,6 +1907,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-safety-scan",
     ]
     assert (app / "out" / "operator-handoff-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
     assert (app / "out" / "operator-handoff-work-queue-arg.txt").read_text(encoding="utf-8") == str(
@@ -1931,6 +2006,9 @@ case "$1" in
   *build_argus_operator_handoff.py)
     # Simulate a broken handoff builder that exits 0 but writes nothing.
     ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
+    ;;
   *)
     echo "unexpected python target: $1" >&2
     exit 98
@@ -2018,6 +2096,9 @@ case "$1" in
     ;;
   *export_argus_data_plane_manifest.py)
     # Simulate a broken manifest exporter that exits 0 but writes nothing.
+    ;;
+  *scan_public_artifacts.py)
+    echo "public-safety-scan" >> "$CALLS"
     ;;
   *)
     echo "unexpected python target: $1" >&2

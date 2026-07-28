@@ -269,19 +269,30 @@ promote_public_store_if_present() {
   if [ ! -d "$public_store/served" ] || [ ! -d "$public_store/releases" ]; then
     return 0
   fi
+  previous_release=""
+  if [ -L "$public_store/current" ]; then
+    previous_release="$(readlink "$public_store/current" || true)"
+  fi
   release_id="cios-$(date -u +"%Y%m%dT%H%M%SZ")-$$"
   release_dir="$public_store/releases/$release_id"
   tmp_dir="$public_store/releases/.${release_id}.tmp"
+  served_tmp="$public_store/.served.$release_id.tmp"
   rm -rf "$tmp_dir"
+  rm -rf "$served_tmp"
   mkdir -p "$tmp_dir"
   cp -R "$PUB/." "$tmp_dir/"
   cat > "$tmp_dir/publication-manifest.json" <<EOF
-{"schema_version":1,"run_id":"$release_id","source_public_dir":"$PUB","published_at":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
+{"schema_version":1,"run_id":"$release_id","previous_release":"$previous_release","published_at":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
 EOF
   mv "$tmp_dir" "$release_dir"
   if [ -s "$release_dir/data/argus-latest-run-status.json" ]; then
     cp "$release_dir/data/argus-latest-run-status.json" "$public_store/latest-status.json"
   fi
+  mkdir -p "$served_tmp"
+  cp -R "$release_dir/." "$served_tmp/"
+  rm -rf "$public_store/served.previous"
+  mv "$public_store/served" "$public_store/served.previous"
+  mv "$served_tmp" "$public_store/served"
   rm -f "$public_store/current.next"
   ln -s "releases/$release_id" "$public_store/current.next"
   rm -f "$public_store/current"
@@ -733,6 +744,10 @@ if [ -s "$OUT/argus-demand-plan-amendment-candidates.csv" ]; then
 fi
 cp -R "$OUT/briefs" "$STAGE/briefs"
 cp -R "$OUT/briefs" "$STAGE/v2/briefs"
+
+.venv/bin/python scripts/scan_public_artifacts.py \
+  --public-dir "$STAGE" \
+  --output "$OUT/public-artifact-safety-scan.json"
 
 mkdir -p "$PUB/data" "$PUB/v2/data"
 cp "$STAGE/index.html" "$PUB/index.html"
