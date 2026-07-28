@@ -404,6 +404,48 @@ def _github_release_change_type(text: str) -> str:
     return "release"
 
 
+def _filter_product_surface_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if not _is_site_boilerplate_product_row(row)]
+
+
+def _is_site_boilerplate_product_row(row: dict[str, Any]) -> bool:
+    capability = _norm_text(row.get("capability"))
+    summary = _norm_text(row.get("summary"))
+    excerpt = _norm_text(row.get("excerpt"))
+    haystack = f"{capability} {summary} {excerpt}".strip()
+    if not haystack:
+        return False
+
+    boilerplate_capabilities = (
+        "cookie consent",
+        "cookie categorization",
+        "strictly necessary cookie",
+        "preference cookie",
+        "statistical cookie",
+        "marketing cookie",
+        "user consent interface",
+        "policy document integration",
+        "privacy policy",
+        "cookie policy",
+    )
+    if any(term in capability for term in boilerplate_capabilities):
+        return True
+
+    boilerplate_phrases = (
+        "accept deny view preferences",
+        "cookie policy privacy policy",
+        "strictly necessary cookies",
+        "functional preferences statistics marketing",
+        "store and/or access device information",
+        "technical storage or access",
+    )
+    return any(term in haystack for term in boilerplate_phrases)
+
+
+def _norm_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip().casefold())
+
+
 def _target_from_args(args: argparse.Namespace) -> ProductSurfaceTarget:
     return ProductSurfaceTarget(
         tenant_id=args.tenant_id,
@@ -456,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             focus_capability=args.focus_capability,
         )
         used_argus_fallback = True
-    rows = scout_extract_response_to_product_records(response, target)
+    rows = _filter_product_surface_rows(scout_extract_response_to_product_records(response, target))
     if not rows and not used_argus_fallback:
         response = _argus_response_from_scrape(
             target,
@@ -466,9 +508,9 @@ def main(argv: list[str] | None = None) -> int:
             provider=args.provider,
             focus_capability=args.focus_capability,
         )
-        rows = scout_extract_response_to_product_records(response, target)
+        rows = _filter_product_surface_rows(scout_extract_response_to_product_records(response, target))
     if not rows:
-        rows = github_release_rows(target, timeout_seconds=args.timeout_seconds)
+        rows = _filter_product_surface_rows(github_release_rows(target, timeout_seconds=args.timeout_seconds))
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

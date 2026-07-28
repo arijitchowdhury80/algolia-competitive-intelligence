@@ -66,6 +66,62 @@ def test_export_product_surface_with_scout_writes_normalized_rows(tmp_path) -> N
     assert rows[0]["capability"] == "AI Shopping Agent"
 
 
+def test_export_product_surface_with_scout_filters_cookie_consent_noise(tmp_path) -> None:
+    module = _load_module()
+    output = tmp_path / "athos-product-rows.json"
+    scout_response = {
+        "success": True,
+        "url": "https://athoscommerce.com/platform",
+        "metadata": {"crawled_at": "2026-07-28T09:20:20+00:00"},
+        "data": {
+            "changes": [
+                {
+                    "capability": "Cookie Consent Management",
+                    "change_type": "docs_update",
+                    "summary": "The platform includes features for managing user consent regarding cookies.",
+                    "excerpt": "Accept Deny View preferences Save preferences",
+                },
+                {
+                    "capability": "Policy Document Integration",
+                    "change_type": "docs_update",
+                    "summary": "The platform integrates links to relevant legal and privacy policy documents.",
+                    "excerpt": "Cookie Policy Privacy Policy",
+                },
+                {
+                    "capability": "Personalized Merchandising Rules",
+                    "change_type": "docs_update",
+                    "summary": "Athos documents merchandising controls for personalized product experiences.",
+                    "excerpt": "Create targeted merchandising rules for product discovery experiences.",
+                },
+            ]
+        },
+    }
+    command = [sys.executable, "-c", f"import json; print({json.dumps(json.dumps(scout_response))})"]
+
+    code = module.main([
+        "--tenant-id",
+        "1",
+        "--company-id",
+        "7",
+        "--company-name",
+        "Athos Commerce",
+        "--company-role",
+        "competitor",
+        "--surface-family",
+        "product_page",
+        "--url",
+        "https://athoscommerce.com/platform",
+        "--scout-command-json",
+        json.dumps(command),
+        "--output",
+        str(output),
+    ])
+
+    rows = json.loads(output.read_text(encoding="utf-8"))
+    assert code == 0
+    assert [row["capability"] for row in rows] == ["Personalized Merchandising Rules"]
+
+
 def test_build_scout_extract_command_contains_schema_instruction_and_url() -> None:
     module = _load_module()
     target = module.ProductSurfaceTarget(
