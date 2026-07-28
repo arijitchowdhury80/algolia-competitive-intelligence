@@ -137,6 +137,10 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     public_store = tmp_path / "public-store"
     (public_store / "releases").mkdir(parents=True)
     (public_store / "served").mkdir()
+    old_release = public_store / "releases" / "cios-old"
+    old_release.mkdir()
+    (old_release / "index.html").write_text("old cockpit", encoding="utf-8")
+    (public_store / "current").symlink_to("releases/cios-old")
 
     result = _run_wrapper(app, public, env_file, {"CIOS_PUBLIC_STORE_DIR": str(public_store)})
 
@@ -167,9 +171,11 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     current_release = (public_store / "current").resolve()
     assert current_release.is_dir()
     assert current_release.parent == (public_store / "releases").resolve()
+    assert current_release != old_release.resolve()
     assert (current_release / "index.html").read_text(encoding="utf-8") == "current cockpit"
     assert (current_release / "publication-manifest.json").is_file()
     assert (public_store / "latest-status.json").is_file()
+    assert not (old_release / "current.next").exists()
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
     assert (public / "v2" / "data" / "argus-demand-work-order-guide.json").exists()
 

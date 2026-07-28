@@ -247,7 +247,8 @@ EOF
   fi
   rm -f "$public_store/current.next"
   ln -s "releases/$release_id" "$public_store/current.next"
-  mv -f "$public_store/current.next" "$public_store/current"
+  rm -f "$public_store/current"
+  mv "$public_store/current.next" "$public_store/current"
 }
 
 kill_process_tree() {
