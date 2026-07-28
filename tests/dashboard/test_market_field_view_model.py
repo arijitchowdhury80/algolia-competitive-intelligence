@@ -165,3 +165,107 @@ def test_builder_compiles_market_field_from_patterns_recommendations_and_unknown
     assert any(node.node_type == "unknown_boundary" for node in field.nodes)
     assert field.actions[0].owner == "PMM"
     assert "absence" not in " ".join(node.summary or "" for node in field.nodes).lower()
+
+
+def test_builder_turns_accepted_recommendation_into_market_field_story() -> None:
+    product_market = FakeProductMarketRepository(
+        patterns={
+            1: [
+                product_market_pattern_row(
+                    id=31,
+                    pattern_type="own_narrative_gap",
+                    capability_text="Agent Studio",
+                    summary=(
+                        "Agent Studio has shipped product proof, competitor AI-search conversation, "
+                        "and Audience Demand, but Algolia's market narrative is lagging."
+                    ),
+                    involved_companies=["Algolia", "Google Vertex AI Search"],
+                    confidence=0.78,
+                    evidence_refs=[
+                        {"source_url": "https://www.algolia.com/products/agent-studio"},
+                        {"source_url": "https://cloud.google.com/enterprise-search"},
+                    ],
+                )
+            ]
+        },
+        recommendations={
+            1: [
+                argus_recommendation_row(
+                    id=52,
+                    pattern_observation_id=31,
+                    owner="Product Marketing",
+                    action="Turn Agent Studio into an evidence-backed market narrative.",
+                    why_now="The demand window is cooling while competitor AI-search framing accelerates.",
+                    urgency="P1",
+                    confidence=0.74,
+                    evidence_refs=[
+                        {"source_url": "https://www.algolia.com/products/agent-studio"},
+                        {"source_url": "looker://algolia/ga4/agent-studio"},
+                    ],
+                )
+            ]
+        },
+        feature_positions={
+            1: [
+                feature_position_row(
+                    company_name="Algolia",
+                    company_role="own",
+                    capability_text="Agent Studio",
+                    position_status="proven",
+                    summary="Algolia has shipped Agent Studio product proof.",
+                    confidence=0.84,
+                    evidence_refs=[{"source_url": "https://www.algolia.com/products/agent-studio"}],
+                ),
+                feature_position_row(
+                    company_name="Google Vertex AI Search",
+                    company_role="competitor",
+                    capability_text="Agent Studio",
+                    position_status="unknown",
+                    summary="Competitor positioning is visible, but exact Agent Studio parity is unresolved.",
+                    confidence=0.35,
+                    evidence_refs=[{"source_url": "https://cloud.google.com/enterprise-search"}],
+                ),
+            ]
+        },
+        demand_signals={
+            1: [
+                demand_signal_row(
+                    topic="Agent Studio",
+                    metric="engaged_sessions",
+                    value=480,
+                    change_pct=0.27,
+                    source_label="Looker Studio GA4 export",
+                    evidence_refs=[{"source_url": "looker://algolia/ga4/agent-studio"}],
+                    metadata={"summary": "Audience Demand rose for Agent Studio evaluation paths."},
+                )
+            ]
+        },
+    )
+    builder = DashboardStateBuilder(
+        signals=FakeSignalsRepository({1: []}),
+        theses=FakeThesesRepository({1: []}),
+        coverage=FakeCoverageRepository({1: full_coverage()}),
+        runs=FakeRunRepository({}),
+        product_market=product_market,
+    )
+
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    field = state.market_field
+    assert field.selected_hotspot.label == "Agent Studio"
+    assert field.selected_hotspot.argus_read.startswith("Agent Studio has shipped product proof")
+    node_types = {node.node_type for node in field.nodes}
+    assert "product_reality" in node_types
+    assert "market_conversation" in node_types
+    assert "audience_demand" in node_types
+    assert "argus_action" in node_types
+    edge_types = {edge.edge_type for edge in field.edges}
+    assert "supports_story" in edge_types
+    assert "requires_action" in edge_types
+    assert "limits_confidence" in edge_types
+    proof_planes = {item.plane for item in field.proof}
+    assert {"product_reality", "market_conversation", "audience_demand", "argus_recommendation"} <= proof_planes
+    assert field.actions[0].owner == "Product Marketing"
+    assert field.actions[0].priority == "P1"
+    assert "demand window is cooling" in field.actions[0].why_now
+    assert any("Competitor positioning is visible" in unknown for unknown in field.selected_hotspot.unknowns)

@@ -1660,6 +1660,20 @@ class DashboardStateBuilder:
         return f"{prefix}-{key}" if key else f"{prefix}-unknown"
 
     @staticmethod
+    def _market_field_first_url(evidence_refs: list[dict[str, Any]]) -> Optional[str]:
+        return DashboardStateBuilder._first_evidence_url(evidence_refs)
+
+    @staticmethod
+    def _market_field_evidence_count(evidence_refs: list[dict[str, Any]]) -> int:
+        return len(
+            [
+                ref
+                for ref in evidence_refs
+                if ref.get("source_url") or ref.get("url") or ref.get("href")
+            ]
+        )
+
+    @staticmethod
     def _confidence_label(confidence: Optional[float]) -> str:
         if confidence is None:
             return "unknown"
@@ -1730,6 +1744,92 @@ class DashboardStateBuilder:
                 )
             )
 
+            product_rows = [
+                row
+                for row in feature_matrix
+                if DashboardStateBuilder._normalize_comparison_key(row.capability_text)
+                == DashboardStateBuilder._normalize_comparison_key(top_pattern.capability_text)
+            ]
+            proven_product_rows = [
+                row
+                for row in product_rows
+                if str(row.position_status or "").strip().lower() in {"proven", "present", "claimed"}
+            ]
+            if proven_product_rows:
+                summary = "; ".join(
+                    row.summary or f"{row.company_name} has {row.position_status} product evidence."
+                    for row in proven_product_rows[:3]
+                )
+                product_reality_id = DashboardStateBuilder._market_field_id(
+                    "product-reality",
+                    top_pattern.capability_text,
+                )
+                nodes[product_reality_id] = MarketFieldNode(
+                    node_id=product_reality_id,
+                    label="Product reality",
+                    node_type="product_reality",
+                    summary=summary,
+                    href=DashboardStateBuilder._market_field_first_url(
+                        [
+                            ref
+                            for row in proven_product_rows
+                            for ref in row.evidence_refs
+                        ]
+                    ),
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=product_reality_id,
+                        target_node_id=hotspot_id,
+                        edge_type="supports_story",
+                        strength="strong",
+                    )
+                )
+                proof.append(
+                    MarketFieldProofItem(
+                        plane="product_reality",
+                        summary=summary,
+                        source_count=sum(
+                            DashboardStateBuilder._market_field_evidence_count(row.evidence_refs)
+                            for row in proven_product_rows
+                        ),
+                        href=nodes[product_reality_id].href,
+                    )
+                )
+
+            if top_pattern.involved_companies or top_pattern.evidence_refs:
+                market_conversation_id = DashboardStateBuilder._market_field_id(
+                    "market-conversation",
+                    top_pattern.capability_text,
+                )
+                involved = DashboardStateBuilder._human_join(top_pattern.involved_companies)
+                summary = top_pattern.summary
+                if involved and involved != "no companies":
+                    summary = f"{involved}: {summary}"
+                nodes[market_conversation_id] = MarketFieldNode(
+                    node_id=market_conversation_id,
+                    label="Market conversation",
+                    node_type="market_conversation",
+                    summary=summary,
+                    href=DashboardStateBuilder._market_field_first_url(top_pattern.evidence_refs),
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=market_conversation_id,
+                        target_node_id=hotspot_id,
+                        edge_type="supports_story",
+                        strength="medium",
+                    )
+                )
+                proof.append(
+                    MarketFieldProofItem(
+                        plane="market_conversation",
+                        summary=summary,
+                        source_count=DashboardStateBuilder._market_field_evidence_count(top_pattern.evidence_refs),
+                        href=nodes[market_conversation_id].href,
+                    )
+                )
+
             unknowns: list[str] = []
             for row in feature_matrix:
                 if str(row.position_status or "").strip().lower() != "unknown":
@@ -1774,6 +1874,45 @@ class DashboardStateBuilder:
                         target_node_id=hotspot_id,
                         edge_type="overlaps_demand",
                         strength="medium",
+                    )
+                )
+
+            matching_recommendation = next(
+                (
+                    recommendation
+                    for recommendation in recommendations
+                    if recommendation.pattern_observation_id == top_pattern.pattern_id
+                ),
+                recommendations[0] if recommendations else None,
+            )
+            if matching_recommendation is not None:
+                action_id = DashboardStateBuilder._market_field_id(
+                    "argus-action",
+                    f"{matching_recommendation.owner} {matching_recommendation.action}",
+                )
+                nodes[action_id] = MarketFieldNode(
+                    node_id=action_id,
+                    label=f"{matching_recommendation.owner} action",
+                    node_type="argus_action",
+                    summary=f"{matching_recommendation.action} {matching_recommendation.why_now}",
+                    href=DashboardStateBuilder._market_field_first_url(matching_recommendation.evidence_refs),
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=hotspot_id,
+                        target_node_id=action_id,
+                        edge_type="requires_action",
+                        strength="strong",
+                    )
+                )
+                proof.append(
+                    MarketFieldProofItem(
+                        plane="argus_recommendation",
+                        summary=f"{matching_recommendation.owner}: {matching_recommendation.action}",
+                        source_count=DashboardStateBuilder._market_field_evidence_count(
+                            matching_recommendation.evidence_refs
+                        ),
+                        href=nodes[action_id].href,
                     )
                 )
 
