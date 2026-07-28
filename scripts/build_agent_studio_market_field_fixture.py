@@ -112,8 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     publish_to_file(state, json_path)
     manifest = {
         "status": "built",
-        "html": str(html_path),
-        "json": str(json_path),
+        "html": html_path.name,
+        "json": json_path.name,
         "selected_hotspot": state.market_field.selected_hotspot.label if state.market_field.selected_hotspot else None,
         "node_types": sorted({node.node_type for node in state.market_field.nodes}),
         "proof_planes": sorted({item.plane for item in state.market_field.proof}),

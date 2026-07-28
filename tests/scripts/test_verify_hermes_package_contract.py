@@ -52,6 +52,7 @@ REQUIRED_FILES = [
     "scripts/build_phase0_release_record.py",
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/scan_public_artifacts.py",
     "scripts/validate_market_field_story.py",
     "scripts/validate_market_field_visual_acceptance.py",
     "scripts/cios_run_queue.py",
@@ -656,6 +657,16 @@ def test_preflight_fails_when_dashboard_source_references_cdn_runtime(tmp_path):
 
     assert result.returncode == 2
     assert "3d runtime must not use external CDN: src/cios/dashboard/cockpit_renderer.py contains unpkg.com" in result.stderr
+
+
+def test_preflight_allows_public_safety_scanner_to_name_forbidden_cdn_hosts(tmp_path):
+    app = _make_app(tmp_path)
+    scanner = app / "scripts" / "scan_public_artifacts.py"
+    scanner.write_text("FORBIDDEN_RUNTIME_HOSTS = ('unpkg.com', 'cdn.jsdelivr.net', 'esm.sh')\n", encoding="utf-8")
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 0, result.stderr + result.stdout
 
 
 def test_preflight_fails_when_manual_fast_lane_omits_demand_plan_template_export(tmp_path):

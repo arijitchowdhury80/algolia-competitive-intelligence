@@ -69,6 +69,7 @@ REQUIRED_PATHS = [
     "scripts/build_phase0_release_record.py",
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/scan_public_artifacts.py",
     "scripts/validate_market_field_story.py",
     "scripts/validate_market_field_visual_acceptance.py",
     "scripts/cios_run_queue.py",
@@ -317,7 +318,10 @@ def collect_3d_runtime_errors(app_dir: Path) -> list[str]:
             rel = path.relative_to(app_dir)
             if str(rel).startswith("src/cios/dashboard/static/vendor/"):
                 continue
-            if str(rel).startswith("tests/") or str(rel) == "scripts/verify_hermes_package_contract.py":
+            if str(rel).startswith("tests/") or str(rel) in {
+                "scripts/scan_public_artifacts.py",
+                "scripts/verify_hermes_package_contract.py",
+            }:
                 continue
             text = path.read_text(encoding="utf-8", errors="ignore")
             for host in FORBIDDEN_RUNTIME_HOSTS:

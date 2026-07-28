@@ -28,7 +28,10 @@ def test_fixture_builder_writes_agent_studio_dashboard_and_manifest(tmp_path) ->
     assert code == 0
     assert (tmp_path / "argus-dashboard.json").exists()
     assert manifest["status"] == "built"
+    assert manifest["html"] == "argus-dashboard.html"
+    assert manifest["json"] == "argus-dashboard.json"
     assert manifest["selected_hotspot"] == "Agent Studio"
     assert "product_reality" in manifest["node_types"]
     assert "argus_recommendation" in manifest["proof_planes"]
     assert "Turn Agent Studio into an evidence-backed market narrative." in html
+    assert str(tmp_path) not in json.dumps(manifest)
