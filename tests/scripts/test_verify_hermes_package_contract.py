@@ -52,6 +52,7 @@ REQUIRED_FILES = [
     "scripts/build_phase0_release_record.py",
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/check_pilot_monitoring.py",
     "scripts/check_live_operational_safety.py",
     "scripts/redact_public_artifacts.py",
     "scripts/scan_public_artifacts.py",
@@ -606,6 +607,16 @@ def test_preflight_fails_when_launch_readiness_gate_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: scripts/check_e2e_launch_readiness.py" in result.stderr
+
+
+def test_preflight_fails_when_pilot_monitoring_gate_missing(tmp_path):
+    app = _make_app(tmp_path)
+    (app / "scripts" / "check_pilot_monitoring.py").unlink()
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "missing required path: scripts/check_pilot_monitoring.py" in result.stderr
 
 
 def test_preflight_fails_when_live_operational_safety_gate_missing(tmp_path):
