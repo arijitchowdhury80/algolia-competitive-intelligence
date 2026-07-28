@@ -21,6 +21,16 @@ class CheckResult:
     detail: str
 
 
+MARKET_FIELD_REQUIRED_SELECTORS = (
+    "#market-field",
+    "#selected-movement",
+    "#action-layer",
+    "#proof-drawer",
+    "#evidence-lab",
+    "#admin",
+)
+
+
 def _playwright_sync_api() -> tuple[Any, type[Exception]]:
     try:
         from playwright.sync_api import Error, sync_playwright
@@ -87,6 +97,37 @@ def validate_structure(page: Page) -> CheckResult:
     today = page.locator("#today-read").evaluate("el => el.compareDocumentPosition(document.querySelector('#priority-moves'))")
     _assert(today & 4, "today read does not precede priority moves")
     return CheckResult("structure", "Read, timeline, semantic layer, priority moves, selected competitor, role implications, evidence sections, and Argus assets present")
+
+
+def validate_market_field(page: Page) -> CheckResult:
+    for selector in MARKET_FIELD_REQUIRED_SELECTORS:
+        _assert(page.locator(selector).count() == 1, f"{selector} missing")
+
+    _assert(page.locator("[data-market-hotspot]").count() > 0, "market hotspots missing")
+    first = page.locator("[data-market-hotspot]").first
+    first.click()
+    page.wait_for_timeout(150)
+    _assert(page.locator("#selected-movement").is_visible(), "selected movement did not remain visible")
+    _assert(page.locator("#action-layer").is_visible(), "action layer is not visible")
+
+    for label in ("today", "7d", "30d", "custom"):
+        control = page.locator(f'[data-time-window="{label}"]')
+        _assert(control.count() == 1, f"{label} time window missing")
+        control.click()
+        page.wait_for_timeout(100)
+
+    proof_button = page.locator("[data-proof-drawer-toggle]")
+    _assert(proof_button.count() == 1, "proof drawer toggle missing")
+    proof_button.click()
+    page.wait_for_timeout(150)
+    _assert(proof_button.get_attribute("aria-expanded") == "true", "proof drawer did not expand")
+    _assert(page.locator("[data-proof-drawer-panel]").is_visible(), "proof drawer panel is not visible")
+    _assert(page.locator("#evidence-lab").is_visible(), "Evidence Lab route is not visible")
+    _assert(page.locator("#admin").is_visible(), "Admin route is not visible")
+    return CheckResult(
+        "market_field",
+        "Hotspot selection, time windows, action layer, proof drawer, Evidence, and Admin sections validated",
+    )
 
 
 def validate_nav_targets(page: Page) -> CheckResult:
@@ -264,6 +305,10 @@ def validate_responsive(base_url: str, viewports: list[tuple[int, int]]) -> list
             errors: list[str] = []
             page.on("pageerror", lambda exc: errors.append(str(exc)))
             page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
+            _assert(page.locator("#market-field").count() == 1, f"market field missing at {width}px")
+            _assert(page.locator("#selected-movement").count() == 1, f"selected movement missing at {width}px")
+            _assert(page.locator("#action-layer").count() == 1, f"action layer missing at {width}px")
+            _assert(page.locator("#proof-drawer").count() == 1, f"proof drawer missing at {width}px")
             _assert(page.locator("#today-read").count() == 1, f"today read missing at {width}px")
             _assert(page.locator("#intelligence-spine").count() == 1, f"intelligence spine missing at {width}px")
             _assert(page.locator("#market-timeline").count() == 1, f"market timeline missing at {width}px")
@@ -306,6 +351,7 @@ def main() -> None:
         page = browser.new_page(viewport={"width": 1280, "height": 900}, ignore_https_errors=True)
         page.goto(base_url, wait_until="domcontentloaded", timeout=30000)
         _assert("Argus Competitive Intelligence Cockpit" in page.title(), "unexpected page title")
+        results.append(validate_market_field(page))
         results.append(validate_structure(page))
         results.append(validate_nav_targets(page))
         results.append(validate_timeline(page))
