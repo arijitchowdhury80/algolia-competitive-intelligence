@@ -50,7 +50,9 @@ REQUIRED_FILES = [
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
     "scripts/build_phase0_release_record.py",
+    "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/validate_market_field_story.py",
     "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
@@ -597,6 +599,16 @@ def test_preflight_fails_when_launch_readiness_gate_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: scripts/check_e2e_launch_readiness.py" in result.stderr
+
+
+def test_preflight_fails_when_market_field_story_validator_missing(tmp_path):
+    app = _make_app(tmp_path)
+    (app / "scripts" / "validate_market_field_story.py").unlink()
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "missing required path: scripts/validate_market_field_story.py" in result.stderr
 
 
 def test_preflight_fails_when_e2e_validation_plan_missing(tmp_path):
