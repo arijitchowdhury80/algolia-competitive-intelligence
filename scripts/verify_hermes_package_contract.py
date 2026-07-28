@@ -71,6 +71,7 @@ REQUIRED_PATHS = [
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
     "scripts/check_pilot_monitoring.py",
+    "scripts/check_phase8_exit.py",
     "scripts/check_live_operational_safety.py",
     "scripts/redact_public_artifacts.py",
     "scripts/scan_public_artifacts.py",
