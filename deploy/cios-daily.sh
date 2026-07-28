@@ -464,8 +464,8 @@ if [ "$DAILY_CODE" -ne 0 ]; then
       --guide-output "$OUT/argus-demand-work-order-guide.json" \
       --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT"
 
-    run_argus_demand_intake_sidecar
     evaluate_planned_demand_sidecar
+    run_argus_demand_intake_sidecar
 
     .venv/bin/python scripts/attach_post_run_summaries.py \
       --dashboard "$OUT/argus-dashboard.json" \
@@ -579,8 +579,8 @@ fi
   --guide-output "$OUT/argus-demand-work-order-guide.json" \
   --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT"
 
-run_argus_demand_intake_sidecar
 evaluate_planned_demand_sidecar
+run_argus_demand_intake_sidecar
 
 .venv/bin/python scripts/attach_post_run_summaries.py \
   --dashboard "$OUT/argus-dashboard.json" \
