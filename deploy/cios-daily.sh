@@ -745,6 +745,10 @@ fi
 cp -R "$OUT/briefs" "$STAGE/briefs"
 cp -R "$OUT/briefs" "$STAGE/v2/briefs"
 
+.venv/bin/python scripts/redact_public_artifacts.py \
+  --public-dir "$STAGE" \
+  --output "$OUT/public-artifact-redaction.json"
+
 .venv/bin/python scripts/scan_public_artifacts.py \
   --public-dir "$STAGE" \
   --output "$OUT/public-artifact-safety-scan.json"

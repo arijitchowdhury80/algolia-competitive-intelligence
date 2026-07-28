@@ -69,6 +69,7 @@ REQUIRED_PATHS = [
     "scripts/build_phase0_release_record.py",
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/redact_public_artifacts.py",
     "scripts/scan_public_artifacts.py",
     "scripts/validate_market_field_story.py",
     "scripts/validate_market_field_visual_acceptance.py",
@@ -129,6 +130,7 @@ WRAPPER_INVARIANTS = {
     "wrapper missing scoped output cleanup": 'find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +',
     "wrapper missing current-run artifact validation": "missing dashboard artifact from current run",
     "wrapper missing staged publish directory": ".argus-publish.$$",
+    "wrapper missing public artifact redaction": "redact_public_artifacts.py",
     "wrapper missing public artifact safety scan": "scan_public_artifacts.py",
 }
 
@@ -320,6 +322,7 @@ def collect_3d_runtime_errors(app_dir: Path) -> list[str]:
             if str(rel).startswith("src/cios/dashboard/static/vendor/"):
                 continue
             if str(rel).startswith("tests/") or str(rel) in {
+                "scripts/redact_public_artifacts.py",
                 "scripts/scan_public_artifacts.py",
                 "scripts/verify_hermes_package_contract.py",
             }:

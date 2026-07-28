@@ -52,6 +52,7 @@ REQUIRED_FILES = [
     "scripts/build_phase0_release_record.py",
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
+    "scripts/redact_public_artifacts.py",
     "scripts/scan_public_artifacts.py",
     "scripts/validate_market_field_story.py",
     "scripts/validate_market_field_visual_acceptance.py",
@@ -131,6 +132,7 @@ if [ ! -s "$CIOS_DASHBOARD_OUT" ]; then
 fi
 STAGE="$PUB/.argus-publish.$$"
 mkdir -p "$STAGE"
+.venv/bin/python scripts/redact_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-redaction.json"
 .venv/bin/python scripts/scan_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-safety-scan.json"
 """
 

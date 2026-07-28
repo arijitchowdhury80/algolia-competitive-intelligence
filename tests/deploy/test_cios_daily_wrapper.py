@@ -412,6 +412,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -511,6 +514,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -606,6 +612,9 @@ case "$1" in
   *daily_production_run.py)
     echo "daily should not execute after policy audit failure" >&2
     exit 98
+    ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
     ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
@@ -778,6 +787,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -809,6 +821,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-redaction",
         "public-safety-scan",
     ]
 
@@ -1190,6 +1203,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -1221,6 +1237,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-redaction",
         "public-safety-scan",
     ]
     assert (app / "out" / "gap-plan-arg.txt").read_text(encoding="utf-8") == str(
@@ -1499,6 +1516,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -1530,6 +1550,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-redaction",
         "public-safety-scan",
     ]
     assert (app / "out" / "promotion-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
@@ -1611,6 +1632,9 @@ case "$1" in
   *export_argus_evidence_work_queue.py)
     # Simulate a broken exporter that exits 0 but writes nothing.
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -1687,6 +1711,9 @@ case "$1" in
     ;;
   *export_argus_product_muscle_work_queue.py)
     # Simulate a broken exporter that exits 0 but writes nothing.
+    ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
     ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
@@ -1873,6 +1900,9 @@ case "$1" in
       shift
     done
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -1907,6 +1937,7 @@ esac
         "operator-handoff",
         "dashboard-handoff-attach",
         "data-plane-manifest",
+        "public-redaction",
         "public-safety-scan",
     ]
     assert (app / "out" / "operator-handoff-tenant-arg.txt").read_text(encoding="utf-8") == "algolia"
@@ -2006,6 +2037,9 @@ case "$1" in
   *build_argus_operator_handoff.py)
     # Simulate a broken handoff builder that exits 0 but writes nothing.
     ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
+    ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
     ;;
@@ -2096,6 +2130,9 @@ case "$1" in
     ;;
   *export_argus_data_plane_manifest.py)
     # Simulate a broken manifest exporter that exits 0 but writes nothing.
+    ;;
+  *redact_public_artifacts.py)
+    echo "public-redaction" >> "$CALLS"
     ;;
   *scan_public_artifacts.py)
     echo "public-safety-scan" >> "$CALLS"
