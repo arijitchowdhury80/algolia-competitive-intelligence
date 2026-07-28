@@ -1013,6 +1013,40 @@ def test_data_plane_manifest_blocks_action_when_demand_lacks_comparison_period()
     )
 
 
+def test_data_plane_manifest_prefers_current_readiness_action_over_stale_intake_action() -> None:
+    module = _load_module()
+    dashboard = _dashboard_payload()
+    dashboard["product_market_run"]["demand_signal_count"] = 100
+    dashboard["product_market_run"]["looker_normalized_row_count"] = 20
+    dashboard["product_market_run"]["demand_plane_status"] = "processed"
+
+    payload = module.build_data_plane_manifest_payload(
+        tenant_slug="algolia",
+        dashboard=dashboard,
+        demand_readiness={
+            "status": "processed_no_action_grade_demand",
+            "next_hermes_action": "upload_trended_planned_demand_export",
+            "summary": (
+                "Tenant demand evidence exists, but no topic crossed the rising-demand threshold. "
+                "Argus needs planned topic mapping plus previous-period or change_pct values before it can promote action."
+            ),
+        },
+        demand_intake={
+            "status": "processed_unmapped_demand",
+            "next_hermes_action": "inspect_demand_mapping",
+        },
+        evidence_work_queue={"work_item_count": 0, "blocking_count": 0, "limiting_count": 0, "items": []},
+        operator_handoff={"status": "ready_for_operator_review", "argus_readiness": "actionable"},
+        generated_at="2026-07-12T11:35:00Z",
+    )
+
+    demand_plane = payload["planes"]["audience_demand"]
+    assert payload["status"] == "blocked_on_evidence"
+    assert payload["next_hermes_action"] == "upload_trended_planned_demand_export"
+    assert demand_plane["status"] == "processed_no_action_grade_demand"
+    assert demand_plane["next_hermes_action"] == "upload_trended_planned_demand_export"
+
+
 def test_data_plane_manifest_writes_output_file(tmp_path) -> None:
     module = _load_module()
     output = tmp_path / "out" / "argus-data-plane-manifest.json"

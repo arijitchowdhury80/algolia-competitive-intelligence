@@ -551,7 +551,6 @@ def _demand_plane(
     )
     readiness_status = str(demand_readiness.get("status") or run.get("demand_plane_status") or "not_recorded")
     intake_status = str(intake.get("status") or "")
-    next_action = intake.get("next_hermes_action") or demand_readiness.get("next_hermes_action")
     processed_statuses = {
         "demand_imported_and_argus_refreshed",
         "ga4_exported_demand_imported_and_argus_refreshed",
@@ -584,6 +583,10 @@ def _demand_plane(
         status = intake_status
     else:
         status = readiness_status
+    if status in plan_blocking_statuses:
+        next_action = demand_readiness.get("next_hermes_action") or intake.get("next_hermes_action")
+    else:
+        next_action = intake.get("next_hermes_action") or demand_readiness.get("next_hermes_action")
     blocks_action = status in plan_blocking_statuses or (demand_signal_count == 0 and status in blocking_statuses)
     if blocks_action:
         summary = str(
