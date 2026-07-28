@@ -574,6 +574,7 @@ def _demand_plane(
         "processed_off_plan_demand",
         "processed_unmapped_demand",
         "processed_no_comparison_period",
+        "processed_no_action_grade_demand",
     }
     if readiness_status in plan_blocking_statuses:
         status = readiness_status

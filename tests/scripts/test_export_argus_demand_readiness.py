@@ -403,6 +403,58 @@ def test_export_argus_demand_readiness_blocks_current_period_only_demand(tmp_pat
     }
 
 
+def test_export_argus_demand_readiness_blocks_processed_demand_without_action_grade_topics(tmp_path) -> None:
+    module = _load_module()
+    app_dir = tmp_path / "app"
+    work_root = tmp_path / "work"
+    dashboard = {
+        "product_market_run": {
+            "demand_plane_status": "processed",
+            "looker_discovered_count": 1,
+            "looker_ready_count": 1,
+            "looker_error_count": 0,
+            "looker_normalized_row_count": 20,
+            "demand_signal_count": 100,
+            "product_feature_comparison_read": {
+                "rows": [
+                    {
+                        "capability": "AI Assistant",
+                        "capability_key": "ai assistant",
+                        "assessment": "watch",
+                        "recommended_action": "Check whether demand is moving.",
+                    }
+                ]
+            },
+            "intelligence_brief": {
+                "demand_read": {
+                    "summary": "100 demand signals captured, but none crossed the rising-demand threshold.",
+                    "top_topics": [],
+                    "rising_topic_count": 0,
+                    "demand_signal_count": 100,
+                }
+            },
+        }
+    }
+
+    payload = module.build_demand_readiness_payload(
+        tenant_slug="algolia",
+        app_dir=app_dir,
+        work_root=work_root,
+        env={"CIOS_GA4_EXPORT_ENABLED": "0"},
+        dashboard=dashboard,
+        generated_at="2026-07-12T02:00:00Z",
+    )
+
+    assert payload["status"] == "processed_no_action_grade_demand"
+    assert payload["next_hermes_action"] == "upload_trended_planned_demand_export"
+    assert payload["summary"] == (
+        "Tenant demand evidence exists, but no topic crossed the rising-demand threshold. "
+        "Argus needs planned topic mapping plus previous-period or change_pct values before it can promote action."
+    )
+    assert payload["action_grade_coverage"]["demand_signal_count"] == 100
+    assert payload["action_grade_coverage"]["rising_topic_count"] == 0
+
+
 def test_export_argus_demand_readiness_prefers_queued_manual_exports(tmp_path) -> None:
     module = _load_module()
     app_dir = tmp_path / "app"

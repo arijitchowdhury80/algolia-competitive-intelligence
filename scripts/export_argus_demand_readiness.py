@@ -438,6 +438,20 @@ def _demand_comparison_coverage(dashboard: dict[str, Any] | None) -> dict[str, A
     }
 
 
+def _demand_action_grade_coverage(dashboard: dict[str, Any] | None) -> dict[str, Any]:
+    demand_read = {}
+    run = _dashboard_run(dashboard)
+    brief = run.get("intelligence_brief")
+    if isinstance(brief, dict) and isinstance(brief.get("demand_read"), dict):
+        demand_read = brief["demand_read"]
+    return {
+        "demand_signal_count": _int_value(run.get("demand_signal_count")),
+        "rising_topic_count": _int_value(demand_read.get("rising_topic_count")),
+        "top_topic_count": len(_list_value(demand_read.get("top_topics"))),
+        "summary": _text_value(demand_read.get("summary")),
+    }
+
+
 def _demand_collection_plan(
     *,
     status: str,
@@ -491,6 +505,7 @@ def _refine_status_with_plan_coverage(
     summary: str,
     demand_collection_plan: dict[str, Any],
     comparison_coverage: dict[str, Any],
+    action_grade_coverage: dict[str, Any],
 ) -> tuple[str, str, str]:
     if status != "processed":
         return status, next_action, summary
@@ -503,6 +518,18 @@ def _refine_status_with_plan_coverage(
             (
                 "Tenant demand evidence exists, but the imported export only has current-period values. "
                 "Argus needs a previous-period or change_pct column before it can score movement."
+            ),
+        )
+    demand_signal_count = _int_value(action_grade_coverage.get("demand_signal_count"))
+    rising_topic_count = _int_value(action_grade_coverage.get("rising_topic_count"))
+    top_topic_count = _int_value(action_grade_coverage.get("top_topic_count"))
+    if demand_signal_count > 0 and rising_topic_count == 0 and top_topic_count == 0:
+        return (
+            "processed_no_action_grade_demand",
+            "upload_trended_planned_demand_export",
+            (
+                "Tenant demand evidence exists, but no topic crossed the rising-demand threshold. "
+                "Argus needs planned topic mapping plus previous-period or change_pct values before it can promote action."
             ),
         )
     coverage = demand_collection_plan.get("coverage")
@@ -756,12 +783,14 @@ def build_demand_readiness_payload(
         dashboard=dashboard,
     )
     comparison_coverage = _demand_comparison_coverage(dashboard)
+    action_grade_coverage = _demand_action_grade_coverage(dashboard)
     status, next_action, summary = _refine_status_with_plan_coverage(
         status=status,
         next_action=next_action,
         summary=summary,
         demand_collection_plan=demand_collection_plan,
         comparison_coverage=comparison_coverage,
+        action_grade_coverage=action_grade_coverage,
     )
     demand_source_contract = build_demand_source_contract(
         tenant_slug=tenant_slug,
@@ -785,6 +814,7 @@ def build_demand_readiness_payload(
         "demand_source_contract": demand_source_contract,
         "demand_collection_plan": demand_collection_plan,
         "comparison_coverage": comparison_coverage,
+        "action_grade_coverage": action_grade_coverage,
         "operator_actions": _operator_actions(tenant_slug, status=status),
         "safety": {
             "secret_values_included": False,
