@@ -111,6 +111,40 @@ def _package_contract_passed(log_text: str) -> bool:
     return PASS_PACKAGE_TOKEN in log_text
 
 
+def _public_redaction_passed(redaction: Mapping[str, Any] | None) -> bool:
+    if not redaction:
+        return False
+    return (
+        redaction.get("status") in {"clean", "redacted", "passed"}
+        and redaction.get("public_safe_for_scan") is True
+        and not _dict_value(redaction).get("error")
+    )
+
+
+def _public_scan_passed(scan: Mapping[str, Any] | None) -> bool:
+    if not scan:
+        return False
+    findings = scan.get("findings")
+    finding_count = _int_value(scan.get("finding_count"))
+    if isinstance(findings, list):
+        finding_count = len(findings)
+    return scan.get("status") == "passed" and scan.get("public_safe") is True and finding_count == 0
+
+
+def _operational_safety_passed(safety: Mapping[str, Any] | None) -> bool:
+    if not safety:
+        return False
+    return (
+        safety.get("status") == "passed"
+        and safety.get("operational_safe") is True
+        and safety.get("current_release_exists") is True
+        and safety.get("served_release_ready") is True
+        and _int_value(safety.get("hidden_staging_dir_count")) == 0
+        and _int_value(safety.get("root_owned_artifact_count")) == 0
+        and _int_value(safety.get("orphan_process_count")) == 0
+    )
+
+
 def _blocker(requirement: str, actual: str, next_step: str) -> dict[str, str]:
     return {
         "requirement": requirement,
@@ -135,6 +169,9 @@ def evaluate_launch_readiness(
     public_status: dict[str, Any],
     click_validation_log: str = "",
     package_contract_log: str = "",
+    public_redaction: dict[str, Any] | None = None,
+    public_safety_scan: dict[str, Any] | None = None,
+    operational_safety: dict[str, Any] | None = None,
     min_active_sources: int = 1,
     max_failed_sources: int = 0,
     generated_at: str | None = None,
@@ -157,6 +194,9 @@ def evaluate_launch_readiness(
         "dashboard_click_validation_passed": _click_validation_passed(click_validation_log),
         "hermes_package_contract_passed": _package_contract_passed(package_contract_log),
         "public_safety_ok": _public_safety_ok(public_status),
+        "public_artifact_redaction_passed": _public_redaction_passed(public_redaction),
+        "public_artifact_scan_passed": _public_scan_passed(public_safety_scan),
+        "live_operational_safety_passed": _operational_safety_passed(operational_safety),
     }
 
     blockers: list[dict[str, str]] = []
@@ -228,6 +268,30 @@ def evaluate_launch_readiness(
                 "Redact internal paths and secrets from public artifacts before launch.",
             )
         )
+    if not checks["public_artifact_redaction_passed"]:
+        blockers.append(
+            _blocker(
+                "public_artifact_redaction_passed",
+                f"redaction_status={_dict_value(public_redaction).get('status', 'missing')}",
+                "Run scripts/redact_public_artifacts.py and pass its JSON artifact into this gate.",
+            )
+        )
+    if not checks["public_artifact_scan_passed"]:
+        blockers.append(
+            _blocker(
+                "public_artifact_scan_passed",
+                f"scan_status={_dict_value(public_safety_scan).get('status', 'missing')}",
+                "Run scripts/scan_public_artifacts.py and pass its JSON artifact into this gate.",
+            )
+        )
+    if not checks["live_operational_safety_passed"]:
+        blockers.append(
+            _blocker(
+                "live_operational_safety_passed",
+                f"operational_status={_dict_value(operational_safety).get('status', 'missing')}",
+                "Run scripts/check_live_operational_safety.py against the deployed host and pass its JSON artifact into this gate.",
+            )
+        )
 
     status = "pass" if not blockers else "fail"
     payload: dict[str, Any] = {
@@ -270,6 +334,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--click-validation-log-text")
     parser.add_argument("--package-contract-log", type=Path)
     parser.add_argument("--package-contract-log-text")
+    parser.add_argument("--public-redaction", type=Path)
+    parser.add_argument("--public-safety-scan", type=Path)
+    parser.add_argument("--operational-safety", type=Path)
     parser.add_argument("--min-active-sources", type=int, default=1)
     parser.add_argument("--max-failed-sources", type=int, default=0)
     parser.add_argument("--output", type=Path)
@@ -282,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
         public_status=_load_json(args.public_status),
         click_validation_log=_load_text(args.click_validation_log, args.click_validation_log_text),
         package_contract_log=_load_text(args.package_contract_log, args.package_contract_log_text),
+        public_redaction=_load_json(args.public_redaction) if args.public_redaction else None,
+        public_safety_scan=_load_json(args.public_safety_scan) if args.public_safety_scan else None,
+        operational_safety=_load_json(args.operational_safety) if args.operational_safety else None,
         min_active_sources=args.min_active_sources,
         max_failed_sources=args.max_failed_sources,
     )

@@ -66,6 +66,39 @@ def _published_status() -> dict:
     }
 
 
+def _public_redaction() -> dict:
+    return {
+        "status": "redacted",
+        "public_safe_for_scan": True,
+        "redaction_count": 3,
+        "redacted_file_count": 2,
+        "findings": [],
+    }
+
+
+def _public_safety_scan() -> dict:
+    return {
+        "status": "passed",
+        "public_safe": True,
+        "finding_count": 0,
+        "findings": [],
+    }
+
+
+def _operational_safety() -> dict:
+    return {
+        "gate": "cios_live_operational_safety",
+        "status": "passed",
+        "operational_safe": True,
+        "current_release_exists": True,
+        "served_release_ready": True,
+        "hidden_staging_dir_count": 0,
+        "root_owned_artifact_count": 0,
+        "orphan_process_count": 0,
+        "findings": [],
+    }
+
+
 def test_launch_readiness_passes_only_when_all_e2e_gates_pass() -> None:
     module = _load_module()
 
@@ -73,6 +106,9 @@ def test_launch_readiness_passes_only_when_all_e2e_gates_pass() -> None:
         public_status=_published_status(),
         click_validation_log="PASS structure\nPASS dashboard_click_validation\n",
         package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
     )
 
     assert result["gate"] == "cios_e2e_launch_readiness"
@@ -85,6 +121,9 @@ def test_launch_readiness_passes_only_when_all_e2e_gates_pass() -> None:
     assert result["checks"]["audience_demand_processed"] is True
     assert result["checks"]["dashboard_click_validation_passed"] is True
     assert result["checks"]["hermes_package_contract_passed"] is True
+    assert result["checks"]["public_artifact_redaction_passed"] is True
+    assert result["checks"]["public_artifact_scan_passed"] is True
+    assert result["checks"]["live_operational_safety_passed"] is True
     assert result["blockers"] == []
 
 
@@ -130,6 +169,9 @@ def test_launch_readiness_fails_with_specific_blockers_for_current_blocked_run()
         public_status=blocked,
         click_validation_log="PASS dashboard_click_validation\n",
         package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
     )
 
     assert result["status"] == "fail"
@@ -151,10 +193,16 @@ def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> Non
     status_path = tmp_path / "argus-latest-run-status.json"
     click_path = tmp_path / "click.log"
     package_path = tmp_path / "package.log"
+    redaction_path = tmp_path / "public-artifact-redaction.json"
+    scan_path = tmp_path / "public-artifact-safety-scan.json"
+    operational_path = tmp_path / "live-operational-safety.json"
     output_path = tmp_path / "launch-readiness.json"
     status_path.write_text(json.dumps(_published_status()), encoding="utf-8")
     click_path.write_text("PASS dashboard_click_validation\n", encoding="utf-8")
     package_path.write_text("PASS: CI-OS Hermes package contract satisfied\n", encoding="utf-8")
+    redaction_path.write_text(json.dumps(_public_redaction()), encoding="utf-8")
+    scan_path.write_text(json.dumps(_public_safety_scan()), encoding="utf-8")
+    operational_path.write_text(json.dumps(_operational_safety()), encoding="utf-8")
 
     code = module.main(
         [
@@ -164,6 +212,12 @@ def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> Non
             str(click_path),
             "--package-contract-log",
             str(package_path),
+            "--public-redaction",
+            str(redaction_path),
+            "--public-safety-scan",
+            str(scan_path),
+            "--operational-safety",
+            str(operational_path),
             "--output",
             str(output_path),
         ]
@@ -173,9 +227,10 @@ def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> Non
     assert code == 0
     assert payload["status"] == "pass"
     assert payload["checks"]["dashboard_click_validation_passed"] is True
+    assert payload["checks"]["live_operational_safety_passed"] is True
 
 
-def test_launch_readiness_cli_fails_when_click_validation_is_missing(tmp_path) -> None:
+def test_launch_readiness_cli_fails_when_required_validation_artifacts_are_missing(tmp_path) -> None:
     module = _load_module()
     status_path = tmp_path / "argus-latest-run-status.json"
     output_path = tmp_path / "launch-readiness.json"
@@ -195,7 +250,13 @@ def test_launch_readiness_cli_fails_when_click_validation_is_missing(tmp_path) -
     payload = json.loads(output_path.read_text(encoding="utf-8"))
     assert code == 2
     assert payload["checks"]["dashboard_click_validation_passed"] is False
+    assert payload["checks"]["public_artifact_redaction_passed"] is False
+    assert payload["checks"]["public_artifact_scan_passed"] is False
+    assert payload["checks"]["live_operational_safety_passed"] is False
     assert any(item["requirement"] == "dashboard_click_validation_passed" for item in payload["blockers"])
+    assert any(item["requirement"] == "public_artifact_redaction_passed" for item in payload["blockers"])
+    assert any(item["requirement"] == "public_artifact_scan_passed" for item in payload["blockers"])
+    assert any(item["requirement"] == "live_operational_safety_passed" for item in payload["blockers"])
 
 
 def test_e2e_validation_plan_is_written_to_disk_and_names_the_real_gates() -> None:
