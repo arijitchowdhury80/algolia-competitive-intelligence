@@ -53,6 +53,7 @@ REQUIRED_FILES = [
     "scripts/build_agent_studio_market_field_fixture.py",
     "scripts/check_e2e_launch_readiness.py",
     "scripts/validate_market_field_story.py",
+    "scripts/validate_market_field_visual_acceptance.py",
     "scripts/cios_run_queue.py",
     "scripts/scout_http_shim",
     "scripts/scout_http_shim.py",
