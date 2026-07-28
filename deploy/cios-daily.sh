@@ -215,7 +215,8 @@ evaluate_planned_demand_sidecar() {
     --data-dir "$CIOS_PLANNED_DEMAND_EXPORT_DATA_DIR" \
     --output "$OUT/argus-planned-demand-evaluation.json" \
     --prepared-output "$OUT/argus-planned-demand-prepared.csv" \
-    --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv"
+    --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv" \
+    --accept-limited-plan-evidence
   PLANNED_DEMAND_EVAL_CODE=$?
   set -e
   if [ -s "$OUT/argus-planned-demand-evaluation.json" ]; then

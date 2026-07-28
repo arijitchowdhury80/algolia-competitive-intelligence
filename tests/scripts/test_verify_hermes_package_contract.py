@@ -116,7 +116,7 @@ find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/promote_product_surface_candidates.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/product-surface-candidate-promotion-summary.json"
 .venv/bin/python scripts/export_argus_demand_readiness.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/argus-demand-readiness.json"
 .venv/bin/python scripts/export_argus_demand_plan_template.py --readiness "$OUT/argus-demand-readiness.json" --output "$OUT/argus-demand-plan-template.csv"
-.venv/bin/python scripts/evaluate_argus_planned_demand_exports.py --plan "$OUT/argus-demand-plan-template.csv" --data-dir "$APP/data" --output "$OUT/argus-planned-demand-evaluation.json" --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv"
+.venv/bin/python scripts/evaluate_argus_planned_demand_exports.py --plan "$OUT/argus-demand-plan-template.csv" --data-dir "$APP/data" --output "$OUT/argus-planned-demand-evaluation.json" --prepared-output "$OUT/argus-planned-demand-prepared.csv" --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv" --accept-limited-plan-evidence
 .venv/bin/python scripts/run_argus_demand_intake.py --tenant "$CIOS_DELIVER_TENANT" --record-history --output "$OUT/argus-demand-intake.json"
 .venv/bin/python scripts/attach_post_run_summaries.py --dashboard "$OUT/argus-dashboard.json" --demand-readiness "$OUT/argus-demand-readiness.json"
 .venv/bin/python scripts/rerender_dashboard.py --tenant "$CIOS_DELIVER_TENANT" --out-dir "$OUT"

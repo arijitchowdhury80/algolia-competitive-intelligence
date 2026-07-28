@@ -105,6 +105,7 @@ WRAPPER_INVARIANTS = {
     "wrapper missing demand-readiness export": "export_argus_demand_readiness.py",
     "wrapper missing demand plan template export": "export_argus_demand_plan_template.py",
     "wrapper missing planned demand evaluator": "evaluate_argus_planned_demand_exports.py",
+    "wrapper missing limited planned-demand acceptance": "--accept-limited-plan-evidence",
     "wrapper missing demand-intake coordinator": "run_argus_demand_intake.py",
     "wrapper missing demand-intake history recording": "--record-history",
     "wrapper missing post-run summary attach": "attach_post_run_summaries.py",
