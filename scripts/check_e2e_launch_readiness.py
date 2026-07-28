@@ -63,9 +63,27 @@ def _source_coverage_complete(public_status: Mapping[str, Any], *, min_active_so
     return active >= min_active_sources and checked >= active and active > 0
 
 
-def _source_failure_budget_ok(public_status: Mapping[str, Any], *, max_failed_sources: int) -> bool:
+def _source_failure_ratio(public_status: Mapping[str, Any]) -> float:
     coverage = _dict_value(public_status.get("source_coverage"))
-    return _int_value(coverage.get("failed_source_count")) <= max_failed_sources
+    active = _int_value(coverage.get("active_source_count"))
+    if active <= 0:
+        return 0.0
+    return _int_value(coverage.get("failed_source_count")) / active
+
+
+def _source_failure_budget_ok(
+    public_status: Mapping[str, Any],
+    *,
+    max_failed_sources: int,
+    max_failed_source_ratio: float | None = None,
+) -> bool:
+    coverage = _dict_value(public_status.get("source_coverage"))
+    failed = _int_value(coverage.get("failed_source_count"))
+    if failed <= max_failed_sources:
+        return True
+    if max_failed_source_ratio is None:
+        return False
+    return _source_failure_ratio(public_status) <= max_failed_source_ratio
 
 
 def _audience_demand_processed(public_status: Mapping[str, Any]) -> bool:
@@ -178,6 +196,7 @@ def evaluate_launch_readiness(
     operational_safety: dict[str, Any] | None = None,
     min_active_sources: int = 1,
     max_failed_sources: int = 0,
+    max_failed_source_ratio: float | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Return a launch readiness verdict from current authoritative artifacts."""
@@ -192,6 +211,7 @@ def evaluate_launch_readiness(
         "source_failure_budget_ok": _source_failure_budget_ok(
             public_status,
             max_failed_sources=max_failed_sources,
+            max_failed_source_ratio=max_failed_source_ratio,
         ),
         "audience_demand_processed": _audience_demand_processed(public_status),
         "product_reality_present": _product_reality_present(public_status),
@@ -225,10 +245,18 @@ def evaluate_launch_readiness(
             )
         )
     if not checks["source_failure_budget_ok"]:
+        source_failure_ratio = _source_failure_ratio(public_status)
+        ratio_text = ""
+        if max_failed_source_ratio is not None:
+            ratio_text = (
+                f" failed_source_ratio={source_failure_ratio:.4f} "
+                f"max_failed_source_ratio={max_failed_source_ratio:.4f}"
+            )
         blockers.append(
             _blocker(
                 "source_failure_budget_ok",
-                f"failed_source_count={_int_value(coverage.get('failed_source_count'))} max_failed_sources={max_failed_sources}",
+                f"failed_source_count={_int_value(coverage.get('failed_source_count'))} "
+                f"max_failed_sources={max_failed_sources}{ratio_text}",
                 "Repair failed sources or raise the launch failure budget with a documented degradation decision.",
             )
         )
@@ -309,7 +337,11 @@ def evaluate_launch_readiness(
         else "CI-OS launch readiness gate failed.",
         "checks": checks,
         "blockers": blockers,
-        "source_coverage": coverage,
+        "source_coverage": {
+            **coverage,
+            "failed_source_ratio": round(_source_failure_ratio(public_status), 4),
+            "max_failed_source_ratio": max_failed_source_ratio,
+        },
         "public_status": {
             "publish_status": public_status.get("publish_status"),
             "status": public_status.get("status"),
@@ -343,6 +375,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--operational-safety", type=Path)
     parser.add_argument("--min-active-sources", type=int, default=1)
     parser.add_argument("--max-failed-sources", type=int, default=0)
+    parser.add_argument("--max-failed-source-ratio", type=float)
     parser.add_argument("--output", type=Path)
     return parser.parse_args(argv)
 
@@ -358,6 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         operational_safety=_load_json(args.operational_safety) if args.operational_safety else None,
         min_active_sources=args.min_active_sources,
         max_failed_sources=args.max_failed_sources,
+        max_failed_source_ratio=args.max_failed_source_ratio,
     )
     if args.output:
         write_payload(payload, args.output)

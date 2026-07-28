@@ -256,6 +256,64 @@ def test_launch_readiness_accepts_monitored_pilot_limited_by_evidence_public_sta
     assert result["next_action"] == "review_limited_evidence_queue"
 
 
+def test_launch_readiness_accepts_controlled_pilot_source_failure_rate() -> None:
+    module = _load_module()
+    status = _published_status()
+    status["status"] = "limited_by_evidence"
+    status["source_coverage"] = {
+        "active_source_count": 42,
+        "checked_source_count": 42,
+        "failed_source_count": 4,
+    }
+
+    result = module.evaluate_launch_readiness(
+        public_status=status,
+        click_validation_log="PASS dashboard_click_validation\n",
+        package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
+        max_failed_sources=1,
+        max_failed_source_ratio=0.10,
+    )
+
+    assert result["checks"]["source_failure_budget_ok"] is True
+    assert result["source_coverage"]["failed_source_count"] == 4
+    assert result["source_coverage"]["failed_source_ratio"] == 0.0952
+    assert result["source_coverage"]["max_failed_source_ratio"] == 0.10
+    assert result["status"] == "pass"
+
+
+def test_launch_readiness_rejects_controlled_pilot_source_failure_rate_over_budget() -> None:
+    module = _load_module()
+    status = _published_status()
+    status["status"] = "limited_by_evidence"
+    status["source_coverage"] = {
+        "active_source_count": 42,
+        "checked_source_count": 42,
+        "failed_source_count": 5,
+    }
+
+    result = module.evaluate_launch_readiness(
+        public_status=status,
+        click_validation_log="PASS dashboard_click_validation\n",
+        package_contract_log="PASS: CI-OS Hermes package contract satisfied\n",
+        public_redaction=_public_redaction(),
+        public_safety_scan=_public_safety_scan(),
+        operational_safety=_operational_safety(),
+        max_failed_sources=1,
+        max_failed_source_ratio=0.10,
+    )
+
+    assert result["checks"]["source_failure_budget_ok"] is False
+    blockers = {(item["requirement"], item["actual"]) for item in result["blockers"]}
+    assert (
+        "source_failure_budget_ok",
+        "failed_source_count=5 max_failed_sources=1 failed_source_ratio=0.1190 max_failed_source_ratio=0.1000",
+    ) in blockers
+    assert result["status"] == "fail"
+
+
 def test_launch_readiness_cli_writes_json_and_returns_exit_code(tmp_path) -> None:
     module = _load_module()
     status_path = tmp_path / "argus-latest-run-status.json"
