@@ -129,12 +129,16 @@ printf '{"work_item_count":0,"items":[]}' > "$OUT/argus-evidence-work-queue.json
 printf '{"work_item_count":0,"blocking_count":0,"limiting_count":0,"items":[]}' > "$OUT/argus-product-muscle-work-queue.json"
 printf '{"status":"ready_for_operator_review"}' > "$OUT/argus-operator-handoff.json"
 printf '{"schema_version":1,"status":"ready_for_operator_review"}' > "$OUT/argus-data-plane-manifest.json"
+printf '{"publish_status":"published"}' > "$OUT/argus-public-run-status.json"
 mkdir -p "$OUT/briefs/algolia"
 printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
 """,
     )
+    public_store = tmp_path / "public-store"
+    (public_store / "releases").mkdir(parents=True)
+    (public_store / "served").mkdir()
 
-    result = _run_wrapper(app, public, env_file)
+    result = _run_wrapper(app, public, env_file, {"CIOS_PUBLIC_STORE_DIR": str(public_store)})
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert (app / "out" / "product-market-flag.txt").read_text(encoding="utf-8") == "1"
@@ -160,6 +164,12 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert (public / "v2" / "data" / "argus-data-plane-manifest.json").read_text(encoding="utf-8") == (
         '{"schema_version":1,"status":"ready_for_operator_review"}'
     )
+    current_release = (public_store / "current").resolve()
+    assert current_release.is_dir()
+    assert current_release.parent == (public_store / "releases").resolve()
+    assert (current_release / "index.html").read_text(encoding="utf-8") == "current cockpit"
+    assert (current_release / "publication-manifest.json").is_file()
+    assert (public_store / "latest-status.json").is_file()
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
     assert (public / "v2" / "data" / "argus-demand-work-order-guide.json").exists()
 

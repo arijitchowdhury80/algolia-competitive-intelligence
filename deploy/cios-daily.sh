@@ -227,6 +227,29 @@ publish_public_run_status() {
   fi
 }
 
+promote_public_store_if_present() {
+  public_store="${CIOS_PUBLIC_STORE_DIR:-/opt/cios/public-store}"
+  if [ ! -d "$public_store/served" ] || [ ! -d "$public_store/releases" ]; then
+    return 0
+  fi
+  release_id="cios-$(date -u +"%Y%m%dT%H%M%SZ")-$$"
+  release_dir="$public_store/releases/$release_id"
+  tmp_dir="$public_store/releases/.${release_id}.tmp"
+  rm -rf "$tmp_dir"
+  mkdir -p "$tmp_dir"
+  cp -R "$PUB/." "$tmp_dir/"
+  cat > "$tmp_dir/publication-manifest.json" <<EOF
+{"schema_version":1,"run_id":"$release_id","source_public_dir":"$PUB","published_at":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
+EOF
+  mv "$tmp_dir" "$release_dir"
+  if [ -s "$release_dir/data/argus-latest-run-status.json" ]; then
+    cp "$release_dir/data/argus-latest-run-status.json" "$public_store/latest-status.json"
+  fi
+  rm -f "$public_store/current.next"
+  ln -s "releases/$release_id" "$public_store/current.next"
+  mv -f "$public_store/current.next" "$public_store/current"
+}
+
 kill_process_tree() {
   root_pid="$1"
   if command -v pgrep >/dev/null 2>&1; then
@@ -685,5 +708,6 @@ fi
 rm -rf "$PUB/briefs" "$PUB/v2/briefs"
 cp -R "$STAGE/briefs" "$PUB/briefs"
 cp -R "$STAGE/v2/briefs" "$PUB/v2/briefs"
+promote_public_store_if_present
 
 echo "dashboard published to ci.chowmes.com from $APP"

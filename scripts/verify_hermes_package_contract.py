@@ -21,6 +21,7 @@ REQUIRED_PATHS = [
     "deploy/cios-daily.sh",
     "deploy/cios-host-permissions.sh",
     "deploy/cios-host-runner.sh",
+    "deploy/cios-run-finalize.sh",
     "deploy/cios-runner.service",
     "deploy/cios-runner.path",
     "deploy/claude-shim/cios-claude-shim.service",
