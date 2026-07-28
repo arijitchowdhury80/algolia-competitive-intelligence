@@ -749,6 +749,7 @@ cp -R "$OUT/briefs" "$STAGE/v2/briefs"
 
 if [ -f scripts/export_argus_recommendation_review_packet.py ] && \
    [ -f scripts/export_pilot_recommendation_work_artifact.py ] && \
+   [ -f scripts/build_phase8_disposition_request.py ] && \
    [ -f scripts/publish_pilot_recommendation_work_artifact.py ]; then
   mkdir -p "$OUT/phase8"
   set +e
@@ -765,9 +766,18 @@ if [ -f scripts/export_argus_recommendation_review_packet.py ] && \
       --output "$OUT/phase8/argus-pmm-narrative-brief.json" \
       --markdown-output "$OUT/phase8/argus-pmm-narrative-brief.md" \
       --generated-by "cios-wrapper"
+    .venv/bin/python scripts/build_phase8_disposition_request.py \
+      --work-artifact "$OUT/phase8/argus-pmm-narrative-brief.json" \
+      --work-artifact-url "https://ci.chowmes.com/data/phase8/argus-pmm-narrative-brief.md" \
+      --manifest-url "https://ci.chowmes.com/data/phase8/argus-phase8-work-artifacts.json" \
+      --review-packet-path "$OUT/phase8/argus-recommendation-review-packet.json" \
+      --output "$OUT/phase8/argus-pmm-disposition-request.json" \
+      --markdown-output "$OUT/phase8/argus-pmm-disposition-request.md"
     .venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py \
       --artifact-json "$OUT/phase8/argus-pmm-narrative-brief.json" \
       --artifact-markdown "$OUT/phase8/argus-pmm-narrative-brief.md" \
+      --disposition-request-json "$OUT/phase8/argus-pmm-disposition-request.json" \
+      --disposition-request-markdown "$OUT/phase8/argus-pmm-disposition-request.md" \
       --public-dir "$STAGE" \
       --base-url "https://ci.chowmes.com" \
       --output "$OUT/phase8/argus-pmm-narrative-brief-publication.json"

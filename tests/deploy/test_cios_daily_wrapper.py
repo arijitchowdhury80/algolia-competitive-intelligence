@@ -134,6 +134,16 @@ case "$1" in
     done
     exit 0
     ;;
+  *build_phase8_disposition_request.py)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; mkdir -p "$(dirname "$1")"; printf '{"phase":"phase8_controlled_pilot","artifact_type":"named_team_disposition_request","status":"awaiting_named_team_disposition","phase8_exit_evidence":false,"recommendation_id":2,"named_team":"Product Marketing","next_required_action":"Product Marketing must choose used, rejected, or amended."}' > "$1";;
+        --markdown-output) shift; mkdir -p "$(dirname "$1")"; printf '# Phase 8 PMM Disposition Request\n' > "$1";;
+      esac
+      shift
+    done
+    exit 0
+    ;;
   *publish_pilot_recommendation_work_artifact.py)
     public_dir=""
     output=""
@@ -151,6 +161,10 @@ case "$1" in
     cp "$public_dir/data/phase8/argus-pmm-narrative-brief.json" "$public_dir/v2/data/phase8/argus-pmm-narrative-brief.json"
     printf '# Agent Studio PMM Narrative Brief\n' > "$public_dir/data/phase8/argus-pmm-narrative-brief.md"
     cp "$public_dir/data/phase8/argus-pmm-narrative-brief.md" "$public_dir/v2/data/phase8/argus-pmm-narrative-brief.md"
+    printf '{"phase8_exit_evidence":false}' > "$public_dir/data/phase8/argus-pmm-disposition-request.json"
+    cp "$public_dir/data/phase8/argus-pmm-disposition-request.json" "$public_dir/v2/data/phase8/argus-pmm-disposition-request.json"
+    printf '# Phase 8 PMM Disposition Request\n' > "$public_dir/data/phase8/argus-pmm-disposition-request.md"
+    cp "$public_dir/data/phase8/argus-pmm-disposition-request.md" "$public_dir/v2/data/phase8/argus-pmm-disposition-request.md"
     printf '{"status":"published","phase8_exit_evidence":false}' > "$output"
     exit 0
     ;;
@@ -187,6 +201,7 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     for script_name in (
         "export_argus_recommendation_review_packet.py",
         "export_pilot_recommendation_work_artifact.py",
+        "build_phase8_disposition_request.py",
         "publish_pilot_recommendation_work_artifact.py",
     ):
         (app / "scripts" / script_name).write_text("", encoding="utf-8")
@@ -219,6 +234,8 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     )
     assert (public / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
     assert (public / "v2" / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
+    assert (public / "data" / "phase8" / "argus-pmm-disposition-request.json").is_file()
+    assert (public / "v2" / "data" / "phase8" / "argus-pmm-disposition-request.md").is_file()
     assert json.loads((public / "data" / "phase8" / "argus-phase8-work-artifacts.json").read_text(encoding="utf-8"))[
         "phase8_exit_evidence"
     ] is False
@@ -236,6 +253,7 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert (public_store / "served" / "index.html").read_text(encoding="utf-8") == "current cockpit"
     assert (public_store / "served" / "publication-manifest.json").is_file()
     assert (public_store / "served" / "data" / "phase8" / "argus-phase8-work-artifacts.json").is_file()
+    assert (public_store / "served" / "data" / "phase8" / "argus-pmm-disposition-request.json").is_file()
     assert not list(public.glob(".argus-publish.*"))
     assert not list(current_release.glob(".argus-publish.*"))
     assert not list((public_store / "served").glob(".argus-publish.*"))

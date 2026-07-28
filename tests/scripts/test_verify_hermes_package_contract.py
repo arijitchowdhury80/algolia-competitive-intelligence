@@ -49,6 +49,7 @@ REQUIRED_FILES = [
     "scripts/export_argus_recommendation_review_packet.py",
     "scripts/record_pilot_recommendation_disposition.py",
     "scripts/export_pilot_recommendation_work_artifact.py",
+    "scripts/build_phase8_disposition_request.py",
     "scripts/publish_pilot_recommendation_work_artifact.py",
     "scripts/export_argus_data_plane_manifest.py",
     "scripts/export_public_run_status.py",
@@ -141,7 +142,8 @@ STAGE="$PUB/.argus-publish.$$"
 mkdir -p "$STAGE"
 .venv/bin/python scripts/export_argus_recommendation_review_packet.py --dashboard "$OUT/argus-dashboard.json" --output "$OUT/phase8/argus-recommendation-review-packet.json" --markdown-output "$OUT/phase8/argus-recommendation-review-packet.md" --reviewed-by "cios-wrapper"
 .venv/bin/python scripts/export_pilot_recommendation_work_artifact.py --review-packet "$OUT/phase8/argus-recommendation-review-packet.json" --output "$OUT/phase8/argus-pmm-narrative-brief.json" --markdown-output "$OUT/phase8/argus-pmm-narrative-brief.md" --generated-by "cios-wrapper"
-.venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py --artifact-json "$OUT/phase8/argus-pmm-narrative-brief.json" --artifact-markdown "$OUT/phase8/argus-pmm-narrative-brief.md" --public-dir "$STAGE" --base-url "https://ci.chowmes.com" --output "$OUT/phase8/argus-pmm-narrative-brief-publication.json"
+.venv/bin/python scripts/build_phase8_disposition_request.py --work-artifact "$OUT/phase8/argus-pmm-narrative-brief.json" --work-artifact-url "https://ci.chowmes.com/data/phase8/argus-pmm-narrative-brief.md" --manifest-url "https://ci.chowmes.com/data/phase8/argus-phase8-work-artifacts.json" --output "$OUT/phase8/argus-pmm-disposition-request.json" --markdown-output "$OUT/phase8/argus-pmm-disposition-request.md"
+.venv/bin/python scripts/publish_pilot_recommendation_work_artifact.py --artifact-json "$OUT/phase8/argus-pmm-narrative-brief.json" --artifact-markdown "$OUT/phase8/argus-pmm-narrative-brief.md" --disposition-request-json "$OUT/phase8/argus-pmm-disposition-request.json" --disposition-request-markdown "$OUT/phase8/argus-pmm-disposition-request.md" --public-dir "$STAGE" --base-url "https://ci.chowmes.com" --output "$OUT/phase8/argus-pmm-narrative-brief-publication.json"
 cp -R "$STAGE/data/phase8" "$PUB/data/phase8"
 .venv/bin/python scripts/redact_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-redaction.json"
 .venv/bin/python scripts/scan_public_artifacts.py --public-dir "$STAGE" --output "$OUT/public-artifact-safety-scan.json"

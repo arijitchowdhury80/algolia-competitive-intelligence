@@ -14,6 +14,8 @@ from typing import Any, Mapping
 
 JSON_NAME = "argus-pmm-narrative-brief.json"
 MARKDOWN_NAME = "argus-pmm-narrative-brief.md"
+DISPOSITION_REQUEST_JSON_NAME = "argus-pmm-disposition-request.json"
+DISPOSITION_REQUEST_MARKDOWN_NAME = "argus-pmm-disposition-request.md"
 MANIFEST_NAME = "argus-phase8-work-artifacts.json"
 
 PRIVATE_REFERENCE_PATTERNS = (
@@ -77,7 +79,13 @@ def _validate_artifact(artifact: Mapping[str, Any]) -> None:
         raise ValueError("work artifact recommendation_id is required")
 
 
-def _manifest(artifact: Mapping[str, Any], *, base_url: str, generated_at: str) -> dict[str, Any]:
+def _manifest(
+    artifact: Mapping[str, Any],
+    *,
+    base_url: str,
+    generated_at: str,
+    include_disposition_request: bool,
+) -> dict[str, Any]:
     recommendation = _dict_value(artifact.get("recommendation"))
     work_product = _dict_value(artifact.get("work_product"))
     return {
@@ -99,6 +107,12 @@ def _manifest(artifact: Mapping[str, Any], *, base_url: str, generated_at: str) 
                     "json": _public_url(base_url, f"data/phase8/{JSON_NAME}"),
                     "markdown": _public_url(base_url, f"data/phase8/{MARKDOWN_NAME}"),
                 },
+                "disposition_request_urls": {
+                    "json": _public_url(base_url, f"data/phase8/{DISPOSITION_REQUEST_JSON_NAME}"),
+                    "markdown": _public_url(base_url, f"data/phase8/{DISPOSITION_REQUEST_MARKDOWN_NAME}"),
+                }
+                if include_disposition_request
+                else None,
                 "next_required_action": artifact.get("next_required_action"),
             }
         ],
@@ -117,10 +131,18 @@ def publish_work_artifact(
     public_dir: Path,
     base_url: str,
     output: Path | None,
+    disposition_request_json: Path | None = None,
+    disposition_request_markdown: Path | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     _validate_public_safe(artifact_json)
     _validate_public_safe(artifact_markdown)
+    if disposition_request_json:
+        _validate_public_safe(disposition_request_json)
+    if disposition_request_markdown:
+        _validate_public_safe(disposition_request_markdown)
+    if bool(disposition_request_json) != bool(disposition_request_markdown):
+        raise ValueError("both disposition request JSON and markdown must be provided together")
     artifact = _load_json(artifact_json)
     _validate_artifact(artifact)
     generated = generated_at or _now()
@@ -131,8 +153,16 @@ def publish_work_artifact(
         target_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(artifact_json, target_dir / JSON_NAME)
         shutil.copyfile(artifact_markdown, target_dir / MARKDOWN_NAME)
+        if disposition_request_json and disposition_request_markdown:
+            shutil.copyfile(disposition_request_json, target_dir / DISPOSITION_REQUEST_JSON_NAME)
+            shutil.copyfile(disposition_request_markdown, target_dir / DISPOSITION_REQUEST_MARKDOWN_NAME)
 
-    manifest = _manifest(artifact, base_url=base_url, generated_at=generated)
+    manifest = _manifest(
+        artifact,
+        base_url=base_url,
+        generated_at=generated,
+        include_disposition_request=bool(disposition_request_json),
+    )
     for target_dir in (primary_dir, v2_dir):
         _write_json(manifest, target_dir / MANIFEST_NAME)
 
@@ -145,6 +175,7 @@ def publish_work_artifact(
         "recommendation_id": recommendation.get("recommendation_id"),
         "named_team": artifact.get("named_team"),
         "public_urls": manifest["items"][0]["public_urls"],
+        "disposition_request_urls": manifest["items"][0].get("disposition_request_urls"),
         "manifest_url": _public_url(base_url, f"data/phase8/{MANIFEST_NAME}"),
         "v2_manifest_url": _public_url(base_url, f"v2/data/phase8/{MANIFEST_NAME}"),
     }
@@ -157,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact-json", required=True, type=Path)
     parser.add_argument("--artifact-markdown", required=True, type=Path)
+    parser.add_argument("--disposition-request-json", type=Path)
+    parser.add_argument("--disposition-request-markdown", type=Path)
     parser.add_argument("--public-dir", required=True, type=Path)
     parser.add_argument("--base-url", default="https://ci.chowmes.com")
     parser.add_argument("--output", type=Path)
@@ -168,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
         public_dir=args.public_dir,
         base_url=args.base_url,
         output=args.output,
+        disposition_request_json=args.disposition_request_json,
+        disposition_request_markdown=args.disposition_request_markdown,
     )
     print(f"PASS phase8_work_artifact_publication: {summary['public_urls']['json']}")
     return 0
