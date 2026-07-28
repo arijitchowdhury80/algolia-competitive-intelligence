@@ -91,7 +91,11 @@ def _product_reality_present(public_status: Mapping[str, Any]) -> bool:
         _dict_value(product.get("counts")).get("product_event_count"),
         _int_value(run.get("product_event_count")),
     )
-    return status in {"present", "processed", "ready"} and product_event_count > 0
+    return (
+        product_event_count > 0
+        and not bool(product.get("blocks_action"))
+        and status not in {"missing", "blocked", "failed", "blocked_on_evidence"}
+    )
 
 
 def _public_safety_ok(public_status: Mapping[str, Any]) -> bool:
