@@ -1689,6 +1689,18 @@ case "$1" in
       shift
     done
     ;;
+  *evaluate_argus_planned_demand_exports.py)
+    echo "planned-demand-eval" >> "$CALLS"
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output) shift; printf '{"status":"blocked_no_action_grade_planned_demand","plan_amendment_candidates":[{"topic":"Agent Studio"}]}' > "$1";;
+        --amendment-output) shift; printf 'Argus topic\nAgent Studio\n' > "$1";;
+        --prepared-output) shift; printf 'topic\n' > "$1";;
+      esac
+      shift
+    done
+    exit 2
+    ;;
   *run_argus_demand_intake.py)
     echo "demand-intake" >> "$CALLS"
     while [ "$#" -gt 0 ]; do
@@ -1740,6 +1752,10 @@ case "$1" in
         --demand-plan-template)
           shift
           printf "%s" "$1" > "$OUT/operator-handoff-demand-plan-template-arg.txt"
+          ;;
+        --demand-plan-amendments)
+          shift
+          printf "%s" "$1" > "$OUT/operator-handoff-demand-plan-amendments-arg.txt"
           ;;
         --dashboard)
           shift
@@ -1793,6 +1809,8 @@ case "$1" in
 esac
 """,
     )
+    (app / "data").mkdir()
+    (app / "scripts" / "evaluate_argus_planned_demand_exports.py").touch()
 
     result = _run_wrapper(app, public, env_file)
 
@@ -1807,6 +1825,7 @@ esac
         "demand-readiness",
         "demand-plan-template",
         "demand-intake",
+        "planned-demand-eval",
         "post-run-attach",
         "rerender",
         "evidence-work-queue",
@@ -1827,6 +1846,9 @@ esac
     )
     assert (app / "out" / "operator-handoff-demand-plan-template-arg.txt").read_text(encoding="utf-8") == str(
         app / "out" / "argus-demand-plan-template.csv"
+    )
+    assert (app / "out" / "operator-handoff-demand-plan-amendments-arg.txt").read_text(encoding="utf-8") == str(
+        app / "out" / "argus-planned-demand-evaluation.json"
     )
     assert (app / "out" / "operator-handoff-dashboard-arg.txt").read_text(encoding="utf-8") == str(
         app / "out" / "argus-dashboard.json"

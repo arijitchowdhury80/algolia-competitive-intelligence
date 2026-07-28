@@ -315,6 +315,58 @@ def test_build_operator_handoff_includes_public_safe_demand_plan_template_summar
     )
 
 
+def test_build_operator_handoff_includes_public_safe_demand_plan_amendments() -> None:
+    module = _load_module()
+    amendments = {
+        "plan_amendment_candidates": [
+            {
+                "topic": "Agent Studio",
+                "capability_key": "agent studio",
+                "assessment": "demand_plan_amendment",
+                "current_sessions": 1619.0,
+                "previous_sessions": 751.0,
+                "change_pct": 1.1558,
+                "comparison_quality": "comparable_limited",
+                "suggested_filters": ["Agent Studio", "agentic ai", "ai agent", "ai agents"],
+                "why_collect": "Off-plan Looker movement is action-grade for Agent Studio.",
+                "evidence_urls": ["/products/ai/agent-studio"],
+            }
+        ]
+    }
+
+    payload = module.build_operator_handoff_payload(
+        tenant_slug="algolia",
+        work_queue=_work_queue_payload(),
+        demand_readiness=_demand_readiness_payload(),
+        demand_plan_amendments=amendments,
+        demand_plan_amendments_path="/tmp/cios/algolia/out/argus-demand-plan-amendments.json",
+        generated_at="2026-07-28T10:10:00Z",
+    )
+
+    assert payload["demand_plan_amendments"] == {
+        "status": "suggested",
+        "candidate_count": 1,
+        "candidates": [
+            {
+                "topic": "Agent Studio",
+                "capability_key": "agent studio",
+                "assessment": "demand_plan_amendment",
+                "current_sessions": "1619",
+                "previous_sessions": "751",
+                "change_pct": "1.1558",
+                "comparison_quality": "comparable_limited",
+                "suggested_filters": ["Agent Studio", "agentic ai", "ai agent", "ai agents"],
+                "why_collect": "Off-plan Looker movement is action-grade for Agent Studio.",
+            }
+        ],
+    }
+    rendered = json.dumps(payload)
+    assert "evidence_urls" not in rendered
+    assert payload["artifact_refs"]["demand_plan_amendments"] == (
+        "/tmp/cios/algolia/out/argus-demand-plan-amendments.json"
+    )
+
+
 def test_build_operator_handoff_promotes_blocking_demand_readiness_over_limiting_conversation_queue() -> None:
     module = _load_module()
     demand_readiness = _demand_readiness_payload()
@@ -458,6 +510,54 @@ def test_build_argus_operator_handoff_cli_accepts_demand_plan_template(tmp_path)
     assert code == 0
     assert payload["demand_plan_template"]["filename"] == "argus-demand-plan-template.csv"
     assert payload["artifact_refs"]["demand_plan_template"] == str(demand_plan_template)
+
+
+def test_build_argus_operator_handoff_cli_accepts_demand_plan_amendments(tmp_path) -> None:
+    module = _load_module()
+    work_queue = tmp_path / "argus-evidence-work-queue.json"
+    demand_readiness = tmp_path / "argus-demand-readiness.json"
+    demand_plan_amendments = tmp_path / "argus-demand-plan-amendments.json"
+    output = tmp_path / "argus-operator-handoff.json"
+    work_queue.write_text(json.dumps(_work_queue_payload()), encoding="utf-8")
+    demand_readiness.write_text(json.dumps(_demand_readiness_payload()), encoding="utf-8")
+    demand_plan_amendments.write_text(
+        json.dumps(
+            {
+                "plan_amendment_candidates": [
+                    {
+                        "topic": "Agent Studio",
+                        "capability_key": "agent studio",
+                        "current_sessions": 1619,
+                        "previous_sessions": 751,
+                        "change_pct": 1.1558,
+                        "comparison_quality": "comparable_limited",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    code = module.main(
+        [
+            "--tenant",
+            "algolia",
+            "--work-queue",
+            str(work_queue),
+            "--demand-readiness",
+            str(demand_readiness),
+            "--demand-plan-amendments",
+            str(demand_plan_amendments),
+            "--output",
+            str(output),
+        ]
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert code == 0
+    assert payload["demand_plan_amendments"]["candidate_count"] == 1
+    assert payload["demand_plan_amendments"]["candidates"][0]["topic"] == "Agent Studio"
+    assert payload["artifact_refs"]["demand_plan_amendments"] == str(demand_plan_amendments)
 
 
 def test_build_operator_handoff_payload_marks_run_ready_when_queue_is_empty() -> None:

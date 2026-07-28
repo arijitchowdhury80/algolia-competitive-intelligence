@@ -149,6 +149,7 @@ export CIOS_PRODUCT_SURFACE_PROMOTION_TENANT="${CIOS_PRODUCT_SURFACE_PROMOTION_T
 export CIOS_PRODUCT_SURFACE_PROMOTION_SOURCE="${CIOS_PRODUCT_SURFACE_PROMOTION_SOURCE:-product_muscle_gap_plan}"
 export CIOS_PRODUCT_SURFACE_PROMOTED_BY="${CIOS_PRODUCT_SURFACE_PROMOTED_BY:-hermes}"
 export CIOS_DAILY_RUN_TIMEOUT_SECONDS="${CIOS_DAILY_RUN_TIMEOUT_SECONDS:-1350}"
+export CIOS_PLANNED_DEMAND_EXPORT_DATA_DIR="${CIOS_PLANNED_DEMAND_EXPORT_DATA_DIR:-$APP/data}"
 
 case "$CIOS_DAILY_RUN_TIMEOUT_SECONDS" in
   ''|*[!0-9]*)
@@ -197,6 +198,34 @@ run_argus_demand_intake_sidecar() {
   fi
 }
 
+evaluate_planned_demand_sidecar() {
+  DEMAND_PLAN_AMENDMENTS_ARG=""
+  if [ ! -d "$CIOS_PLANNED_DEMAND_EXPORT_DATA_DIR" ]; then
+    return 0
+  fi
+  if [ ! -s "$OUT/argus-demand-plan-template.csv" ]; then
+    return 0
+  fi
+  if [ ! -f scripts/evaluate_argus_planned_demand_exports.py ]; then
+    return 0
+  fi
+  set +e
+  .venv/bin/python scripts/evaluate_argus_planned_demand_exports.py \
+    --plan "$OUT/argus-demand-plan-template.csv" \
+    --data-dir "$CIOS_PLANNED_DEMAND_EXPORT_DATA_DIR" \
+    --output "$OUT/argus-planned-demand-evaluation.json" \
+    --prepared-output "$OUT/argus-planned-demand-prepared.csv" \
+    --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv"
+  PLANNED_DEMAND_EVAL_CODE=$?
+  set -e
+  if [ -s "$OUT/argus-planned-demand-evaluation.json" ]; then
+    DEMAND_PLAN_AMENDMENTS_ARG="--demand-plan-amendments $OUT/argus-planned-demand-evaluation.json"
+  fi
+  if [ "$PLANNED_DEMAND_EVAL_CODE" -ne 0 ] && [ "$PLANNED_DEMAND_EVAL_CODE" -ne 2 ]; then
+    echo "planned demand evaluation exited with $PLANNED_DEMAND_EVAL_CODE; continuing without changing the gate" >&2
+  fi
+}
+
 write_public_run_status() {
   publish_status="$1"
   if [ ! -f scripts/export_public_run_status.py ]; then
@@ -224,6 +253,14 @@ publish_public_run_status() {
   if [ -s "$OUT/argus-demand-work-order-guide.json" ]; then
     cp "$OUT/argus-demand-work-order-guide.json" "$PUB/data/argus-demand-work-order-guide.json"
     cp "$OUT/argus-demand-work-order-guide.json" "$PUB/v2/data/argus-demand-work-order-guide.json"
+  fi
+  if [ -s "$OUT/argus-planned-demand-evaluation.json" ]; then
+    cp "$OUT/argus-planned-demand-evaluation.json" "$PUB/data/argus-planned-demand-evaluation.json"
+    cp "$OUT/argus-planned-demand-evaluation.json" "$PUB/v2/data/argus-planned-demand-evaluation.json"
+  fi
+  if [ -s "$OUT/argus-demand-plan-amendment-candidates.csv" ]; then
+    cp "$OUT/argus-demand-plan-amendment-candidates.csv" "$PUB/data/argus-demand-plan-amendment-candidates.csv"
+    cp "$OUT/argus-demand-plan-amendment-candidates.csv" "$PUB/v2/data/argus-demand-plan-amendment-candidates.csv"
   fi
 }
 
@@ -416,6 +453,7 @@ if [ "$DAILY_CODE" -ne 0 ]; then
       --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT"
 
     run_argus_demand_intake_sidecar
+    evaluate_planned_demand_sidecar
 
     .venv/bin/python scripts/attach_post_run_summaries.py \
       --dashboard "$OUT/argus-dashboard.json" \
@@ -442,6 +480,7 @@ if [ "$DAILY_CODE" -ne 0 ]; then
       --product-muscle-queue "$OUT/argus-product-muscle-work-queue.json" \
       --demand-readiness "$OUT/argus-demand-readiness.json" \
       --demand-plan-template "$OUT/argus-demand-plan-template.csv" \
+      $DEMAND_PLAN_AMENDMENTS_ARG \
       --dashboard "$OUT/argus-dashboard.json" \
       --output "$OUT/argus-operator-handoff.json"
 
@@ -529,6 +568,7 @@ fi
   --tenant "$CIOS_PRODUCT_MUSCLE_GAP_TENANT"
 
 run_argus_demand_intake_sidecar
+evaluate_planned_demand_sidecar
 
 .venv/bin/python scripts/attach_post_run_summaries.py \
   --dashboard "$OUT/argus-dashboard.json" \
@@ -614,6 +654,7 @@ fi
   --product-muscle-queue "$OUT/argus-product-muscle-work-queue.json" \
   --demand-readiness "$OUT/argus-demand-readiness.json" \
   --demand-plan-template "$OUT/argus-demand-plan-template.csv" \
+  $DEMAND_PLAN_AMENDMENTS_ARG \
   --dashboard "$OUT/argus-dashboard.json" \
   --output "$OUT/argus-operator-handoff.json"
 
@@ -682,6 +723,14 @@ if [ -s "$OUT/argus-demand-work-order-guide.json" ]; then
   cp "$OUT/argus-demand-work-order-guide.json" "$STAGE/data/argus-demand-work-order-guide.json"
   cp "$OUT/argus-demand-work-order-guide.json" "$STAGE/v2/data/argus-demand-work-order-guide.json"
 fi
+if [ -s "$OUT/argus-planned-demand-evaluation.json" ]; then
+  cp "$OUT/argus-planned-demand-evaluation.json" "$STAGE/data/argus-planned-demand-evaluation.json"
+  cp "$OUT/argus-planned-demand-evaluation.json" "$STAGE/v2/data/argus-planned-demand-evaluation.json"
+fi
+if [ -s "$OUT/argus-demand-plan-amendment-candidates.csv" ]; then
+  cp "$OUT/argus-demand-plan-amendment-candidates.csv" "$STAGE/data/argus-demand-plan-amendment-candidates.csv"
+  cp "$OUT/argus-demand-plan-amendment-candidates.csv" "$STAGE/v2/data/argus-demand-plan-amendment-candidates.csv"
+fi
 cp -R "$OUT/briefs" "$STAGE/briefs"
 cp -R "$OUT/briefs" "$STAGE/v2/briefs"
 
@@ -705,6 +754,14 @@ fi
 if [ -s "$STAGE/data/argus-demand-work-order-guide.json" ]; then
   cp "$STAGE/data/argus-demand-work-order-guide.json" "$PUB/data/argus-demand-work-order-guide.json"
   cp "$STAGE/v2/data/argus-demand-work-order-guide.json" "$PUB/v2/data/argus-demand-work-order-guide.json"
+fi
+if [ -s "$STAGE/data/argus-planned-demand-evaluation.json" ]; then
+  cp "$STAGE/data/argus-planned-demand-evaluation.json" "$PUB/data/argus-planned-demand-evaluation.json"
+  cp "$STAGE/v2/data/argus-planned-demand-evaluation.json" "$PUB/v2/data/argus-planned-demand-evaluation.json"
+fi
+if [ -s "$STAGE/data/argus-demand-plan-amendment-candidates.csv" ]; then
+  cp "$STAGE/data/argus-demand-plan-amendment-candidates.csv" "$PUB/data/argus-demand-plan-amendment-candidates.csv"
+  cp "$STAGE/v2/data/argus-demand-plan-amendment-candidates.csv" "$PUB/v2/data/argus-demand-plan-amendment-candidates.csv"
 fi
 rm -rf "$PUB/briefs" "$PUB/v2/briefs"
 cp -R "$STAGE/briefs" "$PUB/briefs"

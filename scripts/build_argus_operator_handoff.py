@@ -58,10 +58,12 @@ def build_operator_handoff_payload(
     product_muscle_queue: dict[str, Any] | None = None,
     demand_readiness: dict[str, Any] | None = None,
     demand_plan_template_path: str | None = None,
+    demand_plan_amendments: dict[str, Any] | list[Any] | None = None,
     dashboard: dict[str, Any] | None = None,
     work_queue_path: str | None = None,
     product_muscle_queue_path: str | None = None,
     demand_readiness_path: str | None = None,
+    demand_plan_amendments_path: str | None = None,
     dashboard_path: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
@@ -120,6 +122,7 @@ def build_operator_handoff_payload(
     top_item = _top_item(items)
     status, readiness = _status_for_counts(blocking_count, limiting_count, len(items))
     demand_collection_plan = demand_readiness.get("demand_collection_plan")
+    demand_plan_amendment_summary = _demand_plan_amendment_summary(demand_plan_amendments)
 
     return {
         "tenant_slug": tenant_slug,
@@ -139,6 +142,7 @@ def build_operator_handoff_payload(
         "operator_commands": _operator_commands(demand_readiness.get("operator_actions")),
         "demand_collection_plan": demand_collection_plan if isinstance(demand_collection_plan, dict) else {},
         "demand_plan_template": _demand_plan_template_summary(demand_plan_template_path),
+        "demand_plan_amendments": demand_plan_amendment_summary,
         "operator_brief": _operator_brief(
             top_item=top_item,
             blocking_count=blocking_count,
@@ -150,6 +154,7 @@ def build_operator_handoff_payload(
             "product_muscle_work_queue": product_muscle_queue_path,
             "demand_readiness": demand_readiness_path,
             "demand_plan_template": demand_plan_template_path,
+            "demand_plan_amendments": demand_plan_amendments_path,
             "dashboard": dashboard_path,
         },
         "work_queue": {
@@ -259,6 +264,77 @@ def _demand_observed_state(demand_readiness: dict[str, Any]) -> dict[str, Any]:
     if plan.get("topic_count") is not None:
         state["planned_topic_count"] = _int_value(plan.get("topic_count"))
     return {key: value for key, value in state.items() if value not in ("", None)}
+
+
+def _demand_plan_amendment_candidates(value: dict[str, Any] | list[Any] | None) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        raw = value.get("plan_amendment_candidates")
+        if raw is None:
+            raw = value.get("candidates")
+    elif isinstance(value, list):
+        raw = value
+    else:
+        raw = []
+    candidates: list[dict[str, Any]] = []
+    for item in _list_value(raw):
+        if not isinstance(item, dict):
+            continue
+        topic = _text_value(item.get("topic"))
+        if not topic:
+            continue
+        candidates.append(
+            {
+                "topic": topic,
+                "capability_key": _text_value(item.get("capability_key") or topic),
+                "assessment": _text_value(item.get("assessment") or "demand_plan_amendment"),
+                "current_sessions": _number_text(item.get("current_sessions")),
+                "previous_sessions": _number_text(item.get("previous_sessions")),
+                "change_pct": _number_text(item.get("change_pct")),
+                "comparison_quality": _text_value(item.get("comparison_quality")),
+                "suggested_filters": _string_list(item.get("suggested_filters"), limit=6),
+                "why_collect": _text_value(item.get("why_collect")),
+            }
+        )
+        if len(candidates) >= 4:
+            break
+    return candidates
+
+
+def _demand_plan_amendment_summary(value: dict[str, Any] | list[Any] | None) -> dict[str, Any]:
+    candidates = _demand_plan_amendment_candidates(value)
+    if not candidates:
+        return {}
+    return {
+        "status": "suggested",
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+    }
+
+
+def _number_text(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return _text_value(value)
+    return str(int(number)) if number.is_integer() else str(number)
+
+
+def _string_list(value: Any, *, limit: int = 8) -> list[str]:
+    raw = value if isinstance(value, list) else [value]
+    results: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        text = _text_value(item)
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        results.append(text)
+        if len(results) >= limit:
+            break
+    return results
 
 
 def _demand_readiness_items(demand_readiness: dict[str, Any], *, tenant_slug: str) -> list[dict[str, Any]]:
@@ -610,6 +686,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--product-muscle-queue", type=Path, help="argus-product-muscle-work-queue.json path.")
     parser.add_argument("--demand-readiness", type=Path, help="argus-demand-readiness.json path.")
     parser.add_argument("--demand-plan-template", type=Path, help="argus-demand-plan-template.csv path.")
+    parser.add_argument("--demand-plan-amendments", type=Path, help="planned demand amendment report JSON path.")
     parser.add_argument("--dashboard", type=Path, help="argus-dashboard.json path.")
     parser.add_argument("--output", type=Path, help="Optional JSON artifact path. Prints to stdout when omitted.")
     args = parser.parse_args(argv)
@@ -617,6 +694,7 @@ def main(argv: list[str] | None = None) -> int:
     work_queue = load_json(args.work_queue)
     product_muscle_queue = load_json(args.product_muscle_queue) if args.product_muscle_queue else {}
     demand_readiness = load_json(args.demand_readiness) if args.demand_readiness else {}
+    demand_plan_amendments = load_json(args.demand_plan_amendments) if args.demand_plan_amendments else {}
     dashboard = load_json(args.dashboard) if args.dashboard and args.dashboard.exists() else {}
     payload = build_operator_handoff_payload(
         tenant_slug=args.tenant,
@@ -624,10 +702,12 @@ def main(argv: list[str] | None = None) -> int:
         product_muscle_queue=product_muscle_queue,
         demand_readiness=demand_readiness,
         demand_plan_template_path=str(args.demand_plan_template) if args.demand_plan_template else None,
+        demand_plan_amendments=demand_plan_amendments,
         dashboard=dashboard,
         work_queue_path=str(args.work_queue),
         product_muscle_queue_path=str(args.product_muscle_queue) if args.product_muscle_queue else None,
         demand_readiness_path=str(args.demand_readiness) if args.demand_readiness else None,
+        demand_plan_amendments_path=str(args.demand_plan_amendments) if args.demand_plan_amendments else None,
         dashboard_path=str(args.dashboard) if args.dashboard else None,
     )
 

@@ -77,6 +77,20 @@ def _handoff_payload() -> dict:
             "format": "csv",
             "filename": "argus-demand-plan-template.csv",
         },
+        "demand_plan_amendments": {
+            "status": "suggested",
+            "candidate_count": 1,
+            "candidates": [
+                {
+                    "topic": "Agent Studio",
+                    "capability_key": "agent studio",
+                    "current_sessions": "1619",
+                    "previous_sessions": "751",
+                    "change_pct": "1.1558",
+                    "comparison_quality": "comparable_limited",
+                }
+            ],
+        },
         "work_queue": {
             "work_item_count": 1,
             "blocking_count": 1,
@@ -116,6 +130,7 @@ def test_attach_operator_handoff_payload_adds_public_dashboard_contract() -> Non
         "format": "csv",
         "filename": "argus-demand-plan-template.csv",
     }
+    assert payload["operator_handoff"]["demand_plan_amendments"]["candidates"][0]["topic"] == "Agent Studio"
     assert payload["operator_handoff"]["artifact_found"] is True
     assert payload["operator_handoff"]["artifact_path"] == "/tmp/cios/algolia/argus-operator-handoff.json"
 
@@ -191,4 +206,6 @@ def test_attach_operator_handoff_cli_updates_json_and_renders_html(tmp_path) -> 
     rendered = html.read_text(encoding="utf-8")
     assert "Argus operator handoff" in rendered
     assert "Demand plane missing" in rendered
+    assert "Suggested demand-plan amendment" in rendered
+    assert "Agent Studio" in rendered
     assert "/api/tenants/algolia/argus/demand-imports/template" not in rendered

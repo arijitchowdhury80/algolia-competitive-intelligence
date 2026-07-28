@@ -29,6 +29,7 @@ REQUIRED_FILES = [
     "scripts/export_ga4_demand.py",
     "scripts/export_argus_demand_readiness.py",
     "scripts/export_argus_demand_plan_template.py",
+    "scripts/evaluate_argus_planned_demand_exports.py",
     "scripts/import_demand_and_refresh.py",
     "scripts/run_argus_demand_intake.py",
     "scripts/run_admin.py",
@@ -103,6 +104,7 @@ find "$OUT" -mindepth 1 ! -name .cios-output-dir -exec rm -rf -- {} +
 .venv/bin/python scripts/promote_product_surface_candidates.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/product-surface-candidate-promotion-summary.json"
 .venv/bin/python scripts/export_argus_demand_readiness.py --tenant "$CIOS_DELIVER_TENANT" --output "$OUT/argus-demand-readiness.json"
 .venv/bin/python scripts/export_argus_demand_plan_template.py --readiness "$OUT/argus-demand-readiness.json" --output "$OUT/argus-demand-plan-template.csv"
+.venv/bin/python scripts/evaluate_argus_planned_demand_exports.py --plan "$OUT/argus-demand-plan-template.csv" --data-dir "$APP/data" --output "$OUT/argus-planned-demand-evaluation.json" --amendment-output "$OUT/argus-demand-plan-amendment-candidates.csv"
 .venv/bin/python scripts/run_argus_demand_intake.py --tenant "$CIOS_DELIVER_TENANT" --record-history --output "$OUT/argus-demand-intake.json"
 .venv/bin/python scripts/attach_post_run_summaries.py --dashboard "$OUT/argus-dashboard.json" --demand-readiness "$OUT/argus-demand-readiness.json"
 .venv/bin/python scripts/rerender_dashboard.py --tenant "$CIOS_DELIVER_TENANT" --out-dir "$OUT"
@@ -335,6 +337,7 @@ def _make_app(
     include_intelligence: bool = True,
     include_demand_imports: bool = True,
     include_demand_plan_template: bool = True,
+    include_planned_demand_evaluator: bool = True,
     include_demand_fast_lane: bool = True,
     include_demand_intake: bool = True,
     include_admin_runner: bool = True,
@@ -403,6 +406,8 @@ def _make_app(
         if rel == "src/cios/admin/demand_imports.py" and not include_demand_imports:
             continue
         if rel == "scripts/export_argus_demand_plan_template.py" and not include_demand_plan_template:
+            continue
+        if rel == "scripts/evaluate_argus_planned_demand_exports.py" and not include_planned_demand_evaluator:
             continue
         if rel == "scripts/import_demand_and_refresh.py" and not include_demand_fast_lane:
             continue
@@ -558,6 +563,15 @@ def test_preflight_fails_when_demand_plan_template_export_missing(tmp_path):
 
     assert result.returncode == 2
     assert "missing required path: scripts/export_argus_demand_plan_template.py" in result.stderr
+
+
+def test_preflight_fails_when_planned_demand_evaluator_missing(tmp_path):
+    app = _make_app(tmp_path, include_planned_demand_evaluator=False)
+
+    result = _run_preflight(app)
+
+    assert result.returncode == 2
+    assert "missing required path: scripts/evaluate_argus_planned_demand_exports.py" in result.stderr
 
 
 def test_preflight_fails_when_launch_readiness_gate_missing(tmp_path):

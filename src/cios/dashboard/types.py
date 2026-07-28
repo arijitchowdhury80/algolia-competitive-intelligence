@@ -914,6 +914,7 @@ class DashboardOperatorHandoff(BaseModel):
     operator_commands: list[DashboardOperatorCommandSummary] = Field(default_factory=list)
     demand_collection_plan: dict[str, Any] = Field(default_factory=dict)
     demand_plan_template: dict[str, Any] = Field(default_factory=dict)
+    demand_plan_amendments: dict[str, Any] = Field(default_factory=dict)
     operator_brief: list[str] = Field(default_factory=list)
     artifact_refs: dict[str, Optional[str]] = Field(default_factory=dict)
     work_queue: dict[str, Any] = Field(default_factory=dict)

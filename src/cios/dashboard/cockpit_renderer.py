@@ -4613,6 +4613,38 @@ def _render_demand_work_order(handoff: DashboardOperatorHandoff) -> str:
     </div>"""
 
 
+def _render_demand_plan_amendments(handoff: DashboardOperatorHandoff) -> str:
+    amendments = handoff.demand_plan_amendments or {}
+    candidates = [item for item in (amendments.get("candidates") or []) if isinstance(item, dict)]
+    if not candidates:
+        return ""
+
+    rows: list[str] = []
+    for candidate in candidates[:3]:
+        topic = str(candidate.get("topic") or "Untitled amendment").strip()
+        current = str(candidate.get("current_sessions") or "").strip()
+        previous = str(candidate.get("previous_sessions") or "").strip()
+        change_pct = str(candidate.get("change_pct") or "").strip()
+        quality = str(candidate.get("comparison_quality") or "not recorded").strip()
+        metrics = " · ".join(
+            item
+            for item in (
+                f"current {current}" if current else "",
+                f"previous {previous}" if previous else "",
+                f"change {change_pct}" if change_pct else "",
+                quality,
+            )
+            if item
+        )
+        rows.append(f"""<li><b>{_esc(topic)}</b><span>{_esc(metrics)}</span></li>""")
+    return f"""<div class="operator-handoff-cell operator-demand-amendments">
+      <div class="spine-meta">Suggested demand-plan amendment</div>
+      <b>{_esc(str(len(candidates)))} candidate{'s' if len(candidates) != 1 else ''}</b>
+      <ul class="operator-command-list" aria-label="Demand plan amendment candidates">{''.join(rows)}</ul>
+      <p>Review before treating as planned gate evidence.</p>
+    </div>"""
+
+
 def _render_operator_handoff(handoff: DashboardOperatorHandoff) -> str:
     status_class = _handoff_status_class(handoff.status, handoff.argus_readiness)
     top_blocker = handoff.top_blocker or {}
@@ -4643,6 +4675,7 @@ def _render_operator_handoff(handoff: DashboardOperatorHandoff) -> str:
         command_html = '<p class="operator-command">No command was attached to this handoff.</p>'
     brief_line = handoff.operator_brief[0] if handoff.operator_brief else handoff.summary
     demand_work_order_html = _render_demand_work_order(handoff)
+    demand_amendment_html = _render_demand_plan_amendments(handoff)
     return f"""<article class="operator-handoff" aria-label="Argus operator handoff">
   <div class="operator-handoff-head">
     <div>
@@ -4669,6 +4702,7 @@ def _render_operator_handoff(handoff: DashboardOperatorHandoff) -> str:
       {command_html}
     </div>
     {demand_work_order_html}
+    {demand_amendment_html}
   </div>
 </article>"""
 
