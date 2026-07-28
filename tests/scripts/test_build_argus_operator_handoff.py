@@ -365,6 +365,38 @@ def test_build_operator_handoff_promotes_blocking_demand_readiness_over_limiting
     assert payload["work_queue"]["item_ids"][0].startswith("argus-demand-readiness:")
 
 
+def test_build_operator_handoff_names_missing_demand_trend_window() -> None:
+    module = _load_module()
+    demand_readiness = _demand_readiness_payload()
+    demand_readiness["status"] = "processed_no_comparison_period"
+    demand_readiness["summary"] = (
+        "Tenant demand evidence exists, but the imported export only has current-period values. "
+        "Argus needs a previous-period or change_pct column before it can score movement."
+    )
+    demand_readiness["next_hermes_action"] = "upload_trended_planned_demand_export"
+
+    payload = module.build_operator_handoff_payload(
+        tenant_slug="algolia",
+        work_queue={
+            "tenant_slug": "algolia",
+            "tenant_id": 1,
+            "generated_at": "2026-07-12T22:20:00Z",
+            "work_item_count": 0,
+            "blocking_count": 0,
+            "limiting_count": 0,
+            "items": [],
+        },
+        demand_readiness=demand_readiness,
+        generated_at="2026-07-12T22:22:00Z",
+    )
+
+    assert payload["status"] == "blocked_on_evidence"
+    assert payload["top_blocker"]["title"] == "Demand trend window missing"
+    assert payload["next_operator_action"] == (
+        "Upload a planned demand export with previous-period or change_pct values, then refresh Argus."
+    )
+
+
 def test_build_argus_operator_handoff_cli_accepts_demand_plan_template(tmp_path) -> None:
     module = _load_module()
     work_queue = tmp_path / "argus-evidence-work-queue.json"

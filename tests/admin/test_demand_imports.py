@@ -252,6 +252,53 @@ def test_demand_import_prepare_attaches_argus_plan_metadata_to_matching_rows(tmp
     assert row["argus_evidence_urls"] == ["https://constructor.com/changelog/ai-shopping-agent"]
 
 
+def test_demand_import_does_not_match_plan_from_generic_source_label(tmp_path):
+    app_dir = tmp_path / "app"
+    work_root = tmp_path / "work"
+    drop_folder = app_dir / "data" / "looker" / "algolia"
+    drop_folder.mkdir(parents=True)
+    (drop_folder / "ga-pages.csv").write_text(
+        "topic,metric,value,period_start,period_end,source_label,source_url,excerpt,capability_key\n"
+        "/users/sign_in,sessions,22056,2026-07-01,2026-07-08,"
+        "Looker Studio GA4 export: Algolia - Web Analytics,"
+        "https://lookerstudio.google.com/reporting/abc,"
+        "Page path: /users/sign_in; Sessions: 22056,\n",
+        encoding="utf-8",
+    )
+    demand_plan = {
+        "status": "needs_demand_source",
+        "topic_count": 1,
+        "topics": [
+            {
+                "topic": "Advanced Analytics & Ranking",
+                "capability_key": "advanced analytics ranking",
+                "assessment": "watch",
+                "suggested_filter_terms": [
+                    "Advanced Analytics & Ranking",
+                    "advanced analytics ranking",
+                    "advanced",
+                    "analytics",
+                    "ranking",
+                ],
+            }
+        ],
+    }
+
+    result = DemandImportStore(app_dir=app_dir, work_root=work_root).prepare(
+        "algolia",
+        demand_plan=demand_plan,
+    )
+
+    coverage = result.manifest["files"][0]["demand_plan_coverage"]
+    payload = json.loads(Path(result.payload_paths[0]).read_text(encoding="utf-8"))
+    row = payload["records"][0]
+    assert coverage["status"] == "off_plan"
+    assert coverage["matched_plan_topic_count"] == 0
+    assert coverage["off_plan_record_count"] == 1
+    assert "argus_plan_matched" not in row
+    assert "argus_capability_key" not in row
+
+
 def test_ga4_export_control_passes_argus_demand_plan_to_export_script(tmp_path, monkeypatch):
     app_dir = tmp_path / "app"
     script = app_dir / "scripts" / "export_ga4_demand.py"

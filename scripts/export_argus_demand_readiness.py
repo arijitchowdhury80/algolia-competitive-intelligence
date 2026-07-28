@@ -67,6 +67,15 @@ def _int_value(value: Any) -> int:
         return 0
 
 
+def _number_value(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _text_value(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
@@ -414,6 +423,21 @@ def _demand_plan_coverage(
     }
 
 
+def _demand_comparison_coverage(dashboard: dict[str, Any] | None) -> dict[str, Any]:
+    topics = [_actual_demand_topic(topic) for topic in _demand_read_topics(dashboard)]
+    actual_topics = [topic for topic in topics if topic]
+    with_change = [
+        topic
+        for topic in actual_topics
+        if _number_value(topic.get("change_pct")) is not None
+    ]
+    return {
+        "topic_count": len(actual_topics),
+        "topics_with_change_pct": len(with_change),
+        "missing_change_pct_count": len(actual_topics) - len(with_change),
+    }
+
+
 def _demand_collection_plan(
     *,
     status: str,
@@ -466,9 +490,21 @@ def _refine_status_with_plan_coverage(
     next_action: str,
     summary: str,
     demand_collection_plan: dict[str, Any],
+    comparison_coverage: dict[str, Any],
 ) -> tuple[str, str, str]:
     if status != "processed":
         return status, next_action, summary
+    topic_count = _int_value(comparison_coverage.get("topic_count"))
+    topics_with_change = _int_value(comparison_coverage.get("topics_with_change_pct"))
+    if topic_count > 0 and topics_with_change == 0:
+        return (
+            "processed_no_comparison_period",
+            "upload_trended_planned_demand_export",
+            (
+                "Tenant demand evidence exists, but the imported export only has current-period values. "
+                "Argus needs a previous-period or change_pct column before it can score movement."
+            ),
+        )
     coverage = demand_collection_plan.get("coverage")
     if not isinstance(coverage, dict):
         return status, next_action, summary
@@ -719,11 +755,13 @@ def build_demand_readiness_payload(
         ga4_connector=ga4_connector,
         dashboard=dashboard,
     )
+    comparison_coverage = _demand_comparison_coverage(dashboard)
     status, next_action, summary = _refine_status_with_plan_coverage(
         status=status,
         next_action=next_action,
         summary=summary,
         demand_collection_plan=demand_collection_plan,
+        comparison_coverage=comparison_coverage,
     )
     demand_source_contract = build_demand_source_contract(
         tenant_slug=tenant_slug,
@@ -746,6 +784,7 @@ def build_demand_readiness_payload(
         "ga4_connector": ga4_connector,
         "demand_source_contract": demand_source_contract,
         "demand_collection_plan": demand_collection_plan,
+        "comparison_coverage": comparison_coverage,
         "operator_actions": _operator_actions(tenant_slug, status=status),
         "safety": {
             "secret_values_included": False,

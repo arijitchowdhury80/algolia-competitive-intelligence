@@ -339,8 +339,6 @@ def _demand_topic_terms(topic: dict[str, Any]) -> list[str]:
 def _demand_row_haystack(row: dict[str, Any]) -> str:
     parts = [
         row.get("topic"),
-        row.get("source_url"),
-        row.get("source_label"),
         row.get("excerpt"),
         row.get("source_file"),
         row.get("argus_capability_key"),

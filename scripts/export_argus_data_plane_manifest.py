@@ -573,6 +573,7 @@ def _demand_plane(
         "processed_partial_plan_coverage",
         "processed_off_plan_demand",
         "processed_unmapped_demand",
+        "processed_no_comparison_period",
     }
     if readiness_status in plan_blocking_statuses:
         status = readiness_status

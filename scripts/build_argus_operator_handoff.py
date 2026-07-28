@@ -26,6 +26,7 @@ DEMAND_BLOCKING_STATUSES = {
     "processed_partial_plan_coverage",
     "processed_off_plan_demand",
     "processed_unmapped_demand",
+    "processed_no_comparison_period",
 }
 
 DEMAND_NEXT_ACTION_LABELS = {
@@ -36,6 +37,7 @@ DEMAND_NEXT_ACTION_LABELS = {
     "collect_missing_plan_demand": "Collect demand for missing planned topics.",
     "collect_planned_demand": "Collect the planned GA / Looker demand export.",
     "inspect_demand_mapping": "Inspect demand mapping and repair topic normalization.",
+    "upload_trended_planned_demand_export": "Upload a planned demand export with previous-period or change_pct values, then refresh Argus.",
 }
 
 
@@ -217,6 +219,8 @@ def _demand_status_blocks_action(status: str) -> bool:
 
 
 def _demand_readiness_title(status: str) -> str:
+    if status == "processed_no_comparison_period":
+        return "Demand trend window missing"
     if status in {"processed_partial_plan_coverage", "processed_off_plan_demand", "processed_unmapped_demand"}:
         return "Demand plan coverage incomplete"
     if status == "blocked_bad_manual_export":

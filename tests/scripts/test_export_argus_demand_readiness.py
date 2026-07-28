@@ -343,6 +343,66 @@ def test_export_argus_demand_readiness_scores_imported_demand_against_collection
     assert coverage["off_plan_topics"][0]["evidence_urls"] == ["https://lookerstudio.google.com/reporting/pricing"]
 
 
+def test_export_argus_demand_readiness_blocks_current_period_only_demand(tmp_path) -> None:
+    module = _load_module()
+    app_dir = tmp_path / "app"
+    work_root = tmp_path / "work"
+    dashboard = {
+        "product_market_run": {
+            "demand_plane_status": "processed",
+            "looker_discovered_count": 1,
+            "looker_ready_count": 1,
+            "looker_error_count": 0,
+            "looker_normalized_row_count": 1,
+            "demand_signal_count": 1,
+            "product_feature_comparison_read": {
+                "rows": [
+                    {
+                        "capability": "Flexible Pricing",
+                        "capability_key": "flexible pricing",
+                        "assessment": "watch",
+                        "recommended_action": "Check whether pricing demand is moving.",
+                    }
+                ]
+            },
+            "intelligence_brief": {
+                "demand_read": {
+                    "top_topics": [
+                        {
+                            "topic": "Flexible Pricing",
+                            "capability_key": "flexible pricing",
+                            "value": 1168,
+                            "change_pct": None,
+                            "source_files": ["algolia-looker-demand.csv"],
+                        }
+                    ]
+                }
+            },
+        }
+    }
+
+    payload = module.build_demand_readiness_payload(
+        tenant_slug="algolia",
+        app_dir=app_dir,
+        work_root=work_root,
+        env={"CIOS_GA4_EXPORT_ENABLED": "0"},
+        dashboard=dashboard,
+        generated_at="2026-07-12T02:00:00Z",
+    )
+
+    assert payload["status"] == "processed_no_comparison_period"
+    assert payload["next_hermes_action"] == "upload_trended_planned_demand_export"
+    assert payload["summary"] == (
+        "Tenant demand evidence exists, but the imported export only has current-period values. "
+        "Argus needs a previous-period or change_pct column before it can score movement."
+    )
+    assert payload["comparison_coverage"] == {
+        "topic_count": 1,
+        "topics_with_change_pct": 0,
+        "missing_change_pct_count": 1,
+    }
+
+
 def test_export_argus_demand_readiness_prefers_queued_manual_exports(tmp_path) -> None:
     module = _load_module()
     app_dir = tmp_path / "app"
