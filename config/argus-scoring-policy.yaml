@@ -1,0 +1,37 @@
+schema_version: 1
+generated_by: cios.learn.apply.LearningApplyExecutor
+policies:
+- action_id: d57c814133e6f919
+  status: approved
+  approved_by: arijit
+  approved_at: '2026-07-28T10:42:18.587365+00:00'
+  tenant_id: 1
+  kind: scoring_review
+  target: argus_scoring_policy
+  summary: 'In the next sweep, keep product proof plus rising audience demand as an
+    action-grade priority when it reveals a narrative gap; preserve the recommendation
+    unless newer evidence contradicts it or confidence limits worsen. Accepted action:
+    Turn the shipped Agent Studio capability into an evidence-backed market narrative
+    before the demand window cools.'
+  instruction: 'In the next sweep, keep product proof plus rising audience demand
+    as an action-grade priority when it reveals a narrative gap; preserve the recommendation
+    unless newer evidence contradicts it or confidence limits worsen. Accepted action:
+    Turn the shipped Agent Studio capability into an evidence-backed market narrative
+    before the demand window cools.'
+  change:
+    priority: high
+    problem: 'arijit accepted recommendation 2 for Product Marketing; action: Turn
+      the shipped Agent Studio capability into an evidence-backed market narrative
+      before the demand window cools.; rationale: Arijit approved the Phase 5 Agent
+      Studio recommendation as the current accepted cross-plane read for Product Marketing;
+      evidence is product proof plus rising Audience Demand, with stated limited confidence.'
+    proposed_fix: 'In the next sweep, keep product proof plus rising audience demand
+      as an action-grade priority when it reveals a narrative gap; preserve the recommendation
+      unless newer evidence contradicts it or confidence limits worsen. Accepted action:
+      Turn the shipped Agent Studio capability into an evidence-backed market narrative
+      before the demand window cools.'
+    source: argus_recommendation_acceptance:2
+  evidence_event_ids:
+  - 2
+  source_improvement_ids:
+  - 3
