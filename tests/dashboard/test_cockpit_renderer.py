@@ -199,6 +199,56 @@ def test_market_field_renders_3d_runtime_shell_from_vendored_contract() -> None:
     assert "<script src=" not in html
 
 
+def test_market_field_hotspots_expose_click_to_reveal_payload() -> None:
+    state = DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        market_field=MarketFieldState(
+            selected_hotspot_id="agent-studio",
+            nodes=[
+                MarketFieldNode(node_id="agent-studio", label="Agent Studio", node_type="theme"),
+                MarketFieldNode(node_id="shopping-agent", label="Shopping Agent", node_type="theme"),
+            ],
+            hotspots=[
+                MarketFieldHotspot(
+                    hotspot_id="agent-studio",
+                    label="Agent Studio",
+                    argus_read="Agent Studio has product proof and a closing demand window.",
+                    movement="rising",
+                    confidence_label="medium-high",
+                    proof_status="partial",
+                    connected_node_ids=["agent-studio"],
+                    unknowns=["Demand freshness needs a second read."],
+                ),
+                MarketFieldHotspot(
+                    hotspot_id="shopping-agent",
+                    label="Shopping Agent",
+                    argus_read="Shopping Agent demand is visible but product proof is incomplete.",
+                    movement="watch",
+                    confidence_label="medium",
+                    proof_status="limited",
+                    connected_node_ids=["shopping-agent"],
+                    unknowns=["Product proof is incomplete."],
+                ),
+            ],
+        ),
+    )
+
+    html = render_cockpit_html(state)
+
+    assert 'data-selected-hotspot-id="agent-studio"' in html
+    assert 'data-selected-time-window="7d"' in html
+    assert 'data-hotspot-read="Shopping Agent demand is visible but product proof is incomplete."' in html
+    assert 'data-hotspot-movement="watch"' in html
+    assert 'data-hotspot-confidence="medium"' in html
+    assert 'data-hotspot-proof="limited"' in html
+    assert 'data-hotspot-unknowns="[&quot;Product proof is incomplete.&quot;]"' in html
+    assert 'data-selected-hotspot-movement' in html
+    assert 'data-selected-hotspot-confidence' in html
+    assert 'data-selected-hotspot-proof' in html
+    assert 'data-selected-hotspot-unknowns' in html
+
+
 def test_quiet_current_run_does_not_label_rolling_cards_as_todays_moves() -> None:
     state = DashboardState(
         tenant_id=1,

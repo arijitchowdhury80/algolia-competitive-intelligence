@@ -23,6 +23,7 @@ class CheckResult:
 
 MARKET_FIELD_REQUIRED_SELECTORS = (
     "#market-field",
+    "#market-field-3d",
     "#selected-movement",
     "#action-layer",
     "#proof-drawer",
@@ -104,17 +105,43 @@ def validate_market_field(page: Page) -> CheckResult:
         _assert(page.locator(selector).count() == 1, f"{selector} missing")
 
     _assert(page.locator("[data-market-hotspot]").count() > 0, "market hotspots missing")
+    canvas = page.locator("#market-field-3d")
+    _assert(canvas.count() == 1, "3D Market Field canvas missing")
+    _assert(
+        canvas.evaluate(
+            """canvas => {
+                const ctx = canvas.getContext('2d');
+                if (!ctx || canvas.width < 2 || canvas.height < 2) return false;
+                const data = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 24, 24).data;
+                for (let index = 0; index < data.length; index += 4) {
+                    if (data[index] || data[index + 1] || data[index + 2] || data[index + 3]) return true;
+                }
+                return false;
+            }"""
+        ),
+        "3D Market Field canvas pixel probe is blank",
+    )
     first = page.locator("[data-market-hotspot]").first
     first.click()
     page.wait_for_timeout(150)
     _assert(page.locator("#selected-movement").is_visible(), "selected movement did not remain visible")
     _assert(page.locator("#action-layer").is_visible(), "action layer is not visible")
+    _assert(first.get_attribute("aria-pressed") == "true", "clicked hotspot did not become selected")
+    _assert(
+        page.locator("#market-field").get_attribute("data-selected-hotspot-id") == first.get_attribute("data-market-hotspot"),
+        "Market Field did not record selected hotspot id",
+    )
 
     for label in ("today", "7d", "30d", "custom"):
         control = page.locator(f'[data-time-window="{label}"]')
         _assert(control.count() == 1, f"{label} time window missing")
         control.click()
         page.wait_for_timeout(100)
+        _assert(control.get_attribute("aria-pressed") == "true", f"{label} time window did not become selected")
+        _assert(
+            page.locator("#market-field").get_attribute("data-selected-time-window") == label,
+            f"{label} time window did not update Market Field state",
+        )
 
     proof_button = page.locator("[data-proof-drawer-toggle]")
     _assert(proof_button.count() == 1, "proof drawer toggle missing")

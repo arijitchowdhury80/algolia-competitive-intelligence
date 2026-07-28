@@ -3832,8 +3832,18 @@ _BRIEF_UI_SCRIPT = """
 	      const historyCalendar = document.getElementById('history-calendar');
       const proofToggle = document.querySelector('[data-proof-drawer-toggle]');
       const proofPanel = document.querySelector('[data-proof-drawer-panel]');
+      const marketField = document.getElementById('market-field');
       const marketCanvas = document.querySelector('[data-market-field-3d]');
       const marketStateNode = document.getElementById('market-field-state');
+      const marketHotspots = [...document.querySelectorAll('[data-market-hotspot]')];
+      const marketNodes = [...document.querySelectorAll('[data-market-node]')];
+      const marketTimeButtons = [...document.querySelectorAll('[data-time-window]')];
+      const selectedHotspotTitle = document.querySelector('[data-selected-hotspot-title]');
+      const selectedHotspotRead = document.querySelector('[data-selected-hotspot-read]');
+      const selectedHotspotMovement = document.querySelector('[data-selected-hotspot-movement]');
+      const selectedHotspotConfidence = document.querySelector('[data-selected-hotspot-confidence]');
+      const selectedHotspotProof = document.querySelector('[data-selected-hotspot-proof]');
+      const selectedHotspotUnknowns = document.querySelector('[data-selected-hotspot-unknowns]');
 
       const setActiveNav = (id) => {
         navLinks.forEach((link) => {
@@ -3877,7 +3887,7 @@ _BRIEF_UI_SCRIPT = """
         if (proofPanel) proofPanel.hidden = expanded;
       });
 
-      const initMarketFieldShell = () => {
+      const drawMarketFieldShell = () => {
         if (!marketCanvas || !marketStateNode) return;
         const context = marketCanvas.getContext('2d');
         if (!context) return;
@@ -3895,6 +3905,9 @@ _BRIEF_UI_SCRIPT = """
         context.clearRect(0, 0, rect.width, rect.height);
         context.fillStyle = '#10141d';
         context.fillRect(0, 0, rect.width, rect.height);
+        const activeHotspotId = marketField?.dataset.selectedHotspotId || state.selected_hotspot_id;
+        const activeHotspot = (Array.isArray(state.hotspots) ? state.hotspots : []).find((hotspot) => hotspot.hotspot_id === activeHotspotId);
+        const activeNodeIds = new Set(activeHotspot?.connected_node_ids || []);
         const nodes = Array.isArray(state.nodes) ? state.nodes.slice(0, 24) : [];
         const positions = new Map();
         nodes.forEach((node, index) => {
@@ -3919,20 +3932,63 @@ _BRIEF_UI_SCRIPT = """
           const isTheme = node.node_type === 'theme';
           const isDemand = node.node_type === 'audience_demand';
           const isLimit = node.status === 'confidence_limit' || node.node_type === 'unknown_boundary';
+          const isActive = activeNodeIds.has(node.node_id) || node.node_id === activeHotspotId;
           context.beginPath();
-          context.arc(x, y, isTheme ? 12 : 7, 0, Math.PI * 2);
+          context.arc(x, y, isActive ? (isTheme ? 15 : 10) : (isTheme ? 12 : 7), 0, Math.PI * 2);
           context.fillStyle = isLimit ? '#d13c2f' : isDemand ? '#18a77a' : isTheme ? '#d9a441' : '#8fb4ff';
           context.fill();
-          if (isTheme) {
+          if (isTheme || isActive) {
             context.beginPath();
-            context.arc(x, y, 26, 0, Math.PI * 2);
-            context.strokeStyle = 'rgba(217,164,65,.42)';
+            context.arc(x, y, isActive ? 34 : 26, 0, Math.PI * 2);
+            context.strokeStyle = isActive ? 'rgba(251,250,247,.56)' : 'rgba(217,164,65,.42)';
             context.stroke();
           }
         });
       };
-      initMarketFieldShell();
-      window.addEventListener('resize', initMarketFieldShell);
+      const parseUnknowns = (value) => {
+        try {
+          const parsed = JSON.parse(value || '[]');
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+          return [];
+        }
+      };
+      const selectMarketHotspot = (button) => {
+        if (!button || !marketField) return;
+        const id = button.dataset.marketHotspot;
+        marketField.dataset.selectedHotspotId = id || '';
+        marketHotspots.forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+        const connected = new Set(parseUnknowns(button.dataset.hotspotConnectedNodes));
+        marketNodes.forEach((node) => {
+          const active = node.dataset.marketNode === id || connected.has(node.dataset.marketNode || '');
+          node.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        if (selectedHotspotTitle) selectedHotspotTitle.textContent = button.dataset.hotspotLabel || button.textContent.trim();
+        if (selectedHotspotRead) selectedHotspotRead.textContent = button.dataset.hotspotRead || 'No Argus read has been attached.';
+        if (selectedHotspotMovement) selectedHotspotMovement.textContent = button.dataset.hotspotMovement || 'unknown';
+        if (selectedHotspotConfidence) selectedHotspotConfidence.textContent = button.dataset.hotspotConfidence || 'unknown';
+        if (selectedHotspotProof) selectedHotspotProof.textContent = button.dataset.hotspotProof || 'unknown';
+        if (selectedHotspotUnknowns) {
+          const unknowns = parseUnknowns(button.dataset.hotspotUnknowns);
+          selectedHotspotUnknowns.innerHTML = unknowns.length
+            ? unknowns.map((item) => `<li>${item.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]))}</li>`).join('')
+            : '<li>No confidence boundary has been attached to this movement.</li>';
+        }
+        drawMarketFieldShell();
+      };
+      marketHotspots.forEach((button) => {
+        button.addEventListener('click', () => selectMarketHotspot(button));
+      });
+      marketTimeButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const value = button.dataset.timeWindow || '7d';
+          if (marketField) marketField.dataset.selectedTimeWindow = value;
+          marketTimeButtons.forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+          drawMarketFieldShell();
+        });
+      });
+      drawMarketFieldShell();
+      window.addEventListener('resize', drawMarketFieldShell);
 
 	      const selectCompetitor = (id, name, updateHash = true) => {
 		moveButtons.forEach((button) => {
@@ -5500,8 +5556,22 @@ def _render_market_field_hotspots(state: DashboardState) -> str:
     rows: list[str] = []
     for hotspot in field.hotspots[:8]:
         selected = "true" if hotspot.hotspot_id == field.selected_hotspot_id else "false"
+        unknowns = html.escape(json.dumps(hotspot.unknowns[:5], ensure_ascii=True), quote=True)
+        connected = html.escape(json.dumps(hotspot.connected_node_ids, ensure_ascii=True), quote=True)
         rows.append(
-            f"""<button type="button" class="hotspot-pill" data-market-hotspot="{_esc(hotspot.hotspot_id)}" aria-pressed="{selected}">
+            f"""<button
+  type="button"
+  class="hotspot-pill"
+  data-market-hotspot="{_esc(hotspot.hotspot_id)}"
+  data-hotspot-label="{_esc(hotspot.label)}"
+  data-hotspot-read="{_esc(hotspot.argus_read or "No Argus read has been attached.")}"
+  data-hotspot-movement="{_esc(hotspot.movement)}"
+  data-hotspot-confidence="{_esc(hotspot.confidence_label)}"
+  data-hotspot-proof="{_esc(hotspot.proof_status)}"
+  data-hotspot-unknowns="{unknowns}"
+  data-hotspot-connected-nodes="{connected}"
+  aria-pressed="{selected}"
+>
   <strong>{_esc(hotspot.label)}</strong>
   <span>{_esc(hotspot.movement)} · {_esc(hotspot.confidence_label)} · {_esc(hotspot.proof_status)}</span>
 </button>"""
@@ -5528,12 +5598,12 @@ def _render_selected_movement(state: DashboardState) -> str:
   <h2 data-selected-hotspot-title>{_esc(selected.label)}</h2>
   <p data-selected-hotspot-read>{_esc(selected.argus_read or "No Argus read has been attached.")}</p>
   <dl class="market-facts">
-    <div><dt>Movement</dt><dd>{_esc(selected.movement)}</dd></div>
-    <div><dt>Confidence</dt><dd>{_esc(selected.confidence_label)}</dd></div>
-    <div><dt>Proof</dt><dd>{_esc(selected.proof_status)}</dd></div>
+    <div><dt>Movement</dt><dd data-selected-hotspot-movement>{_esc(selected.movement)}</dd></div>
+    <div><dt>Confidence</dt><dd data-selected-hotspot-confidence>{_esc(selected.confidence_label)}</dd></div>
+    <div><dt>Proof</dt><dd data-selected-hotspot-proof>{_esc(selected.proof_status)}</dd></div>
   </dl>
   <h3>Confidence boundaries</h3>
-  {unknown_block}
+  <ul class="market-unknowns" data-selected-hotspot-unknowns>{unknowns or "<li>No confidence boundary has been attached to this movement.</li>"}</ul>
 </aside>"""
 
 
@@ -5574,7 +5644,8 @@ def _render_proof_drawer(state: DashboardState) -> str:
 
 
 def _render_market_field(state: DashboardState) -> str:
-    return f"""<section id="market-field" class="market-field" aria-label="Market Field">
+    selected_id = state.market_field.selected_hotspot_id or ""
+    return f"""<section id="market-field" class="market-field" aria-label="Market Field" data-selected-hotspot-id="{_esc(selected_id)}" data-selected-time-window="7d">
   <div class="market-field-head">
     <div>
       <div class="eyebrow">Market Field</div>
