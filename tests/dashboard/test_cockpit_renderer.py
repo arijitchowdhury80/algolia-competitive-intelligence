@@ -141,6 +141,64 @@ def test_renders_market_field_first_experience() -> None:
     assert "confirmed absence" not in html.lower()
 
 
+def test_market_field_renders_3d_runtime_shell_from_vendored_contract() -> None:
+    state = DashboardState(
+        tenant_id=1,
+        cadence="daily",
+        market_field=MarketFieldState(
+            selected_hotspot_id="agent-studio",
+            nodes=[
+                MarketFieldNode(node_id="agent-studio", label="Agent Studio", node_type="theme"),
+                MarketFieldNode(node_id="google-vertex-ai-search", label="Google Vertex AI Search", node_type="competitor"),
+                MarketFieldNode(node_id="audience-demand", label="Audience Demand", node_type="audience_demand"),
+            ],
+            hotspots=[
+                MarketFieldHotspot(
+                    hotspot_id="agent-studio",
+                    label="Agent Studio",
+                    argus_read="Agent Studio has product proof and a closing demand window.",
+                    movement="rising",
+                    confidence_label="medium-high",
+                    proof_status="partial",
+                    connected_node_ids=["agent-studio", "google-vertex-ai-search", "audience-demand"],
+                )
+            ],
+            actions=[
+                MarketFieldAction(
+                    owner="Product Marketing",
+                    priority="P1",
+                    action="Turn Agent Studio into an evidence-backed market narrative.",
+                    why_now="The demand window is cooling.",
+                    confidence_label="medium-high",
+                )
+            ],
+            proof=[
+                MarketFieldProofItem(
+                    plane="product_reality",
+                    summary="Agent Studio shipped and has public product proof.",
+                    source_count=4,
+                )
+            ],
+        ),
+    )
+
+    html = render_cockpit_html(state)
+
+    assert 'id="market-field-3d"' in html
+    assert 'data-market-field-3d' in html
+    assert 'data-three-runtime-version="0.160.0"' in html
+    assert 'data-three-runtime="src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js"' in html
+    assert 'id="market-field-state"' in html
+    assert '"nodes":' in html
+    assert '"edges":' in html
+    assert '"hotspots":' in html
+    assert "Agent Studio has product proof and a closing demand window." in html
+    assert "https://unpkg.com" not in html
+    assert "https://cdn.jsdelivr.net" not in html
+    assert "https://esm.sh" not in html
+    assert "<script src=" not in html
+
+
 def test_quiet_current_run_does_not_label_rolling_cards_as_todays_moves() -> None:
     state = DashboardState(
         tenant_id=1,

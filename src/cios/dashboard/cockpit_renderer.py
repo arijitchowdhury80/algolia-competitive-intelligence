@@ -55,6 +55,7 @@ because dropping them would silently change the design's typography.
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass
 from datetime import date as _date, timedelta as _timedelta
@@ -70,6 +71,9 @@ from .types import (
     PrescriptionSummary,
     SourceHealthEntry,
 )
+
+THREE_RUNTIME_VERSION = "0.160.0"
+THREE_RUNTIME_REL_PATH = "src/cios/dashboard/static/vendor/three/0.160.0/three.module.min.js"
 
 _STYLE = """
     :root {
@@ -3450,6 +3454,16 @@ _BRIEF_UI_STYLE = """
         linear-gradient(135deg, #16181d, #242019 54%, #0f1217);
       box-shadow: 0 24px 70px rgba(23,23,23,.16);
     }
+    .market-field-canvas canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .market-field-state-json {
+      display: none;
+    }
     .market-field-canvas::before {
       content: "";
       position: absolute;
@@ -3816,8 +3830,10 @@ _BRIEF_UI_SCRIPT = """
 	      const partnerSelector = document.getElementById('partner-selector');
 	      const historySelector = document.getElementById('history-selector');
 	      const historyCalendar = document.getElementById('history-calendar');
-	      const proofToggle = document.querySelector('[data-proof-drawer-toggle]');
-	      const proofPanel = document.querySelector('[data-proof-drawer-panel]');
+      const proofToggle = document.querySelector('[data-proof-drawer-toggle]');
+      const proofPanel = document.querySelector('[data-proof-drawer-panel]');
+      const marketCanvas = document.querySelector('[data-market-field-3d]');
+      const marketStateNode = document.getElementById('market-field-state');
 
       const setActiveNav = (id) => {
         navLinks.forEach((link) => {
@@ -3860,6 +3876,63 @@ _BRIEF_UI_SCRIPT = """
         proofToggle.textContent = expanded ? 'Open proof drawer' : 'Close proof drawer';
         if (proofPanel) proofPanel.hidden = expanded;
       });
+
+      const initMarketFieldShell = () => {
+        if (!marketCanvas || !marketStateNode) return;
+        const context = marketCanvas.getContext('2d');
+        if (!context) return;
+        let state = { nodes: [], edges: [], hotspots: [] };
+        try {
+          state = JSON.parse(marketStateNode.textContent || '{}');
+        } catch (_) {
+          state = { nodes: [], edges: [], hotspots: [] };
+        }
+        const rect = marketCanvas.getBoundingClientRect();
+        const scale = window.devicePixelRatio || 1;
+        marketCanvas.width = Math.max(1, Math.floor(rect.width * scale));
+        marketCanvas.height = Math.max(1, Math.floor(rect.height * scale));
+        context.setTransform(scale, 0, 0, scale, 0, 0);
+        context.clearRect(0, 0, rect.width, rect.height);
+        context.fillStyle = '#10141d';
+        context.fillRect(0, 0, rect.width, rect.height);
+        const nodes = Array.isArray(state.nodes) ? state.nodes.slice(0, 24) : [];
+        const positions = new Map();
+        nodes.forEach((node, index) => {
+          const angle = (index / Math.max(1, nodes.length)) * Math.PI * 2;
+          const radius = Math.min(rect.width, rect.height) * (node.node_type === 'theme' ? 0.11 : 0.32);
+          const x = rect.width / 2 + Math.cos(angle) * radius;
+          const y = rect.height / 2 + Math.sin(angle) * radius * 0.72;
+          positions.set(node.node_id, { x, y, node });
+        });
+        context.lineWidth = 1.4;
+        context.strokeStyle = 'rgba(251,250,247,.22)';
+        (Array.isArray(state.edges) ? state.edges : []).forEach((edge) => {
+          const source = positions.get(edge.source_node_id);
+          const target = positions.get(edge.target_node_id);
+          if (!source || !target) return;
+          context.beginPath();
+          context.moveTo(source.x, source.y);
+          context.lineTo(target.x, target.y);
+          context.stroke();
+        });
+        positions.forEach(({ x, y, node }) => {
+          const isTheme = node.node_type === 'theme';
+          const isDemand = node.node_type === 'audience_demand';
+          const isLimit = node.status === 'confidence_limit' || node.node_type === 'unknown_boundary';
+          context.beginPath();
+          context.arc(x, y, isTheme ? 12 : 7, 0, Math.PI * 2);
+          context.fillStyle = isLimit ? '#d13c2f' : isDemand ? '#18a77a' : isTheme ? '#d9a441' : '#8fb4ff';
+          context.fill();
+          if (isTheme) {
+            context.beginPath();
+            context.arc(x, y, 26, 0, Math.PI * 2);
+            context.strokeStyle = 'rgba(217,164,65,.42)';
+            context.stroke();
+          }
+        });
+      };
+      initMarketFieldShell();
+      window.addEventListener('resize', initMarketFieldShell);
 
 	      const selectCompetitor = (id, name, updateHash = true) => {
 		moveButtons.forEach((button) => {
@@ -5404,6 +5477,21 @@ def _render_market_field_nodes(state: DashboardState) -> str:
     return "".join(rows)
 
 
+def _json_script_payload(value: object) -> str:
+    return json.dumps(value, ensure_ascii=True).replace("</", "<\\/")
+
+
+def _market_field_payload(state: DashboardState) -> dict[str, object]:
+    field = state.market_field
+    dump = field.model_dump(mode="json") if hasattr(field, "model_dump") else field.dict()
+    dump["runtime"] = {
+        "name": "three",
+        "version": THREE_RUNTIME_VERSION,
+        "path": THREE_RUNTIME_REL_PATH,
+    }
+    return dump
+
+
 def _render_market_field_hotspots(state: DashboardState) -> str:
     field = state.market_field
     if not field.hotspots:
@@ -5502,6 +5590,14 @@ def _render_market_field(state: DashboardState) -> str:
   </div>
   <div class="market-field-layout">
     <div class="market-field-canvas" data-market-field-canvas>
+      <canvas
+        id="market-field-3d"
+        data-market-field-3d
+        data-three-runtime-version="{THREE_RUNTIME_VERSION}"
+        data-three-runtime="{THREE_RUNTIME_REL_PATH}"
+        aria-label="3D Market Field constellation"
+      ></canvas>
+      <script type="application/json" id="market-field-state" class="market-field-state-json">{_json_script_payload(_market_field_payload(state))}</script>
       {_render_market_field_nodes(state)}
     </div>
     {_render_selected_movement(state)}
