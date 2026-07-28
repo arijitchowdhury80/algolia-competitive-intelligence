@@ -42,6 +42,12 @@ from .types import (
     IntelligenceSpine,
     LaneStatus,
     LivingThesis,
+    MarketFieldAction,
+    MarketFieldEdge,
+    MarketFieldHotspot,
+    MarketFieldNode,
+    MarketFieldProofItem,
+    MarketFieldState,
     MonitoredCompetitor,
     PrescriptionSummary,
     ProductFeatureComparisonCell,
@@ -319,6 +325,12 @@ class DashboardStateBuilder:
             demand_signals,
             feature_matrix,
         )
+        market_field = self._build_market_field_state(
+            patterns=product_market_patterns,
+            recommendations=argus_recommendations,
+            demand_signals=demand_signals,
+            feature_matrix=feature_matrix,
+        )
         intelligence_spine = self._build_intelligence_spine(
             product_market_run=product_market_run,
             product_market_patterns=product_market_patterns,
@@ -360,6 +372,7 @@ class DashboardStateBuilder:
             argus_evidence_needs=argus_evidence_needs,
             feature_matrix=feature_matrix,
             product_feature_comparison=product_feature_comparison,
+            market_field=market_field,
             intelligence_spine=intelligence_spine,
             material_delta_ids=[d["id"] for d in deltas if d.get("id") is not None],
             action_item_ids=list(run.get("action_item_ids") or []),
@@ -1640,6 +1653,177 @@ class DashboardStateBuilder:
         if len(values) == 2:
             return f"{values[0]} and {values[1]}"
         return f"{', '.join(values[:-1])}, and {values[-1]}"
+
+    @staticmethod
+    def _market_field_id(prefix: str, value: str) -> str:
+        key = DashboardStateBuilder._normalize_comparison_key(value).replace(" ", "-")
+        return f"{prefix}-{key}" if key else f"{prefix}-unknown"
+
+    @staticmethod
+    def _confidence_label(confidence: Optional[float]) -> str:
+        if confidence is None:
+            return "unknown"
+        if confidence >= 0.8:
+            return "high"
+        if confidence >= 0.65:
+            return "medium-high"
+        if confidence >= 0.4:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _build_market_field_state(
+        *,
+        patterns: list[ProductMarketPatternSummary],
+        recommendations: list[ArgusRecommendationSummary],
+        demand_signals: list[DemandSignalSummary],
+        feature_matrix: list[FeatureMatrixRow],
+    ) -> MarketFieldState:
+        nodes: dict[str, MarketFieldNode] = {}
+        edges: list[MarketFieldEdge] = []
+        hotspots: list[MarketFieldHotspot] = []
+        actions: list[MarketFieldAction] = []
+        proof: list[MarketFieldProofItem] = []
+
+        top_pattern = patterns[0] if patterns else None
+        if top_pattern is not None:
+            hotspot_id = DashboardStateBuilder._market_field_id("hotspot", top_pattern.capability_text)
+            nodes[hotspot_id] = MarketFieldNode(
+                node_id=hotspot_id,
+                label=top_pattern.capability_text,
+                node_type="theme",
+                summary=top_pattern.summary,
+            )
+
+            for company in top_pattern.involved_companies:
+                node_id = DashboardStateBuilder._market_field_id("competitor", company)
+                nodes[node_id] = MarketFieldNode(
+                    node_id=node_id,
+                    label=company,
+                    node_type="competitor",
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=node_id,
+                        target_node_id=hotspot_id,
+                        edge_type="claims",
+                        strength="medium",
+                    )
+                )
+
+            capability_id = DashboardStateBuilder._market_field_id(
+                "capability",
+                top_pattern.capability_text,
+            )
+            nodes[capability_id] = MarketFieldNode(
+                node_id=capability_id,
+                label=top_pattern.capability_text,
+                node_type="capability",
+                summary=top_pattern.summary,
+            )
+            edges.append(
+                MarketFieldEdge(
+                    source_node_id=hotspot_id,
+                    target_node_id=capability_id,
+                    edge_type="describes_capability",
+                    strength="medium",
+                )
+            )
+
+            unknowns: list[str] = []
+            for row in feature_matrix:
+                if str(row.position_status or "").strip().lower() != "unknown":
+                    continue
+                summary = (
+                    row.summary
+                    or "Product proof has not been captured yet; unknown is a confidence limit."
+                )
+                node_id = DashboardStateBuilder._market_field_id(
+                    "unknown",
+                    f"{row.company_name} {row.capability_text}",
+                )
+                nodes[node_id] = MarketFieldNode(
+                    node_id=node_id,
+                    label=f"{row.company_name}: {row.capability_text}",
+                    node_type="unknown_boundary",
+                    status="confidence_limit",
+                    summary=summary,
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=hotspot_id,
+                        target_node_id=node_id,
+                        edge_type="limits_confidence",
+                        strength="weak",
+                        status="confidence_limit",
+                    )
+                )
+                unknowns.append(summary)
+
+            for signal in demand_signals:
+                node_id = DashboardStateBuilder._market_field_id("demand", signal.topic)
+                nodes[node_id] = MarketFieldNode(
+                    node_id=node_id,
+                    label=signal.topic,
+                    node_type="audience_demand",
+                    summary=f"{signal.source_label}: {signal.metric}",
+                )
+                edges.append(
+                    MarketFieldEdge(
+                        source_node_id=node_id,
+                        target_node_id=hotspot_id,
+                        edge_type="overlaps_demand",
+                        strength="medium",
+                    )
+                )
+
+            hotspots.append(
+                MarketFieldHotspot(
+                    hotspot_id=hotspot_id,
+                    label=top_pattern.capability_text,
+                    argus_read=top_pattern.summary,
+                    movement="rising",
+                    confidence_label=DashboardStateBuilder._confidence_label(top_pattern.confidence),
+                    proof_status="partial" if unknowns else "present",
+                    connected_node_ids=list(nodes),
+                    unknowns=unknowns,
+                )
+            )
+
+        for recommendation in recommendations:
+            actions.append(
+                MarketFieldAction(
+                    owner=recommendation.owner,
+                    priority=recommendation.urgency,
+                    action=recommendation.action,
+                    why_now=recommendation.why_now,
+                    evidence_basis=[
+                        str(ref.get("source_url") or ref.get("url"))
+                        for ref in recommendation.evidence_refs
+                        if ref.get("source_url") or ref.get("url")
+                    ],
+                    confidence_label=DashboardStateBuilder._confidence_label(recommendation.confidence),
+                )
+            )
+
+        for signal in demand_signals:
+            proof.append(
+                MarketFieldProofItem(
+                    plane="audience_demand",
+                    summary=f"{signal.topic}: {signal.source_label} {signal.metric}",
+                    source_count=len(signal.evidence_refs),
+                    href=DashboardStateBuilder._first_evidence_url(signal.evidence_refs),
+                )
+            )
+
+        return MarketFieldState(
+            selected_hotspot_id=hotspots[0].hotspot_id if hotspots else None,
+            nodes=list(nodes.values()),
+            edges=edges,
+            hotspots=hotspots,
+            actions=actions,
+            proof=proof,
+        )
 
     @staticmethod
     def _demand_observed_state(product_market_run: ProductMarketRunStatus) -> dict[str, Any]:
