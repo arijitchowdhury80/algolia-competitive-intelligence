@@ -785,6 +785,7 @@ fi
 rm -rf "$PUB/briefs" "$PUB/v2/briefs"
 cp -R "$STAGE/briefs" "$PUB/briefs"
 cp -R "$STAGE/v2/briefs" "$PUB/v2/briefs"
+rm -rf "$STAGE"
 promote_public_store_if_present
 
 echo "dashboard published to ci.chowmes.com from $APP"

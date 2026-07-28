@@ -182,6 +182,9 @@ printf "constructor brief" > "$OUT/briefs/algolia/constructor.html"
     assert (public_store / "latest-status.json").is_file()
     assert (public_store / "served" / "index.html").read_text(encoding="utf-8") == "current cockpit"
     assert (public_store / "served" / "publication-manifest.json").is_file()
+    assert not list(public.glob(".argus-publish.*"))
+    assert not list(current_release.glob(".argus-publish.*"))
+    assert not list((public_store / "served").glob(".argus-publish.*"))
     assert not (old_release / "current.next").exists()
     assert (public / "v2" / "data" / "argus-demand-plan-template.csv").exists()
     assert (public / "v2" / "data" / "argus-demand-work-order-guide.json").exists()
