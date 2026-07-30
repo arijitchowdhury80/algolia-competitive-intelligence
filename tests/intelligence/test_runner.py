@@ -13,6 +13,7 @@ from cios.intelligence.runner import (
     run_product_market_ledger_refresh,
     run_product_market_payload,
 )
+import cios.intelligence.runner as runner_module
 from tests.intelligence.test_product_market_workflow import FakeProductMarketLedger
 
 
@@ -340,6 +341,24 @@ def test_run_product_market_payload_produces_canonical_argus_packet() -> None:
     assert summary.argus_packet.consumer_state.dashboard is not None
     assert summary.argus_packet.consumer_state.dashboard.run_id == summary.argus_packet.run.run_id
     assert ledger.run_intelligence_summaries[0].argus_packet.packet_id == summary.argus_packet.packet_id
+
+
+def test_argus_packet_run_identity_uses_execution_time_not_evidence_time(monkeypatch) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 7, 30, 20, 45, tzinfo=timezone.utc)
+            return value if tz is None else value.astimezone(tz)
+
+    monkeypatch.setattr(runner_module, "datetime", FrozenDateTime)
+    monkeypatch.setattr(runner_module, "_product_market_evidence_as_of", lambda **_kwargs: NOW)
+    ledger = FakeProductMarketLedger()
+
+    summary = runner_module.run_product_market_payload(_payload(), repository=ledger)
+
+    assert summary.argus_packet.run.run_id == "product-market-local-tenant-1-20260730T204500Z"
+    assert summary.argus_packet.packet_id == "packet-product-market-local-tenant-1-20260730T204500Z"
+    assert summary.argus_packet.time_window.end_at == NOW
 
 
 def test_run_product_market_payload_embeds_argus_decision_read_for_business_action() -> None:

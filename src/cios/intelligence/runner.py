@@ -1310,7 +1310,8 @@ def _build_argus_packet_for_product_market_summary(
     result: ProductMarketResult,
     evidence_as_of: datetime | None,
 ) -> ArgusIntelligencePacket:
-    generated_at = evidence_as_of or datetime.now(timezone.utc)
+    generated_at = datetime.now(timezone.utc)
+    evidence_window_end = evidence_as_of or generated_at
     run_stamp = generated_at.strftime("%Y%m%dT%H%M%SZ")
     run_id = f"product-market-local-tenant-{summary.tenant_id}-{run_stamp}"
     total_checked = (
@@ -1338,8 +1339,8 @@ def _build_argus_packet_for_product_market_summary(
         cadence="daily",
         time_window={
             "label": "today",
-            "start_at": generated_at - timedelta(days=1),
-            "end_at": generated_at,
+            "start_at": evidence_window_end - timedelta(days=1),
+            "end_at": evidence_window_end,
             "grain": "daily",
             "movement_basis": "local product-market evidence window",
         },
