@@ -8,6 +8,12 @@ UI-contract adapter point this layer intentionally leaves for that app.
 """
 
 from .publisher import default_filename, publish_to_file, to_json_dict, to_json_str
+from .packet_consumers import (
+    build_dashboard_state_from_packet,
+    build_latest_json_from_packet,
+    build_market_field_from_packet,
+    build_public_status_from_packet,
+)
 from .state_builder import (
     BuildStatusProvider,
     CoverageRepository,
@@ -94,4 +100,8 @@ __all__ = [
     "to_json_str",
     "publish_to_file",
     "default_filename",
+    "build_dashboard_state_from_packet",
+    "build_latest_json_from_packet",
+    "build_market_field_from_packet",
+    "build_public_status_from_packet",
 ]

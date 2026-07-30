@@ -35,6 +35,7 @@ from .runner import (
     load_product_market_payload,
     run_product_market_payload,
 )
+from .argus_packet import ArgusIntelligencePacket, build_argus_packet_from_components
 from .types import (
     ConversationTheme,
     DemandSignal,
@@ -56,6 +57,7 @@ __all__ = [
     "ProductMarketIntelligenceBrief",
     "ProductMarketRunPayload",
     "ProductMarketRunSummary",
+    "ArgusIntelligencePacket",
     "ProductFeatureComparisonRead",
     "ProductFeatureComparisonRow",
     "ProductSurfaceExportPlanItem",
@@ -78,6 +80,7 @@ __all__ = [
     "derive_feature_positions_from_product_events",
     "build_product_feature_comparison_read",
     "build_product_market_intelligence_brief",
+    "build_argus_packet_from_components",
     "load_export_records",
     "load_product_market_payload",
     "run_product_market_payload",
