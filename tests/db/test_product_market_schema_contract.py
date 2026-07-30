@@ -64,6 +64,18 @@ def test_run_intelligence_has_brain_readable_brief_contract() -> None:
     assert "learning_instruction_improvement_ids" in run_block
 
 
+def test_run_intelligence_has_canonical_argus_packet_contract() -> None:
+    run_block = SCHEMA.split("CREATE TABLE product_market_run_intelligence", maxsplit=1)[1].split(
+        "CREATE INDEX idx_product_market_run_intelligence_tenant_created",
+        maxsplit=1,
+    )[0]
+    assert "argus_packet" in run_block
+    assert "product_market_run_intelligence_has_packet" in run_block
+    assert "packet_id" in run_block
+    assert "run" in run_block
+    assert "executive_read" in run_block
+
+
 def test_pattern_observations_allow_product_without_market_conversation_pattern() -> None:
     pattern_block = SCHEMA.split("CREATE TABLE pattern_observations", maxsplit=1)[1].split(
         "CREATE INDEX idx_pattern_observations_tenant_created",

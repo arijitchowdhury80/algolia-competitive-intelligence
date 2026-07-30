@@ -343,6 +343,11 @@ def build_argus_packet_from_components(
             )
         ]
 
+    packet_status = _packet_status_from_components(
+        decision_read.get("status") or intelligence_brief.get("verdict") or "watch",
+        source_health=source_health,
+    )
+
     return ArgusIntelligencePacket.model_validate(
         {
             "schema_version": 1,
@@ -351,7 +356,7 @@ def build_argus_packet_from_components(
             "run": run,
             "cadence": cadence,
             "time_window": time_window,
-            "status": decision_read.get("status") or intelligence_brief.get("verdict") or "watch",
+            "status": packet_status,
             "executive_read": {
                 "headline": intelligence_brief.get("top_insight") or decision_read.get("market_direction") or "No Argus read produced.",
                 "plain_read": intelligence_brief.get("top_insight") or decision_read.get("priority_reason") or "No Argus read produced.",
@@ -383,7 +388,9 @@ def build_argus_packet_from_components(
             "contradictions": [],
             "unknowns": [],
             "source_health": source_health,
-            "next_monitoring_actions": intelligence_brief.get("next_monitoring_actions") or [],
+            "next_monitoring_actions": _next_monitoring_actions_from_brief(
+                intelligence_brief.get("next_monitoring_actions") or []
+            ),
             "consumer_state": _consumer_state_with_packet_id(consumer_state, run_id=run_id, packet_id=packet_id),
             "quality": {
                 "quality_review_status": "not_reviewed",
@@ -408,6 +415,15 @@ def _safe_id(prefix: str, value: str) -> str:
     while "--" in cleaned:
         cleaned = cleaned.replace("--", "-")
     return f"{prefix}-{cleaned or 'unknown'}"
+
+
+def _packet_status_from_components(raw_status: str, *, source_health: dict[str, Any]) -> str:
+    status = str(raw_status or "watch")
+    if status == "quiet":
+        return "quiet_verified"
+    if status == "actionable" and int(source_health.get("failed") or 0) > 0:
+        return "degraded"
+    return status
 
 
 def _proof_nodes_from_urls(urls: list[str]) -> list[ProofNode]:
@@ -523,6 +539,24 @@ def _evidence_planes_from_decision_read(decision_read: dict[str, Any]) -> list[E
             )
         )
     return planes
+
+
+def _next_monitoring_actions_from_brief(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for index, action in enumerate(actions, start=1):
+        action_id = action.get("action_id") or _safe_id("monitor", action.get("instruction") or action.get("summary") or str(index))
+        evidence_needed = action.get("evidence_needed")
+        if evidence_needed is None:
+            evidence_needed = action.get("source_families") or action.get("evidence_urls") or []
+        normalized.append(
+            {
+                "action_id": str(action_id),
+                "summary": str(action.get("summary") or action.get("instruction") or action.get("reason") or "Recheck evidence."),
+                "owner": str(action.get("owner") or "Argus"),
+                "evidence_needed": [str(item) for item in evidence_needed],
+            }
+        )
+    return normalized
 
 
 def _consumer_state_with_packet_id(

@@ -513,6 +513,33 @@ def test_product_market_state_populated_from_repo():
     }
 
 
+def test_product_market_run_history_preserves_canonical_argus_packet() -> None:
+    packet = {
+        "packet_id": "packet-run-1",
+        "run": {"run_id": "daily-algolia-1"},
+        "executive_read": {"headline": "Constructor movement requires PMM review."},
+    }
+    builder = make_builder(
+        coverage={1: full_coverage()},
+        runs={1: {"run_id": "daily-algolia-1", "product_market_summary": {"status": "ran"}}},
+        product_market=FakeProductMarketRepository(
+            run_history={
+                1: [
+                    product_market_run_history_row(
+                        id=22,
+                        top_insight="Constructor movement requires PMM review.",
+                        argus_packet=packet,
+                    )
+                ]
+            }
+        ),
+    )
+
+    state = builder.build(tenant_id=1, cadence="daily")
+
+    assert state.product_market_run_history[0].argus_packet == packet
+
+
 def test_product_market_demand_signal_exposes_argus_plan_context() -> None:
     repo = FakeProductMarketRepository(
         demand_signals={

@@ -384,6 +384,7 @@ def product_market_run_history_row(
     recommendation_count: int = 0,
     learning_instruction_count: int = 1,
     learning_instruction_improvement_ids: list[int] | None = None,
+    argus_packet: dict | None = None,
 ) -> dict:
     from datetime import datetime, timezone
 
@@ -401,6 +402,7 @@ def product_market_run_history_row(
             else ["Coverage learning gate was active."],
             "next_questions": ["Did Coveo publish a matching release?"],
         },
+        "argus_packet": argus_packet,
         "product_event_count": product_event_count,
         "conversation_theme_count": conversation_theme_count,
         "demand_signal_count": demand_signal_count,

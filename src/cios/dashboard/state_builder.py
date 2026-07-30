@@ -886,6 +886,9 @@ class DashboardStateBuilder:
             brief = r.get("intelligence_brief")
             if not isinstance(brief, dict):
                 brief = {}
+            argus_packet = r.get("argus_packet")
+            if not isinstance(argus_packet, dict):
+                argus_packet = {}
             learning_ids = r.get("learning_instruction_improvement_ids") or []
             if not isinstance(learning_ids, list):
                 learning_ids = []
@@ -896,6 +899,7 @@ class DashboardStateBuilder:
                     verdict=str(r.get("verdict") or brief.get("verdict") or "quiet"),
                     top_insight=str(brief.get("top_insight") or "No run intelligence brief was stored."),
                     intelligence_brief=dict(brief),
+                    argus_packet=dict(argus_packet),
                     primary_action=brief.get("primary_action"),
                     watchlist=[str(item) for item in (brief.get("watchlist") or [])],
                     evidence_urls=[str(item) for item in (brief.get("evidence_urls") or [])],

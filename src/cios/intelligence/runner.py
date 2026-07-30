@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, Field
 
+from .argus_packet import ArgusIntelligencePacket, build_argus_packet_from_components
 from .capabilities import capability_key, demand_capability_key
 from .decision_read import build_argus_decision_read
 from .demand_quality import (
@@ -160,6 +161,7 @@ class ProductMarketRunSummary(BaseModel):
             confidence_limits=["No product-market synthesis result was available."],
         )
     )
+    argus_packet: ArgusIntelligencePacket | None = None
 
 
 class ProductMarketIntelligenceBrief(BaseModel):
@@ -224,14 +226,15 @@ def run_product_market_payload(
             if improvement_id is not None
         }
     )
+    evidence_as_of = _product_market_evidence_as_of(
+        product_events=batch.product_events,
+        conversation_themes=batch.conversation_themes,
+        demand_signals=batch.demand_signals,
+    )
     movement_map = build_market_movement_map(
         current_patterns=result.patterns,
         historical_patterns=_load_pattern_history(repository, payload.tenant_id),
-        as_of=_product_market_evidence_as_of(
-            product_events=batch.product_events,
-            conversation_themes=batch.conversation_themes,
-            demand_signals=batch.demand_signals,
-        ),
+        as_of=evidence_as_of,
     )
     conversion_diagnostics = build_product_market_conversion_diagnostics(
         scout_record_count=len(payload.scout_records),
@@ -297,6 +300,12 @@ def run_product_market_payload(
         learning_instruction_improvement_ids=learning_instruction_improvement_ids,
         conversion_diagnostics=conversion_diagnostics,
         intelligence_brief=intelligence_brief,
+    )
+    summary.argus_packet = _build_argus_packet_for_product_market_summary(
+        summary,
+        own_company_name=payload.own_company_name,
+        result=result,
+        evidence_as_of=evidence_as_of,
     )
     save_run_intelligence_summary = getattr(repository, "save_run_intelligence_summary", None)
     if callable(save_run_intelligence_summary):
@@ -378,14 +387,15 @@ def run_product_market_ledger_refresh(
         )
 
     feature_positions = derive_feature_positions_from_product_events(product_events)
+    evidence_as_of = _product_market_evidence_as_of(
+        product_events=product_events,
+        conversation_themes=conversation_themes,
+        demand_signals=demand_signals,
+    )
     movement_map = build_market_movement_map(
         current_patterns=result.patterns,
         historical_patterns=_load_pattern_history(repository, tenant_id),
-        as_of=_product_market_evidence_as_of(
-            product_events=product_events,
-            conversation_themes=conversation_themes,
-            demand_signals=demand_signals,
-        ),
+        as_of=evidence_as_of,
     )
     conversion_diagnostics = build_product_market_conversion_diagnostics(
         scout_record_count=len(product_events),
@@ -452,6 +462,12 @@ def run_product_market_ledger_refresh(
         learning_instruction_improvement_ids=_learning_instruction_improvement_ids(instructions),
         conversion_diagnostics=conversion_diagnostics,
         intelligence_brief=intelligence_brief,
+    )
+    summary.argus_packet = _build_argus_packet_for_product_market_summary(
+        summary,
+        own_company_name=own_company_name,
+        result=result,
+        evidence_as_of=evidence_as_of,
     )
     save_run_intelligence_summary = getattr(repository, "save_run_intelligence_summary", None)
     if callable(save_run_intelligence_summary):
@@ -1285,6 +1301,102 @@ def _item_evidence_urls(item: Any) -> list[str]:
         for evidence in getattr(item, "evidence", [])
         if getattr(evidence, "source_url", None)
     ]
+
+
+def _build_argus_packet_for_product_market_summary(
+    summary: ProductMarketRunSummary,
+    *,
+    own_company_name: str,
+    result: ProductMarketResult,
+    evidence_as_of: datetime | None,
+) -> ArgusIntelligencePacket:
+    generated_at = evidence_as_of or datetime.now(timezone.utc)
+    run_stamp = generated_at.strftime("%Y%m%dT%H%M%SZ")
+    run_id = f"product-market-local-tenant-{summary.tenant_id}-{run_stamp}"
+    total_checked = (
+        summary.product_event_count
+        + summary.conversation_theme_count
+        + summary.demand_signal_count
+    )
+    return build_argus_packet_from_components(
+        tenant={
+            "tenant_id": summary.tenant_id,
+            "slug": _tenant_slug(own_company_name),
+            "display_name": own_company_name,
+        },
+        run={
+            "run_id": run_id,
+            "generated_at": generated_at,
+            "started_at": generated_at,
+            "completed_at": generated_at,
+            "hermes_profile": "argus",
+            "package_commit": "local",
+            "package_release_id": f"local-{run_stamp}",
+            "produced_by_user": "cios",
+            "source": "local_test",
+        },
+        cadence="daily",
+        time_window={
+            "label": "today",
+            "start_at": generated_at - timedelta(days=1),
+            "end_at": generated_at,
+            "grain": "daily",
+            "movement_basis": "local product-market evidence window",
+        },
+        intelligence_brief=summary.intelligence_brief.model_dump(mode="json"),
+        decision_read=summary.intelligence_brief.decision_read,
+        movement_map=summary.intelligence_brief.movement_map,
+        recommendations=_packet_recommendation_rows(result.recommendations),
+        source_health={
+            "active": total_checked,
+            "checked": total_checked,
+            "failed": 0,
+            "stale": 0,
+            "confidence_impact": "local product-market evidence was converted into a canonical packet",
+        },
+        consumer_state=_packet_consumer_state(run_id=run_id),
+    )
+
+
+def _tenant_slug(name: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "-" for ch in name).strip("-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug or "tenant"
+
+
+def _packet_consumer_state(*, run_id: str) -> dict[str, dict[str, Any]]:
+    return {
+        "telegram_daily": {"status": "skipped", "run_id": run_id},
+        "telegram_weekly": {"status": "not_applicable", "run_id": run_id},
+        "dashboard": {"status": "rendered", "run_id": run_id},
+        "market_field": {"status": "rendered", "run_id": run_id},
+        "evidence_lab": {"status": "rendered", "run_id": run_id},
+        "admin": {"status": "rendered", "run_id": run_id},
+        "public_status": {"status": "rendered", "run_id": run_id},
+    }
+
+
+def _packet_recommendation_rows(recommendations: list[Recommendation]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, recommendation in enumerate(recommendations, start=1):
+        rows.append(
+            {
+                "id": index,
+                "owner": recommendation.owner,
+                "action": recommendation.action,
+                "why_now": recommendation.why_now,
+                "expected_outcome": recommendation.scorecard.summary,
+                "urgency": recommendation.urgency,
+                "confidence": recommendation.confidence,
+                "status": "open",
+                "scorecard": recommendation.scorecard.model_dump(mode="json"),
+                "evidence_refs": [
+                    evidence.model_dump(mode="json") for evidence in recommendation.evidence
+                ],
+            }
+        )
+    return rows
 
 
 def build_product_market_intelligence_brief(

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from cios.db.repos.product_market import PgProductMarketRepository
 from cios.intelligence.runner import ProductMarketIntelligenceBrief, ProductMarketRunSummary
+from cios.intelligence.argus_packet_scenarios import build_argus_packet_scenario
 from cios.intelligence.types import (
     ConversationTheme,
     DemandSignal,
@@ -334,6 +335,7 @@ def test_get_pattern_history_reads_recent_pattern_observations_for_tenant_window
 
 def test_save_run_intelligence_summary_targets_product_market_run_intelligence() -> None:
     conn = _FakeConnection(row={"id": 456})
+    packet = build_argus_packet_scenario("missing_demand_day")
     summary = ProductMarketRunSummary(
         tenant_id=1,
         verdict="watch",
@@ -354,6 +356,7 @@ def test_save_run_intelligence_summary_targets_product_market_run_intelligence()
             confidence_limits=["Coverage learning gate was active."],
             next_questions=["Did Coveo publish a matching release?"],
         ),
+        argus_packet=packet,
     )
 
     saved_id = PgProductMarketRepository(conn).save_run_intelligence_summary(summary)
@@ -364,16 +367,35 @@ def test_save_run_intelligence_summary_targets_product_market_run_intelligence()
     assert conn.cursor_obj.params["verdict"] == "watch"
     assert conn.cursor_obj.params["product_event_count"] == 4
     assert conn.cursor_obj.params["intelligence_brief"].obj["top_insight"].startswith("Constructor moved")
+    assert conn.cursor_obj.params["argus_packet"].obj["packet_id"] == packet.packet_id
+    assert conn.cursor_obj.params["argus_packet"].obj["run"]["run_id"] == packet.run.run_id
     assert conn.cursor_obj.params["learning_instruction_improvement_ids"].obj == [202, 303]
 
 
 def test_get_latest_run_intelligence_reads_latest_brain_record() -> None:
-    conn = _FakeConnection(rows=[{"id": 8, "verdict": "actionable", "intelligence_brief": {"top_insight": "Ship now"}}])
+    conn = _FakeConnection(
+        rows=[
+            {
+                "id": 8,
+                "verdict": "actionable",
+                "intelligence_brief": {"top_insight": "Ship now"},
+                "argus_packet": {"packet_id": "packet-run-1", "run": {"run_id": "run-1"}},
+            }
+        ]
+    )
 
     rows = PgProductMarketRepository(conn).get_latest_run_intelligence(tenant_id=1, limit=1)
 
-    assert rows == [{"id": 8, "verdict": "actionable", "intelligence_brief": {"top_insight": "Ship now"}}]
+    assert rows == [
+        {
+            "id": 8,
+            "verdict": "actionable",
+            "intelligence_brief": {"top_insight": "Ship now"},
+            "argus_packet": {"packet_id": "packet-run-1", "run": {"run_id": "run-1"}},
+        }
+    ]
     assert "FROM product_market_run_intelligence" in conn.cursor_obj.sql
+    assert "argus_packet" in conn.cursor_obj.sql
     assert "ORDER BY created_at DESC, id DESC" in conn.cursor_obj.sql
     assert conn.cursor_obj.params == (1, 1)
 

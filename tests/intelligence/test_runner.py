@@ -323,6 +323,25 @@ def test_run_product_market_payload_executes_workflow_and_returns_counts() -> No
     assert summary.intelligence_brief.next_questions
 
 
+def test_run_product_market_payload_produces_canonical_argus_packet() -> None:
+    ledger = FakeProductMarketLedger()
+
+    summary = run_product_market_payload(_payload(), repository=ledger)
+
+    assert summary.argus_packet is not None
+    assert summary.argus_packet.schema_version == 1
+    assert summary.argus_packet.tenant.tenant_id == 1
+    assert summary.argus_packet.run.run_id.startswith("product-market-local-tenant-1-")
+    assert summary.argus_packet.run.package_commit == "local"
+    assert summary.argus_packet.status == "actionable"
+    assert summary.argus_packet.executive_read.headline == summary.intelligence_brief.top_insight
+    assert summary.argus_packet.recommendations[0].owner == "PMM"
+    assert summary.argus_packet.recommendations[0].proof_ref_ids
+    assert summary.argus_packet.consumer_state.dashboard is not None
+    assert summary.argus_packet.consumer_state.dashboard.run_id == summary.argus_packet.run.run_id
+    assert ledger.run_intelligence_summaries[0].argus_packet.packet_id == summary.argus_packet.packet_id
+
+
 def test_run_product_market_payload_embeds_argus_decision_read_for_business_action() -> None:
     ledger = FakeProductMarketLedger()
 

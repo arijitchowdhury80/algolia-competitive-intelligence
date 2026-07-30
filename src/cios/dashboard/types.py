@@ -463,6 +463,7 @@ class ProductMarketRunHistoryEntry(BaseModel):
     verdict: str
     top_insight: str
     intelligence_brief: dict[str, Any] = Field(default_factory=dict)
+    argus_packet: dict[str, Any] = Field(default_factory=dict)
     primary_action: Optional[str] = None
     watchlist: list[str] = Field(default_factory=list)
     evidence_urls: list[str] = Field(default_factory=list)

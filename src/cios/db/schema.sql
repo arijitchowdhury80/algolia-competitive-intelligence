@@ -821,6 +821,7 @@ CREATE TABLE product_market_run_intelligence (
     tenant_id                           bigint NOT NULL REFERENCES tenants(id),
     verdict                             text   NOT NULL CHECK (verdict IN ('actionable','watch','quiet')),
     intelligence_brief                  jsonb  NOT NULL DEFAULT '{}'::jsonb,
+    argus_packet                        jsonb  NOT NULL,
     product_event_count                 integer NOT NULL DEFAULT 0,
     conversation_theme_count            integer NOT NULL DEFAULT 0,
     demand_signal_count                 integer NOT NULL DEFAULT 0,
@@ -838,6 +839,14 @@ CREATE TABLE product_market_run_intelligence (
     ),
     CONSTRAINT product_market_run_intelligence_has_learning_ids CHECK (
         jsonb_typeof(learning_instruction_improvement_ids) = 'array'
+    ),
+    CONSTRAINT product_market_run_intelligence_has_packet CHECK (
+        jsonb_typeof(argus_packet) = 'object'
+        AND argus_packet ? 'packet_id'
+        AND argus_packet ? 'run'
+        AND argus_packet ? 'executive_read'
+        AND jsonb_typeof(argus_packet->'run') = 'object'
+        AND (argus_packet->'run') ? 'run_id'
     )
 );
 CREATE INDEX idx_product_market_run_intelligence_tenant_created

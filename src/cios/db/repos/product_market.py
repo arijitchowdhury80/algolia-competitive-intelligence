@@ -350,19 +350,22 @@ class PgProductMarketRepository:
         anchor. Stored JSON is sanitized at the persistence edge.
         """
 
+        if getattr(summary, "argus_packet", None) is None:
+            raise ValueError("Product-market run intelligence requires argus_packet")
         brief = summary.intelligence_brief.model_dump(mode="json")
+        packet = summary.argus_packet.model_dump(mode="json")
         with tenant_context(self._conn, int(summary.tenant_id)):
             with self._conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
                     INSERT INTO product_market_run_intelligence (
-                        tenant_id, verdict, intelligence_brief,
+                        tenant_id, verdict, intelligence_brief, argus_packet,
                         product_event_count, conversation_theme_count,
                         demand_signal_count, feature_position_count,
                         pattern_count, recommendation_count,
                         learning_instruction_count, learning_instruction_improvement_ids
                     ) VALUES (
-                        %(tenant_id)s, %(verdict)s, %(intelligence_brief)s,
+                        %(tenant_id)s, %(verdict)s, %(intelligence_brief)s, %(argus_packet)s,
                         %(product_event_count)s, %(conversation_theme_count)s,
                         %(demand_signal_count)s, %(feature_position_count)s,
                         %(pattern_count)s, %(recommendation_count)s,
@@ -374,6 +377,7 @@ class PgProductMarketRepository:
                         "tenant_id": int(summary.tenant_id),
                         "verdict": _postgres_safe(summary.verdict),
                         "intelligence_brief": Json(_postgres_safe(brief)),
+                        "argus_packet": Json(_postgres_safe(packet)),
                         "product_event_count": int(summary.product_event_count),
                         "conversation_theme_count": int(summary.conversation_theme_count),
                         "demand_signal_count": int(summary.demand_signal_count),
@@ -395,7 +399,7 @@ class PgProductMarketRepository:
             with self._conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     """
-                    SELECT id, verdict, intelligence_brief,
+                    SELECT id, verdict, intelligence_brief, argus_packet,
                            product_event_count, conversation_theme_count,
                            demand_signal_count, feature_position_count,
                            pattern_count, recommendation_count,

@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS product_market_run_intelligence (
     tenant_id                           bigint NOT NULL REFERENCES tenants(id),
     verdict                             text   NOT NULL CHECK (verdict IN ('actionable','watch','quiet')),
     intelligence_brief                  jsonb  NOT NULL DEFAULT '{}'::jsonb,
+    argus_packet                        jsonb  NOT NULL,
     product_event_count                 integer NOT NULL DEFAULT 0,
     conversation_theme_count            integer NOT NULL DEFAULT 0,
     demand_signal_count                 integer NOT NULL DEFAULT 0,
@@ -206,10 +207,34 @@ CREATE TABLE IF NOT EXISTS product_market_run_intelligence (
     ),
     CONSTRAINT product_market_run_intelligence_has_learning_ids CHECK (
         jsonb_typeof(learning_instruction_improvement_ids) = 'array'
+    ),
+    CONSTRAINT product_market_run_intelligence_has_packet CHECK (
+        jsonb_typeof(argus_packet) = 'object'
+        AND argus_packet ? 'packet_id'
+        AND argus_packet ? 'run'
+        AND argus_packet ? 'executive_read'
+        AND jsonb_typeof(argus_packet->'run') = 'object'
+        AND (argus_packet->'run') ? 'run_id'
     )
 );
 CREATE INDEX IF NOT EXISTS idx_product_market_run_intelligence_tenant_created
     ON product_market_run_intelligence (tenant_id, created_at DESC, id DESC);
+
+ALTER TABLE product_market_run_intelligence
+    ADD COLUMN IF NOT EXISTS argus_packet jsonb;
+UPDATE product_market_run_intelligence
+SET argus_packet = jsonb_build_object(
+    'schema_version', 1,
+    'packet_id', 'legacy-product-market-run-' || id::text,
+    'run', jsonb_build_object('run_id', 'legacy-product-market-run-' || id::text),
+    'executive_read', jsonb_build_object(
+        'headline', COALESCE(intelligence_brief->>'top_insight', 'Legacy run intelligence'),
+        'plain_read', COALESCE(intelligence_brief->>'top_insight', 'Legacy run intelligence')
+    )
+)
+WHERE argus_packet IS NULL;
+ALTER TABLE product_market_run_intelligence
+    ALTER COLUMN argus_packet SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS run_stage_ledgers (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
