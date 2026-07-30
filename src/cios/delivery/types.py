@@ -99,6 +99,8 @@ class ReportReadyEvent(BaseModel):
     html_path: Optional[str] = None
     markdown_body: Optional[str] = None
     dashboard_url: Optional[str] = None
+    packet_id: Optional[str] = None
+    run_id: Optional[str] = None
     is_material_alert: bool = False
     confidence: Optional[float] = None
 
@@ -162,6 +164,8 @@ class BotDeliveryRecord(BaseModel):
     html_path: Optional[str] = None
     dashboard_url: Optional[str] = None
     report_id: Optional[int] = None
+    packet_id: Optional[str] = None
+    run_id: Optional[str] = None
     error: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -1111,10 +1111,13 @@ CREATE TABLE bot_deliveries (
     html_path         text,
     dashboard_url     text,
     report_id         bigint REFERENCES reports(id),
+    packet_id         text,
+    run_id            text,
     error             text,
     created_at        timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_bot_deliveries_tenant ON bot_deliveries (tenant_id, created_at DESC);
+CREATE INDEX idx_bot_deliveries_tenant_packet ON bot_deliveries (tenant_id, run_id, packet_id);
 
 -- Dashboard state: the semantic snapshot the cockpit renders from (not scraped prose).
 CREATE TABLE dashboard_state (

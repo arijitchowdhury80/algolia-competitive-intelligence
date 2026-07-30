@@ -19,7 +19,7 @@ from cios.platform.channels.types import Channel
 
 _BOT_DELIVERY_COLUMNS = (
     "id, tenant_id, cadence, bot_profile, channel, recipient_redacted, status, "
-    "markdown_path, html_path, dashboard_url, report_id, error, created_at"
+    "markdown_path, html_path, dashboard_url, report_id, packet_id, run_id, error, created_at"
 )
 _DELIVERY_ATTEMPT_COLUMNS = (
     "id, tenant_id, user_id, channel, status, delivery_ref, error, created_at"
@@ -39,6 +39,8 @@ def _row_to_bot_delivery(row: dict[str, Any]) -> BotDeliveryRecord:
         html_path=row["html_path"],
         dashboard_url=row["dashboard_url"],
         report_id=row["report_id"],
+        packet_id=row["packet_id"],
+        run_id=row["run_id"],
         error=row["error"],
         created_at=row["created_at"],
     )
@@ -76,10 +78,11 @@ class PgBotDeliveryRepository:
                         f"""
                         INSERT INTO bot_deliveries (
                             tenant_id, cadence, bot_profile, channel, recipient_redacted,
-                            status, markdown_path, html_path, dashboard_url, report_id, error, created_at
+                            status, markdown_path, html_path, dashboard_url, report_id, packet_id, run_id,
+                            error, created_at
                         ) VALUES (%(tenant_id)s, %(cadence)s, %(bot_profile)s, %(channel)s, %(recipient_redacted)s,
                                   %(status)s, %(markdown_path)s, %(html_path)s, %(dashboard_url)s, %(report_id)s,
-                                  %(error)s, %(created_at)s)
+                                  %(packet_id)s, %(run_id)s, %(error)s, %(created_at)s)
                         RETURNING {_BOT_DELIVERY_COLUMNS}
                         """,
                         _bot_delivery_params(record),
@@ -92,7 +95,9 @@ class PgBotDeliveryRepository:
                             error = %(error)s,
                             markdown_path = %(markdown_path)s,
                             html_path = %(html_path)s,
-                            dashboard_url = %(dashboard_url)s
+                            dashboard_url = %(dashboard_url)s,
+                            packet_id = %(packet_id)s,
+                            run_id = %(run_id)s
                         WHERE id = %(id)s AND tenant_id = %(tenant_id)s
                         RETURNING {_BOT_DELIVERY_COLUMNS}
                         """,
@@ -115,6 +120,8 @@ def _bot_delivery_params(record: BotDeliveryRecord) -> dict[str, Any]:
         "html_path": record.html_path,
         "dashboard_url": record.dashboard_url,
         "report_id": record.report_id,
+        "packet_id": record.packet_id,
+        "run_id": record.run_id,
         "error": record.error,
         "created_at": record.created_at,
     }

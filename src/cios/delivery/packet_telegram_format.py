@@ -10,15 +10,27 @@ from .telegram_format import render_brief_html
 def render_daily_packet_brief_html(packet: ArgusIntelligencePacket, *, dashboard_url: str | None = None) -> str:
     """Render the daily mobile command brief from the canonical packet."""
 
-    body = _failure_body(packet) if packet.status in {"failed", "blocked"} else _daily_body(packet)
+    body = render_daily_packet_brief_markdown(packet)
     return render_brief_html(packet.executive_read.headline, body, dashboard_url=dashboard_url)
 
 
 def render_weekly_packet_brief_html(packet: ArgusIntelligencePacket, *, dashboard_url: str | None = None) -> str:
     """Render a weekly pattern brief from the canonical packet."""
 
-    body = _failure_body(packet) if packet.status in {"failed", "blocked"} else _weekly_body(packet)
+    body = render_weekly_packet_brief_markdown(packet)
     return render_brief_html(f"Argus weekly pattern brief - {packet.tenant.display_name}", body, dashboard_url=dashboard_url)
+
+
+def render_daily_packet_brief_markdown(packet: ArgusIntelligencePacket) -> str:
+    """Render the daily mobile command brief body from the canonical packet."""
+
+    return _failure_body(packet) if packet.status in {"failed", "blocked"} else _daily_body(packet)
+
+
+def render_weekly_packet_brief_markdown(packet: ArgusIntelligencePacket) -> str:
+    """Render the weekly pattern brief body from the canonical packet."""
+
+    return _failure_body(packet) if packet.status in {"failed", "blocked"} else _weekly_body(packet)
 
 
 def _daily_body(packet: ArgusIntelligencePacket) -> str:
@@ -97,4 +109,9 @@ def _plane_lines(packet: ArgusIntelligencePacket) -> list[str]:
     return lines
 
 
-__all__ = ["render_daily_packet_brief_html", "render_weekly_packet_brief_html"]
+__all__ = [
+    "render_daily_packet_brief_html",
+    "render_weekly_packet_brief_html",
+    "render_daily_packet_brief_markdown",
+    "render_weekly_packet_brief_markdown",
+]

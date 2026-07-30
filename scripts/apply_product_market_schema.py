@@ -236,6 +236,12 @@ WHERE argus_packet IS NULL;
 ALTER TABLE product_market_run_intelligence
     ALTER COLUMN argus_packet SET NOT NULL;
 
+ALTER TABLE bot_deliveries
+    ADD COLUMN IF NOT EXISTS packet_id text,
+    ADD COLUMN IF NOT EXISTS run_id text;
+CREATE INDEX IF NOT EXISTS idx_bot_deliveries_tenant_packet
+    ON bot_deliveries (tenant_id, run_id, packet_id);
+
 CREATE TABLE IF NOT EXISTS run_stage_ledgers (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     tenant_id    bigint NOT NULL REFERENCES tenants(id),

@@ -134,6 +134,8 @@ class DeliveryCommander:
             html_path=report.html_path,
             dashboard_url=report.dashboard_url,
             report_id=report.report_id,
+            packet_id=report.packet_id,
+            run_id=report.run_id,
         )
         bot_delivery = self._bot_deliveries.save(bot_delivery)
 
