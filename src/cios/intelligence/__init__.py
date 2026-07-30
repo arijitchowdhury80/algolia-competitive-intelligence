@@ -36,6 +36,11 @@ from .runner import (
     run_product_market_payload,
 )
 from .argus_packet import ArgusIntelligencePacket, build_argus_packet_from_components
+from .argus_packet_scenarios import (
+    build_all_argus_packet_scenarios,
+    build_argus_packet_scenario,
+    list_argus_packet_scenarios,
+)
 from .types import (
     ConversationTheme,
     DemandSignal,
@@ -81,6 +86,9 @@ __all__ = [
     "build_product_feature_comparison_read",
     "build_product_market_intelligence_brief",
     "build_argus_packet_from_components",
+    "build_all_argus_packet_scenarios",
+    "build_argus_packet_scenario",
+    "list_argus_packet_scenarios",
     "load_export_records",
     "load_product_market_payload",
     "run_product_market_payload",
