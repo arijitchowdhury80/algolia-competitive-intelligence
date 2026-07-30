@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1319,6 +1320,7 @@ def _build_argus_packet_for_product_market_summary(
         + summary.conversation_theme_count
         + summary.demand_signal_count
     )
+    package_commit = _packet_package_commit()
     return build_argus_packet_from_components(
         tenant={
             "tenant_id": summary.tenant_id,
@@ -1331,7 +1333,7 @@ def _build_argus_packet_for_product_market_summary(
             "started_at": generated_at,
             "completed_at": generated_at,
             "hermes_profile": "argus",
-            "package_commit": "local",
+            "package_commit": package_commit,
             "package_release_id": f"local-{run_stamp}",
             "produced_by_user": "cios",
             "source": "local_test",
@@ -1364,6 +1366,23 @@ def _tenant_slug(name: str) -> str:
     while "--" in slug:
         slug = slug.replace("--", "-")
     return slug or "tenant"
+
+
+def _packet_package_commit() -> str:
+    for env_name in ("CIOS_PACKAGE_COMMIT", "CIOS_RELEASE_COMMIT"):
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            return value
+    package_root = Path(__file__).resolve().parents[3]
+    for marker_name in (".cios-release-commit", ".cios-package-commit"):
+        marker = package_root / marker_name
+        try:
+            value = marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return "local"
 
 
 def _packet_consumer_state(*, run_id: str) -> dict[str, dict[str, Any]]:

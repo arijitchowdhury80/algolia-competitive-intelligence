@@ -361,6 +361,16 @@ def test_argus_packet_run_identity_uses_execution_time_not_evidence_time(monkeyp
     assert summary.argus_packet.time_window.end_at == NOW
 
 
+def test_argus_packet_uses_package_commit_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("CIOS_PACKAGE_COMMIT", "abc123release")
+    ledger = FakeProductMarketLedger()
+
+    summary = run_product_market_payload(_payload(), repository=ledger)
+
+    assert summary.argus_packet.run.package_commit == "abc123release"
+    assert summary.argus_packet.run.package_release_id.startswith("local-")
+
+
 def test_run_product_market_payload_embeds_argus_decision_read_for_business_action() -> None:
     ledger = FakeProductMarketLedger()
 
