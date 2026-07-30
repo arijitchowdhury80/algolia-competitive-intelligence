@@ -12,9 +12,12 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import psycopg
 from psycopg.rows import dict_row

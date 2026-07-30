@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -51,3 +53,18 @@ def test_build_forced_weekly_request_does_not_require_calendar_sunday(tmp_path) 
     assert request.report.run_id == packet.run.run_id
     assert request.report.cadence == Cadence.WEEKLY
     assert "Weekly window:" in request.report.markdown_body
+
+
+def test_script_help_loads_without_external_pythonpath() -> None:
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+
+    completed = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH), "--help"],
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Force-send an Argus packet to Telegram" in completed.stdout
