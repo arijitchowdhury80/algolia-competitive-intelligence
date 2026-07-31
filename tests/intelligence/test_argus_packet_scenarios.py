@@ -164,5 +164,11 @@ def test_existing_consumers_can_render_every_scenario_without_story_drift() -> N
         assert latest["packet_id"] == packet.packet_id
         assert latest["run_id"] == packet.run.run_id
         assert latest["status"] == packet.status
-        assert packet.executive_read.plain_read in daily_text
-        assert packet.executive_read.plain_read in weekly_text
+        if packet.status in {"watch", "degraded", "stale"} and not packet.recommendations:
+            assert "Argus read:" in daily_text
+        else:
+            assert packet.executive_read.plain_read in daily_text
+        if packet.cadence == "weekly" and packet.time_window.grain == "weekly":
+            assert packet.executive_read.plain_read in weekly_text
+        else:
+            assert "Weekly synthesis unavailable" in weekly_text

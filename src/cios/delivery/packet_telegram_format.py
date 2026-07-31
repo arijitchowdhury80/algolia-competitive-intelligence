@@ -11,14 +11,14 @@ def render_daily_packet_brief_html(packet: ArgusIntelligencePacket, *, dashboard
     """Render the daily mobile command brief from the canonical packet."""
 
     body = render_daily_packet_brief_markdown(packet)
-    return render_brief_html(packet.executive_read.headline, body, dashboard_url=dashboard_url)
+    return render_brief_html(daily_packet_brief_title(packet), body, dashboard_url=dashboard_url)
 
 
 def render_weekly_packet_brief_html(packet: ArgusIntelligencePacket, *, dashboard_url: str | None = None) -> str:
     """Render a weekly pattern brief from the canonical packet."""
 
     body = render_weekly_packet_brief_markdown(packet)
-    return render_brief_html(f"Argus weekly pattern brief - {packet.tenant.display_name}", body, dashboard_url=dashboard_url)
+    return render_brief_html(weekly_packet_brief_title(packet), body, dashboard_url=dashboard_url)
 
 
 def render_daily_packet_brief_markdown(packet: ArgusIntelligencePacket) -> str:
@@ -34,6 +34,9 @@ def render_weekly_packet_brief_markdown(packet: ArgusIntelligencePacket) -> str:
 
 
 def _daily_body(packet: ArgusIntelligencePacket) -> str:
+    if packet.status in {"watch", "degraded", "stale"} and not packet.recommendations:
+        return _watch_body(packet)
+
     lines = [
         f"Status: {packet.status}",
         f"Run: {packet.run.run_id}",
@@ -70,15 +73,19 @@ def _daily_body(packet: ArgusIntelligencePacket) -> str:
 
 
 def _weekly_body(packet: ArgusIntelligencePacket) -> str:
+    if packet.cadence != "weekly" or packet.time_window.grain != "weekly":
+        return _weekly_unavailable_body(packet)
+
     lines = [
         f"Weekly window: {packet.time_window.start_at.date()} to {packet.time_window.end_at.date()}",
         f"Run: {packet.run.run_id}",
         "",
         packet.executive_read.plain_read,
     ]
-    if packet.market_movements:
+    movements = _unique_movements(packet)
+    if movements:
         lines.extend(["", "Weekly pattern:"])
-        for movement in packet.market_movements[:3]:
+        for movement in movements[:3]:
             lines.append(f"- {movement.summary}")
     if packet.recommendations:
         recommendation = packet.recommendations[0]
@@ -100,6 +107,130 @@ def _failure_body(packet: ArgusIntelligencePacket) -> str:
     return "\n".join(lines)
 
 
+def _watch_body(packet: ArgusIntelligencePacket) -> str:
+    movement = _unique_movements(packet)[0] if _unique_movements(packet) else None
+    blocked = packet.blocked_actions[0] if packet.blocked_actions else None
+    next_action = packet.next_monitoring_actions[0] if packet.next_monitoring_actions else None
+    next_check = _next_check_text(packet, blocked, next_action)
+
+    lines = [
+        "Argus read: Watch, no owner action",
+        f"Run: {packet.run.run_id}",
+        f"Window: {packet.time_window.label}",
+    ]
+    if movement is not None:
+        lines.extend(["", f"Market movement: {movement.label}", movement.summary])
+    else:
+        lines.extend(["", packet.executive_read.plain_read])
+
+    lines.extend(
+        [
+            "",
+            (
+                "Why it matters: Product and market-conversation proof exist, but no tenant-side demand "
+                "evidence was captured, so Argus is watching instead of promoting an owner action."
+            ),
+        ]
+    )
+    if next_check:
+        lines.extend(["", f"Next check: {next_check}"])
+    lines.extend(_plane_status_line(packet))
+    return "\n".join(lines)
+
+
+def _weekly_unavailable_body(packet: ArgusIntelligencePacket) -> str:
+    lines = [
+        "Weekly synthesis unavailable",
+        f"This is a {packet.cadence} packet, not a weekly synthesis packet.",
+        f"Run: {packet.run.run_id}",
+    ]
+    if packet.next_monitoring_actions:
+        lines.extend(["", f"Next check: {packet.next_monitoring_actions[0].summary}"])
+    else:
+        lines.extend(["", "Next check: Build the weekly packet from multi-day movement memory before sending a weekly read."])
+    return "\n".join(lines)
+
+
+def daily_packet_brief_title(packet: ArgusIntelligencePacket) -> str:
+    if packet.status in {"watch", "degraded", "stale"} and not packet.recommendations:
+        return f"Argus read: watch, no owner action - {packet.tenant.display_name}"
+    return packet.executive_read.headline
+
+
+def weekly_packet_brief_title(packet: ArgusIntelligencePacket) -> str:
+    if packet.cadence != "weekly" or packet.time_window.grain != "weekly":
+        return f"Argus weekly synthesis unavailable - {packet.tenant.display_name}"
+    return f"Argus weekly pattern brief - {packet.tenant.display_name}"
+
+
+def _unique_movements(packet: ArgusIntelligencePacket):
+    seen: set[tuple[str, str]] = set()
+    out = []
+    for movement in packet.market_movements:
+        key = (movement.label.strip().lower(), movement.summary.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(movement)
+    return out
+
+
+def _next_check_text(packet: ArgusIntelligencePacket, blocked, next_action) -> str:
+    movement = _unique_movements(packet)[0] if _unique_movements(packet) else None
+    if movement is not None and _demand_evidence_blocks_action(packet, blocked):
+        return f"Collect GA / Looker demand evidence for {movement.label} before promoting it into a recommendation."
+
+    candidates = []
+    if next_action is not None:
+        candidates.append(getattr(next_action, "summary", ""))
+        candidates.extend(getattr(next_action, "evidence_needed", []) or [])
+    if blocked is not None:
+        candidates.extend(getattr(blocked, "needed_evidence", []) or [])
+
+    for candidate in candidates:
+        text = str(candidate).strip()
+        if not text:
+            continue
+        if _looks_like_blocker_explanation(text):
+            continue
+        return text
+
+    subject = movement.label if movement is not None else "the selected movement"
+    return f"Collect fresh Audience Demand evidence for {subject}."
+
+
+def _demand_evidence_blocks_action(packet: ArgusIntelligencePacket, blocked) -> bool:
+    blocker_text = str(getattr(blocked, "blocked_reason", "") if blocked else "").lower()
+    if "tenant-side demand" in blocker_text or "audience demand" in blocker_text:
+        return True
+    return any(
+        plane.plane == "audience_demand" and plane.status in {"missing", "partial", "stale", "failed"}
+        for plane in packet.evidence_planes
+    )
+
+
+def _looks_like_blocker_explanation(text: str) -> bool:
+    lowered = text.lower()
+    return (
+        "no tenant-side demand evidence" in lowered
+        or "cannot promote" in lowered
+        or "could not become" in lowered
+        or "withheld" in lowered
+    )
+
+
+def _plane_status_line(packet: ArgusIntelligencePacket) -> list[str]:
+    if not packet.evidence_planes:
+        return []
+    parts: list[str] = []
+    for plane in packet.evidence_planes[:3]:
+        label = plane.plane.replace("_", " ").title()
+        count = plane.evidence_count or plane.signal_count
+        count_suffix = f" ({count})" if count else ""
+        parts.append(f"{label} {plane.status}{count_suffix}")
+    return ["", f"Proof: {'; '.join(parts)}"] if parts else []
+
+
 def _plane_lines(packet: ArgusIntelligencePacket) -> list[str]:
     if not packet.evidence_planes:
         return []
@@ -110,8 +241,10 @@ def _plane_lines(packet: ArgusIntelligencePacket) -> list[str]:
 
 
 __all__ = [
+    "daily_packet_brief_title",
     "render_daily_packet_brief_html",
     "render_weekly_packet_brief_html",
     "render_daily_packet_brief_markdown",
     "render_weekly_packet_brief_markdown",
+    "weekly_packet_brief_title",
 ]

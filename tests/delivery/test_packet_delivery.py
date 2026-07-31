@@ -95,6 +95,24 @@ def test_weekly_packet_delivery_request_uses_weekly_pattern_body() -> None:
     assert "today's competitive brief" not in request.report.markdown_body.lower()
 
 
+def test_watch_packet_delivery_request_uses_operator_title_not_raw_packet_sentence() -> None:
+    from cios.delivery.packet_delivery import build_packet_delivery_request
+
+    packet = build_argus_packet_scenario("missing_demand_day")
+
+    request = build_packet_delivery_request(
+        packet,
+        cadence=Cadence.DAILY,
+        telegram_chat_id="123456789",
+        dashboard_url="https://ci.chowmes.com/",
+        report_id=80,
+    )
+
+    assert request.report.title == "Argus read: watch, no owner action - Algolia"
+    assert request.report.title != packet.executive_read.headline
+    assert "Argus read: Watch, no owner action" in request.report.markdown_body
+
+
 @pytest.mark.asyncio
 async def test_delivering_packet_brief_records_true_sent_status_with_packet_identity() -> None:
     from cios.delivery.packet_delivery import build_packet_delivery_request

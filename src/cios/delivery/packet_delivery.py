@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from cios.delivery.packet_telegram_format import (
+    daily_packet_brief_title,
     render_daily_packet_brief_markdown,
     render_weekly_packet_brief_markdown,
+    weekly_packet_brief_title,
 )
 from cios.delivery.types import Cadence, DeliveryRequest, RecipientTarget, ReportReadyEvent, RoutingPlan
 from cios.intelligence.argus_packet import ArgusIntelligencePacket
@@ -22,10 +24,10 @@ def build_packet_delivery_request(
     """Build a Telegram delivery request that preserves packet/run identity."""
 
     if cadence == Cadence.DAILY:
-        title = packet.executive_read.headline
+        title = daily_packet_brief_title(packet)
         markdown_body = render_daily_packet_brief_markdown(packet)
     elif cadence == Cadence.WEEKLY:
-        title = f"Argus weekly pattern brief - {packet.tenant.display_name}"
+        title = weekly_packet_brief_title(packet)
         markdown_body = render_weekly_packet_brief_markdown(packet)
     else:
         raise ValueError("packet delivery supports daily and weekly cadences only")

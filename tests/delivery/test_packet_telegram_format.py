@@ -205,6 +205,84 @@ def test_weekly_telegram_brief_uses_weekly_pattern_not_daily_recap() -> None:
     assert "today's brief" not in text.lower()
 
 
+def test_weekly_telegram_brief_does_not_masquerade_daily_packet_as_synthesis() -> None:
+    renderer = _telegram_module()
+    packet = _packet()
+
+    text = renderer.render_weekly_packet_brief_markdown(packet)
+
+    assert "Weekly synthesis unavailable" in text
+    assert "daily packet" in text
+    assert "Weekly pattern:" not in text
+
+
+def test_watch_packet_telegram_brief_compresses_repeated_packet_text() -> None:
+    watch_payload = _packet_payload(status="watch", recommendations=[])
+    repeated_read = (
+        "Luigi's Box, Nosto has product proof and public positioning around Support, "
+        "but Argus has no tenant-side demand evidence in this run; watch the movement, "
+        "do not promote action yet."
+    )
+    watch_payload["executive_read"] = {
+        **deepcopy(watch_payload["executive_read"]),
+        "headline": repeated_read,
+        "plain_read": repeated_read,
+        "why_it_matters_to_algolia": (
+            f"Watch Luigi's Box and Nosto because {repeated_read} "
+            "Argus withheld owner action until tenant-side demand evidence is present."
+        ),
+        "decision_posture": "watch",
+        "primary_recommendation_id": None,
+    }
+    watch_payload["market_movements"] = [
+        {
+            **deepcopy(watch_payload["market_movements"][0]),
+            "label": "Shopping Assistant",
+            "summary": "Shopping Assistant is heating up across Luigi's Box, Constructor, and Bloomreach.",
+        },
+        {
+            **deepcopy(watch_payload["market_movements"][0]),
+            "movement_id": "movement-shopping-assistant-duplicate",
+            "label": "Shopping Assistant",
+            "summary": "Shopping Assistant is heating up across Luigi's Box, Constructor, and Bloomreach.",
+        },
+    ]
+    watch_payload["blocked_actions"] = [
+        {
+            "blocked_action_id": "blocked-action-1",
+            "owner": "Operator",
+            "proposed_action": "Promote the current Argus read.",
+            "blocked_reason": "No tenant-side demand evidence was captured, so Argus cannot promote owner action.",
+            "needed_evidence": [
+                "No tenant-side demand evidence was captured, so product proof could not become a product-market pattern."
+            ],
+            "next_monitoring_action_ref_ids": [],
+            "movement_ref_ids": ["movement-agent-studio"],
+        }
+    ]
+    watch_payload["next_monitoring_actions"] = [
+        {
+            "action_id": "collect-demand",
+            "summary": "Collect GA / Looker demand evidence for Shopping Assistant.",
+            "owner": "Argus",
+            "evidence_needed": ["fresh Audience Demand evidence for Shopping Assistant"],
+        }
+    ]
+    contract = _contract_module()
+    packet = contract.ArgusIntelligencePacket.model_validate(watch_payload)
+
+    renderer = _telegram_module()
+    text = renderer.render_daily_packet_brief_markdown(packet)
+
+    assert "Argus read: Watch, no owner action" in text
+    assert "Market movement: Shopping Assistant" in text
+    assert text.count("Shopping Assistant is heating up across Luigi's Box, Constructor, and Bloomreach.") == 1
+    assert text.lower().count("no tenant-side demand evidence") == 1
+    assert "Next check: Collect GA / Looker demand evidence for Shopping Assistant before promoting it into a recommendation." in text
+    assert "Status:" not in text
+    assert "Blocked action: Promote the current Argus read." not in text
+
+
 def test_failed_packet_renders_failure_not_fake_intelligence() -> None:
     failed_payload = _packet_payload(status="failed")
     failed_payload["recommendations"] = []

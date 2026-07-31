@@ -448,25 +448,42 @@ def _movement_velocity(heat_level: str) -> str:
 
 def _market_movements_from_movement_map(movement_map: dict[str, Any], *, time_window: dict[str, Any]) -> list[MarketMovement]:
     movements: list[MarketMovement] = []
-    for cell in movement_map.get("heat_cells") or []:
-        capability = str(cell.get("capability") or "Market movement")
+    cells_by_capability: dict[str, list[dict[str, Any]]] = {}
+    for raw_cell in movement_map.get("heat_cells") or []:
+        if not isinstance(raw_cell, dict):
+            continue
+        capability = str(raw_cell.get("capability") or "Market movement").strip() or "Market movement"
+        cells_by_capability.setdefault(capability, []).append(raw_cell)
+
+    for capability, cells in cells_by_capability.items():
         movement_id = _safe_id("movement", capability)
-        proof_ids = [_safe_id("proof", str(url)) for url in cell.get("evidence_urls") or []]
+        proof_urls = _dedupe_text(
+            str(url)
+            for cell in cells
+            for url in cell.get("evidence_urls") or []
+        )
+        heat_level = _top_heat_level(cells)
         movements.append(
             MarketMovement(
                 movement_id=movement_id,
                 label=capability,
-                summary=movement_map.get("direction_summary") or f"{capability} is the selected market movement.",
+                summary=_movement_summary(movement_map, capability),
                 movement_type="mixed",
-                direction=_movement_direction(str(cell.get("heat_level") or "")),
-                velocity=_movement_velocity(str(cell.get("heat_level") or "")),
-                materiality="high" if cell.get("heat_level") == "hot" else "medium",
+                direction=_movement_direction(heat_level),
+                velocity=_movement_velocity(heat_level),
+                materiality="high" if heat_level == "hot" else "medium",
                 time_window=str(time_window.get("label") or "today"),
-                entities=[str(cell.get("company_name"))] if cell.get("company_name") else [],
+                entities=sorted(
+                    _dedupe_text(
+                        str(cell.get("company_name") or "")
+                        for cell in cells
+                        if cell.get("company_name")
+                    )
+                ),
                 capabilities=[capability],
                 themes=[capability],
                 evidence_plane_refs=[],
-                proof_ref_ids=proof_ids,
+                proof_ref_ids=[_safe_id("proof", url) for url in proof_urls],
                 recommendation_ref_ids=[],
                 field_graph_ref_id=_safe_id("field", capability),
             )
@@ -514,11 +531,49 @@ def _blocked_actions_from_decision_read(decision_read: dict[str, Any], *, moveme
                 owner="Operator",
                 proposed_action="Promote the current Argus read.",
                 blocked_reason=str(reason),
-                needed_evidence=[str(reason)],
+                needed_evidence=_needed_evidence_from_blocker(str(reason)),
                 movement_ref_ids=movement_ref_ids,
             )
         )
     return blocked
+
+
+def _movement_summary(movement_map: dict[str, Any], capability: str) -> str:
+    summary = str(movement_map.get("direction_summary") or "").strip()
+    if summary and capability.lower() in summary.lower():
+        return summary
+    return f"{capability} is the selected market movement."
+
+
+def _top_heat_level(cells: list[dict[str, Any]]) -> str:
+    ranked = sorted(
+        (str(cell.get("heat_level") or "") for cell in cells),
+        key=lambda level: {"hot": 3, "warm": 2, "watch": 1, "cool": 0}.get(level, 0),
+        reverse=True,
+    )
+    return ranked[0] if ranked else "unknown"
+
+
+def _dedupe_text(values: Any) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in values:
+        text = str(raw).strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
+
+
+def _needed_evidence_from_blocker(reason: str) -> list[str]:
+    lowered = reason.lower()
+    if "tenant-side demand" in lowered or "rising demand" in lowered:
+        return ["Fresh Audience Demand evidence for the selected movement."]
+    if "learning" in lowered or "gate" in lowered:
+        return ["Learning-gate evidence showing the read is safe to promote."]
+    return ["Additional source evidence that resolves this blocker."]
 
 
 def _evidence_planes_from_decision_read(decision_read: dict[str, Any]) -> list[EvidencePlane]:

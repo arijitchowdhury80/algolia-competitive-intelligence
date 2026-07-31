@@ -209,6 +209,54 @@ def test_movement_map_maps_heat_cells_into_market_movements() -> None:
     assert packet.market_movements[0].field_graph_ref_id
 
 
+def test_movement_map_collapses_duplicate_capability_cells_into_one_movement() -> None:
+    components = _base_components()
+    components["movement_map"]["direction_summary"] = (
+        "Shopping Assistant is heating up across Luigi's Box, Constructor, and Bloomreach."
+    )
+    components["movement_map"]["heat_cells"] = [
+        {
+            "company_name": "Luigi's Box",
+            "capability": "Shopping Assistant",
+            "heat_level": "hot",
+            "signal_count": 2,
+            "recent_count": 2,
+            "prior_count": 0,
+            "confidence": 0.72,
+            "evidence_urls": ["https://example.com/luigis-box-shopping-assistant"],
+        },
+        {
+            "company_name": "Constructor",
+            "capability": "Shopping Assistant",
+            "heat_level": "hot",
+            "signal_count": 1,
+            "recent_count": 1,
+            "prior_count": 0,
+            "confidence": 0.68,
+            "evidence_urls": ["https://example.com/constructor-shopping-assistant"],
+        },
+        {
+            "company_name": "Bloomreach",
+            "capability": "Shopping Assistant",
+            "heat_level": "hot",
+            "signal_count": 1,
+            "recent_count": 1,
+            "prior_count": 0,
+            "confidence": 0.67,
+            "evidence_urls": ["https://example.com/bloomreach-shopping-assistant"],
+        },
+    ]
+
+    packet = _build_packet(movement_map=components["movement_map"])
+
+    shopping_movements = [
+        movement for movement in packet.market_movements if movement.label == "Shopping Assistant"
+    ]
+    assert len(shopping_movements) == 1
+    assert shopping_movements[0].entities == ["Bloomreach", "Constructor", "Luigi's Box"]
+    assert len(shopping_movements[0].proof_ref_ids) == 3
+
+
 def test_recommendation_rows_map_to_packet_recommendations() -> None:
     packet = _build_packet()
 
