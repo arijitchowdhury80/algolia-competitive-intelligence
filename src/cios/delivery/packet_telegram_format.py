@@ -139,13 +139,16 @@ def _watch_body(packet: ArgusIntelligencePacket) -> str:
 
 
 def _weekly_unavailable_body(packet: ArgusIntelligencePacket) -> str:
+    blocked = packet.blocked_actions[0] if packet.blocked_actions else None
+    next_action = packet.next_monitoring_actions[0] if packet.next_monitoring_actions else None
+    next_check = _next_check_text(packet, blocked, next_action)
     lines = [
         "Weekly synthesis unavailable",
         f"This is a {packet.cadence} packet, not a weekly synthesis packet.",
         f"Run: {packet.run.run_id}",
     ]
-    if packet.next_monitoring_actions:
-        lines.extend(["", f"Next check: {packet.next_monitoring_actions[0].summary}"])
+    if next_check:
+        lines.extend(["", f"Next check: {next_check}"])
     else:
         lines.extend(["", "Next check: Build the weekly packet from multi-day movement memory before sending a weekly read."])
     return "\n".join(lines)

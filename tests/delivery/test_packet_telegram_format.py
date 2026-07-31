@@ -207,12 +207,42 @@ def test_weekly_telegram_brief_uses_weekly_pattern_not_daily_recap() -> None:
 
 def test_weekly_telegram_brief_does_not_masquerade_daily_packet_as_synthesis() -> None:
     renderer = _telegram_module()
-    packet = _packet()
+    daily_payload = _packet_payload(status="watch", recommendations=[])
+    daily_payload["executive_read"] = {
+        **deepcopy(daily_payload["executive_read"]),
+        "decision_posture": "watch",
+        "primary_recommendation_id": None,
+    }
+    daily_payload["market_movements"][0]["label"] = "Shopping Assistant"
+    daily_payload["market_movements"][0]["summary"] = "Shopping Assistant is heating up across Luigi's Box."
+    daily_payload["blocked_actions"] = [
+        {
+            "blocked_action_id": "blocked-action-1",
+            "owner": "Operator",
+            "proposed_action": "Promote the current Argus read.",
+            "blocked_reason": "No tenant-side demand evidence was captured.",
+            "needed_evidence": ["No tenant-side demand evidence was captured."],
+            "next_monitoring_action_ref_ids": [],
+            "movement_ref_ids": ["movement-agent-studio"],
+        }
+    ]
+    daily_payload["next_monitoring_actions"] = [
+        {
+            "action_id": "collect-demand",
+            "summary": "Collect GA / Looker demand evidence for Support.",
+            "owner": "Argus",
+            "evidence_needed": ["fresh Audience Demand evidence for Support"],
+        }
+    ]
+    contract = _contract_module()
+    packet = contract.ArgusIntelligencePacket.model_validate(daily_payload)
 
     text = renderer.render_weekly_packet_brief_markdown(packet)
 
     assert "Weekly synthesis unavailable" in text
     assert "daily packet" in text
+    assert "Shopping Assistant before promoting it into a recommendation" in text
+    assert "evidence for Support" not in text
     assert "Weekly pattern:" not in text
 
 
